@@ -25,11 +25,19 @@ password.
 
 Bcrypt cost stays at 10 (matches the existing seed).
 
-Coin balances are deliberately not set in the seed. The Bet (Kalki
-Exchange) service awards `SIGNUP_COIN_BONUS` on the first call to
-`/api/internal/users/ensure`, so balances materialise on first sign-in —
-this matches the unified-wallet architecture documented in
-`UNIFIED_WALLET.md`.
+Coin balances follow the existing bet seed pattern (verified in
+`bet/prisma/seed.ts` and `bet/app/api/internal/users/ensure/route.ts`):
+
+- The **auctions backend** (`backend/prisma/seed.ts`) does not track
+  balances — its `User` table has no balance column. Nothing to seed.
+- **Bet** (`bet/prisma/seed.ts`) creates a `Wallet` row alongside each
+  `User`. Pre-populate it: `admin@kalki.local` → 50,000, `user1/2/3` →
+  10,000. This matches what the legacy demo seed did and what the
+  `kalki` namespace's Bet DB currently shows.
+- The `/api/internal/users/ensure` bridge creates wallets with
+  `balance: 0` for users that arrive via SSO without a Bet row — that
+  path is for *future* users, not seeded demos, so it's irrelevant
+  here.
 
 ## Removing the legacy demo rows
 
