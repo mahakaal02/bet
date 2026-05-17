@@ -14,28 +14,37 @@ async function main() {
   // database. The Bet host hands every new account `SIGNUP_COIN_BONUS` coins
   // on first sign-in. Admin/demo accounts only get credentials here; their
   // wallets materialise on the first call to /api/internal/users/ensure.
-  const adminPassword = await bcrypt.hash('admin123', 10);
+  // Purge any pre-existing @uniquebid.local demo accounts so a re-seed
+  // produces a clean kalki-only state. The ringmaster sentinel
+  // (see src/bids/bids.service.ts) is a system row, not a demo user — skip it.
+  await prisma.user.deleteMany({
+    where: {
+      email: { endsWith: '@uniquebid.local' },
+      NOT: { email: 'ringmaster@uniquebid.local' },
+    },
+  });
+
+  const sharedPassword = await bcrypt.hash('password12345', 10);
   await prisma.user.upsert({
-    where: { email: 'admin@uniquebid.local' },
-    update: {},
+    where: { email: 'admin@kalki.local' },
+    update: { passwordHash: sharedPassword, isAdmin: true, emailVerified: true },
     create: {
-      email: 'admin@uniquebid.local',
+      email: 'admin@kalki.local',
       username: 'admin',
-      passwordHash: adminPassword,
+      passwordHash: sharedPassword,
       emailVerified: true,
       isAdmin: true,
     },
   });
 
-  const demoPassword = await bcrypt.hash('demo1234', 10);
   for (let i = 1; i <= 3; i++) {
     await prisma.user.upsert({
-      where: { email: `demo${i}@uniquebid.local` },
-      update: {},
+      where: { email: `user${i}@kalki.local` },
+      update: { passwordHash: sharedPassword, emailVerified: true },
       create: {
-        email: `demo${i}@uniquebid.local`,
-        username: `demo${i}`,
-        passwordHash: demoPassword,
+        email: `user${i}@kalki.local`,
+        username: `user${i}`,
+        passwordHash: sharedPassword,
         emailVerified: true,
       },
     });
