@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solid navy fill, matched to the PNG's edge colour so the launcher's
+     shape mask blends seamlessly with the foreground bitmap. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#070A1A" />
+</shape>

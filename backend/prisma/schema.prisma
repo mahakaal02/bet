@@ -1,0 +1,289 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String?  @unique
+  username      String   @unique
+  passwordHash  String
+  emailVerified Boolean  @default(false)
+  isAdmin       Boolean  @default(false)
+  // WhatsApp-based identity (alternative to email signup).
+  whatsappPhone String?  @unique
+  phoneVerified Boolean  @default(false)
+  /// Canonical wallet identity on Bet (Kalki Exchange). Populated lazily on
+  /// the first wallet operation via POST /api/internal/users/ensure on the
+  /// Bet host. Coin balances + wallet ledger live entirely on Bet, keyed by
+  /// this column — this backend keeps no local balance state of its own.
+  betUserId     String?  @unique
+  createdAt     DateTime @default(now())
+
+  bids          Bid[]
+  wins          Auction[] @relation("AuctionWinner")
+  devices       DeviceToken[]
+  coinTxns      CoinTransaction[]
+  aviatorBets   AviatorBet[]
+  aviatorMsgs   AviatorChatMessage[]
+}
+
+model DeviceToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  platform  String   // "android" | "ios"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Auction {
+  id          String         @id @default(uuid())
+  title       String
+  description String
+  imageUrls   String[]       @default([])
+  retailPrice Decimal        @db.Decimal(12, 2)
+  coinsPerBid Int
+  // When the auction transitions from UPCOMING → LIVE. Auctions whose
+  // startsAt is in the past are LIVE immediately; the scheduler promotes
+  // others when their startsAt arrives.
+  startsAt    DateTime?
+  endsAt      DateTime
+  status      AuctionStatus  @default(UPCOMING)
+  winnerId    String?
+  winnerAmount Decimal?      @db.Decimal(12, 2)
+  closedAt    DateTime?
+  createdAt   DateTime       @default(now())
+
+  /// Admin override controls. NORMAL is the default — the auction settles
+  /// by the natural lowest-unique-bid rule. NO_WINNER and FIXED_WINNER are
+  /// kill-switch / rigging modes used for marketing demos or "house always
+  /// wins" promotions; see `bidding-engine.ts::classifyPlacedAmount` and
+  /// `bids.service.ts::placeBid` for the runtime behaviour.
+  manipulationMode    AuctionManipulationMode @default(NORMAL)
+  /// Set when `manipulationMode = FIXED_WINNER`. The first bid landing at
+  /// exactly this amount is treated as the winner; other bidders at the
+  /// same amount see "Duplicate / Colliding". Null otherwise.
+  fixedWinningAmount  Decimal? @db.Decimal(12, 2)
+
+  winner      User?          @relation("AuctionWinner", fields: [winnerId], references: [id])
+  bids        Bid[]
+
+  @@index([status, endsAt])
+  @@index([status, startsAt])
+}
+
+enum AuctionStatus {
+  UPCOMING
+  LIVE
+  ENDED
+}
+
+/// Admin manipulation modes for an auction:
+///   - NORMAL          — natural lowest-unique-bid rule. Default.
+///   - NO_WINNER       — kill-switch. Whenever a bid would classify as
+///                       "Lowest & Unique", the ringmaster sentinel user
+///                       auto-places a duplicate to nullify the win.
+///   - FIXED_WINNER    — admin pre-picks the winning amount. First bidder
+///                       at `fixedWinningAmount` wins; others at the same
+///                       amount see "Duplicate / Colliding".
+enum AuctionManipulationMode {
+  NORMAL
+  NO_WINNER
+  FIXED_WINNER
+}
+
+model Bid {
+  id        String   @id @default(uuid())
+  auctionId String
+  userId    String
+  amount    Decimal  @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+
+  auction Auction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  // Fast lookup for the bidding engine: classify a candidate against an
+  // auction's bids by amount.
+  @@index([auctionId, amount])
+  @@index([auctionId, userId])
+}
+
+// Singleton row (id = "default"). Admin-controlled coin economy.
+model CoinSettings {
+  id                 String   @id @default("default")
+  inrPerCoin         Decimal  @db.Decimal(10, 2) @default(5.00)
+  defaultCoinsPerBid Int      @default(1)
+  updatedAt          DateTime @updatedAt
+}
+
+// Admin-defined SKUs users can purchase. Razorpay orders reference these by id.
+model CoinPack {
+  id        String   @id @default(uuid())
+  coins     Int
+  priceInr  Decimal  @db.Decimal(10, 2)
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  orders    PaymentOrder[]
+}
+
+// Local audit row for coin movements driven by this backend (auction bids,
+// Razorpay top-ups). The canonical ledger lives on Bet; these rows exist
+// purely for backend-side reconciliation + idempotency on payment webhooks.
+model CoinTransaction {
+  id        String   @id @default(uuid())
+  userId    String
+  delta     Int      // positive = credit, negative = debit
+  reason    String   // "razorpay_purchase" | "bid_cost" | "admin_grant" | "refund"
+  reference String?  // razorpay payment_id, bid id, etc — used for idempotency
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@unique([reason, reference], name: "uniq_reason_reference")
+}
+
+// Razorpay order — discriminated by `kind`:
+//   COIN_PACK    : buys auction coins (coinPackId set, coins > 0)
+//   WALLET_TOPUP : tops up the user's INR wallet (coinPackId null, coins 0)
+model PaymentOrder {
+  id              String   @id @default(uuid())
+  userId          String
+  kind            PaymentOrderKind @default(COIN_PACK)
+  coinPackId      String?
+  razorpayOrderId String   @unique
+  razorpayPaymentId String?
+  amountInr       Decimal  @db.Decimal(10, 2)
+  coins           Int      @default(0)
+  status          PaymentStatus @default(PENDING)
+  createdAt       DateTime @default(now())
+  capturedAt      DateTime?
+
+  coinPack        CoinPack? @relation(fields: [coinPackId], references: [id])
+
+  @@index([userId, createdAt])
+}
+
+enum PaymentOrderKind {
+  COIN_PACK
+  WALLET_TOPUP
+}
+
+enum PaymentStatus {
+  PENDING
+  CAPTURED
+  FAILED
+}
+
+// Short-lived OTP for WhatsApp phone verification. The code is stored as a
+// SHA-256 hash; constant-time compared on verify.
+model PhoneOtp {
+  id        String   @id @default(uuid())
+  phone     String
+  codeHash  String
+  expiresAt DateTime
+  consumed  Boolean  @default(false)
+  attempts  Int      @default(0)
+  // Pending account material — applied when the OTP is verified.
+  username  String?
+  passwordHash String?
+  createdAt DateTime @default(now())
+
+  @@index([phone, createdAt(sort: Desc)])
+}
+
+// ─── Aviator (multiplier game) ──────────────────────────────────────────────
+
+model AviatorRound {
+  id              String   @id @default(uuid())
+  roundNumber     Int      @unique
+  // Inline seed copy (also stored on AviatorFairnessSeed). Kept so each round
+  // is self-verifiable without joining the seeds table.
+  serverSeed      String
+  serverSeedHash  String
+  clientSeed      String
+  // Reference + nonce into the seed batch (added in Slice 2 — null for rounds
+  // created before seed rotation existed).
+  seedId          String?
+  nonce           Int?
+  crashMultiplier Decimal  @db.Decimal(10, 2)
+  status          AviatorRoundStatus @default(BETTING)
+  startedAt       DateTime @default(now())
+  crashedAt       DateTime?
+
+  seed AviatorFairnessSeed? @relation(fields: [seedId], references: [id])
+  bets AviatorBet[]
+
+  @@index([status])
+  @@index([startedAt(sort: Desc)])
+  @@index([seedId])
+}
+
+enum AviatorRoundStatus {
+  BETTING
+  RUNNING
+  CRASHED
+}
+
+/// Batched provably-fair seed. Each row spans many rounds (nonce 1..N).
+/// `serverSeed` is private until `revealedAt` is set; `serverSeedHash` is
+/// always public. After rotation, users can verify every round that used
+/// this seed by recomputing the crash multiplier.
+model AviatorFairnessSeed {
+  id               String    @id @default(uuid())
+  serverSeed       String
+  serverSeedHash   String    @unique
+  clientSeed       String    // common to the batch
+  startedAt        DateTime  @default(now())
+  revealedAt       DateTime?
+  isActive         Boolean   @default(true)
+  rotationReason   String?   // "scheduled" | "admin" | "max_rounds"
+  startRoundNumber Int?      // first round
+  endRoundNumber   Int?      // last round (set on rotation)
+
+  rounds AviatorRound[]
+
+  @@index([isActive])
+}
+
+model AviatorBet {
+  id                  String   @id @default(uuid())
+  userId              String
+  roundId             String
+  amount              Int      // demo credits
+  autoCashoutAt       Decimal? @db.Decimal(10, 2)
+  cashedOutAt         DateTime?
+  cashedOutMultiplier Decimal? @db.Decimal(10, 2)
+  payout              Int?
+  createdAt           DateTime @default(now())
+
+  user  User         @relation(fields: [userId], references: [id])
+  round AviatorRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roundId]) // one bet per user per round
+  @@index([roundId])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model AviatorChatMessage {
+  id        String   @id @default(uuid())
+  userId    String
+  message   String   @db.VarChar(280)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([createdAt(sort: Desc)])
+}

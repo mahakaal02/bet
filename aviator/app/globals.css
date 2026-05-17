@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0B1020;
+  --color-surface: #121A2F;
+  --color-elevated: #1A2542;
+  --color-accent-red: #FF4D5A;
+  --color-accent-orange: #FF8C42;
+  --color-neon-green: #2EE59D;
+  --color-neon-green-deep: #18C37E;
+  --color-text-primary: #F5F7FF;
+  --color-text-secondary: #AAB3CC;
+  --color-divider: rgba(255, 255, 255, 0.08);
+
+  --font-sans:
+    Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+html, body, #__next {
+  height: 100%;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+
+/* Plane canvas aspect ratio: tight on phones (fits bet + wallet above fold),
+   wider on desktop where vertical room isn't scarce. */
+html { --plane-aspect: 21 / 9; }
+@media (min-width: 1024px) { html { --plane-aspect: 16 / 9; } }
+
+/* Glassmorphism utility — used for floating panels */
+.glass {
+  background: rgba(26, 37, 66, 0.55);
+  border: 1px solid var(--color-divider);
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.text-glow-orange {
+  text-shadow:
+    0 0 16px rgba(255, 140, 66, 0.65),
+    0 0 32px rgba(255, 77, 90, 0.35);
+}
+
+.text-glow-green {
+  text-shadow:
+    0 0 16px rgba(46, 229, 157, 0.65),
+    0 0 32px rgba(24, 195, 126, 0.35);
+}
+
+.text-glow-red {
+  text-shadow:
+    0 0 16px rgba(255, 77, 90, 0.75),
+    0 0 32px rgba(255, 77, 90, 0.4);
+}
+
+@keyframes pulseCashout {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(46, 229, 157, 0.7); }
+  50%      { transform: scale(1.03); box-shadow: 0 0 0 14px rgba(46, 229, 157, 0); }
+}
+.cashout-pulse { animation: pulseCashout 1.2s ease-in-out infinite; }
+
+@keyframes screenShake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-4px, 2px); }
+  40% { transform: translate(4px, -2px); }
+  60% { transform: translate(-2px, 4px); }
+  80% { transform: translate(2px, -4px); }
+}
+.screen-shake { animation: screenShake 0.4s ease-in-out; }

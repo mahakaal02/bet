@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #07090e;
+  --color-bg-elev: #0d1117;
+  --color-bg-card: #11161f;
+  --color-border: #1f2937;
+  --color-border-strong: #334155;
+  --color-text: #e5e7eb;
+  --color-text-dim: #94a3b8;
+  --color-text-faint: #64748b;
+  --color-accent: #22d3ee;
+  --color-accent-2: #818cf8;
+  --color-yes: #10b981;
+  --color-no: #ef4444;
+  --color-yes-bg: rgba(16, 185, 129, 0.12);
+  --color-no-bg: rgba(239, 68, 68, 0.12);
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #1f2937;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Glassmorphism card. Used by <Card variant="glass">. */
+.glass {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.04),
+    rgba(255, 255, 255, 0.01)
+  );
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Premium price ticker — slight glow on green/red. */
+.ticker-up {
+  color: var(--color-yes);
+  text-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
+}
+.ticker-down {
+  color: var(--color-no);
+  text-shadow: 0 0 12px rgba(239, 68, 68, 0.45);
+}
+
+.gradient-accent {
+  background: linear-gradient(135deg, #22d3ee 0%, #818cf8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Skeleton loader pulse */
+@keyframes pulse-bg {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.skeleton {
+  background: #1a212c;
+  border-radius: 8px;
+  animation: pulse-bg 1.5s ease-in-out infinite;
+}
+
+/* Subtle fade-in for client-rendered cards */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up {
+  animation: fade-up 220ms ease-out both;
+}

@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bet-postgres
+    environment:
+      POSTGRES_USER: bet
+      POSTGRES_PASSWORD: bet
+      POSTGRES_DB: bet
+    ports:
+      - "5433:5432"
+    volumes:
+      - bet-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bet"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  bet:
+    build: .
+    container_name: bet-web
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://bet:bet@postgres:5432/bet?schema=public
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-change-me-please-change-me-please-change-me}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3100}
+      SIGNUP_COIN_BONUS: "10000"
+      DAILY_REWARD_COINS: "500"
+      DISCLAIMER: "This is a demo. No real money, no payouts. Virtual coins only."
+    ports:
+      - "3100:3100"
+    command: sh -c "npx prisma migrate deploy && npm run start"
+
+volumes:
+  bet-pg:

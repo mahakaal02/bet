@@ -1,0 +1,611 @@
+// Prediction-market schema. Demo coins only — no real money flows.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───── Users & wallet ──────────────────────────────────────────────────────
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  username      String   @unique
+  passwordHash  String?
+  image         String?
+  isAdmin       Boolean  @default(false)
+  banned        Boolean  @default(false)
+  suspendedUntil DateTime? @db.Timestamptz(6)
+  // Cached XP / level / streak so leaderboards & profile don't recompute.
+  xp            Int      @default(0)
+  level         Int      @default(1)
+  streak        Int      @default(0)
+  lastClaimAt   DateTime? @db.Timestamptz(6)
+  referralCode  String?  @unique
+  referredById  String?
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  wallet        Wallet?
+  positions     Position[]
+  trades        Trade[]
+  txns          Transaction[]
+  rewards       Reward[]
+  watchlist     Watchlist[]
+  notifications Notification[]
+  comments      Comment[]
+  adminLogs     AdminLog[]
+  accounts      Account[]
+  sessions      Session[]
+  marketsCreated Market[] @relation("MarketCreator")
+  achievements   UserAchievement[]
+  emailVerifications EmailVerification[]
+  passwordResets PasswordReset[]
+  orders         Order[]
+  reportsFiled   Report[] @relation("Reporter")
+  reportsResolved Report[] @relation("Resolver")
+  payments        PaymentOrder[]
+  withdrawals     WithdrawalRequest[]
+  withdrawalsDecided WithdrawalRequest[] @relation("WithdrawalDecider")
+  emailVerified Boolean   @default(false)
+  emailVerifiedAt DateTime? @db.Timestamptz(6)
+  referrer      User?     @relation("Referrals", fields: [referredById], references: [id])
+  referred      User[]    @relation("Referrals")
+
+  @@index([username])
+  @@index([xp(sort: Desc)])
+}
+
+// NextAuth required tables (only present so Google OAuth works out of the
+// box; Credentials sessions don't write to these).
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime @db.Timestamptz(6)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime @db.Timestamptz(6)
+
+  @@unique([identifier, token])
+}
+
+// Coins are stored on Wallet rather than inline on User so a future
+// multi-currency expansion (e.g. seasonal coins) just adds rows here.
+model Wallet {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  balance     Int      @default(0)   // demo coins
+  lockedInOrders Int   @default(0)   // reserved by open orders (future-proof)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ───── Markets ─────────────────────────────────────────────────────────────
+
+enum MarketCategory {
+  POLITICS
+  SPORTS
+  CRYPTO
+  TECH
+  ENTERTAINMENT
+}
+
+enum MarketStatus {
+  OPEN
+  CLOSED
+  RESOLVED
+  CANCELLED
+}
+
+enum Outcome {
+  YES
+  NO
+}
+
+model Market {
+  id          String         @id @default(cuid())
+  slug        String         @unique
+  title       String
+  description String
+  bannerUrl   String?
+  category    MarketCategory
+  resolutionSource String?
+  endsAt      DateTime @db.Timestamptz(6)
+  status      MarketStatus   @default(OPEN)
+  resolvedAs  Outcome?
+  resolvedAt  DateTime? @db.Timestamptz(6)
+  resolutionNote String?
+  featured    Boolean        @default(false)
+
+  // Constant-product AMM reserves. Price of YES = noShares / (yesShares + noShares).
+  // Seeded by the admin (default 1000/1000 → 50%/50%). Updated atomically on
+  // every trade.
+  yesShares   Float          @default(1000)
+  noShares    Float          @default(1000)
+  // Lifetime volume of coins traded across both sides (for trending sort).
+  volumeCoins Int            @default(0)
+  // Trending score — exponentially-decayed volume, recomputed by the
+  // scheduler. Higher = more trending.
+  trendingScore Float        @default(0)
+
+  createdById String?
+  createdAt   DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime       @updatedAt @db.Timestamptz(6)
+
+  createdBy   User?          @relation("MarketCreator", fields: [createdById], references: [id])
+
+  trades      Trade[]
+  positions   Position[]
+  pricePoints PricePoint[]
+  comments    Comment[]
+  watchlist   Watchlist[]
+  orders      Order[]
+  orderMatches OrderMatch[]
+
+  @@index([status, endsAt])
+  @@index([category, status])
+  @@index([trendingScore(sort: Desc)])
+  @@index([featured])
+}
+
+// Snapshot of mid price after each trade — used to draw the price chart on
+// the market detail page. Trimmed by the scheduler when older than 30 days.
+model PricePoint {
+  id        String   @id @default(cuid())
+  marketId  String
+  yesPrice  Float    // 0..1
+  noPrice   Float    // 0..1
+  recordedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@index([marketId, recordedAt])
+}
+
+// ───── Trading ─────────────────────────────────────────────────────────────
+
+model Trade {
+  id        String   @id @default(cuid())
+  marketId  String
+  userId    String
+  outcome   Outcome
+  // How many "shares" the user bought. Each YES share pays 1 coin if YES
+  // resolves; each NO share pays 1 coin if NO resolves.
+  shares    Float
+  // Coins flowing on the user side, signed: +ve on BUY (debit from wallet),
+  // -ve on SELL (credit to wallet). This is the NET amount after the
+  // platform fee — see `feeCoins` for the fee that was skimmed.
+  cost      Int
+  // Platform commission collected on this fill (2% of notional, 0 on
+  // pre-commission historical rows). Always positive. Lives separately
+  // from `cost` so analytics can sum revenue without sign-juggling.
+  feeCoins  Int      @default(0)
+  // Realised average price per share, for receipts and analytics.
+  pricePerShare Float
+  // Snapshots of market reserves AFTER this trade. Lets the chart be
+  // reconstructed deterministically from Trade alone.
+  yesSharesAfter Float
+  noSharesAfter  Float
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([marketId, createdAt])
+  @@index([userId, createdAt])
+}
+
+// Singleton row (id = "singleton"). Cached running counters for platform
+// revenue so the admin dashboard reads O(1) instead of aggregating the
+// Transaction ledger. Updated inside the same DB transaction as the fee
+// movement — Transaction rows remain the audit-of-record; this row is a
+// derived view that must agree with `SUM(delta) WHERE kind LIKE 'commission_%'`.
+model PlatformRevenue {
+  id                   String   @id @default("singleton")
+  // Buy + sell commissions collected on every fill (book + AMM legs).
+  totalTradingFees     Int      @default(0)
+  // 5% rake on net profit at market resolution. Principal is never docked.
+  totalSettlementFees  Int      @default(0)
+  // Convenience sum, maintained alongside the two above to avoid a runtime
+  // add on every dashboard render. Invariant:
+  //   totalPlatformRevenue == totalTradingFees + totalSettlementFees.
+  totalPlatformRevenue Int      @default(0)
+  updatedAt            DateTime @updatedAt @db.Timestamptz(6)
+}
+
+// One row per (user, market, outcome). Updated atomically with each trade.
+// `locked` is the count of shares currently posted as SELL orders on the
+// orderbook; `shares - locked` is what's truly available for new SELLs.
+model Position {
+  id        String   @id @default(cuid())
+  userId    String
+  marketId  String
+  outcome   Outcome
+  shares    Float    @default(0)
+  locked    Float    @default(0)
+  costBasis Int      @default(0)  // total coins spent on this leg
+  realizedPnl Int    @default(0)  // set on resolution
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, marketId, outcome])
+  @@index([userId])
+  @@index([marketId])
+}
+
+// ───── Orderbook ───────────────────────────────────────────────────────────
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderStatus {
+  OPEN
+  PARTIAL
+  FILLED
+  CANCELLED
+}
+
+/// A limit order on a market's binary outcome book. BUYs reserve coins
+/// (`remaining * limitPrice`) at submit; SELLs reserve shares from the
+/// matching Position. Reservations release on fill or cancel.
+///
+/// Matching is price-time priority within (marketId, outcome, side). A new
+/// BUY crosses against SELLs sorted by ascending limitPrice; a new SELL
+/// crosses against BUYs sorted by descending limitPrice. Taker pays the
+/// resting maker's price (price improvement passes back to the taker).
+model Order {
+  id          String      @id @default(cuid())
+  userId      String
+  marketId    String
+  outcome     Outcome
+  side        OrderSide
+  limitPrice  Float       // 0..1
+  shares      Float       // original size
+  remaining   Float       // unfilled
+  filledShares Float      @default(0)
+  filledCost  Int         @default(0)
+  status      OrderStatus @default(OPEN)
+  createdAt   DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime    @updatedAt @db.Timestamptz(6)
+  cancelledAt DateTime? @db.Timestamptz(6)
+  filledAt    DateTime? @db.Timestamptz(6)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  takerMatches OrderMatch[] @relation("TakerMatches")
+  makerMatches OrderMatch[] @relation("MakerMatches")
+
+  @@index([marketId, outcome, side, status])
+  @@index([userId, status, createdAt])
+  @@index([marketId, outcome, side, limitPrice])
+}
+
+/// Each fill produces one OrderMatch (two-sided audit) and one Trade
+/// (single-sided audit, kept for the existing portfolio views). Splitting
+/// the two keeps settlement bookkeeping unambiguous.
+model OrderMatch {
+  id           String    @id @default(cuid())
+  marketId     String
+  outcome      Outcome
+  shares       Float
+  price        Float     // 0..1
+  takerOrderId String
+  makerOrderId String
+  takerUserId  String
+  makerUserId  String
+  takerSide    OrderSide
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+
+  market     Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  takerOrder Order  @relation("TakerMatches", fields: [takerOrderId], references: [id], onDelete: Cascade)
+  makerOrder Order  @relation("MakerMatches", fields: [makerOrderId], references: [id], onDelete: Cascade)
+
+  @@index([marketId, createdAt(sort: Desc)])
+}
+
+// Coin movement audit. Idempotent on (kind, reference) for guarded operations
+// like daily-claim and resolution payouts.
+model Transaction {
+  id        String   @id @default(cuid())
+  userId    String
+  delta     Int      // positive = credit, negative = debit
+  kind      String   // "signup_bonus" | "daily_claim" | "trade_buy" | "resolution_payout" | "admin_grant" | "referral_bonus"
+  reference String?
+  metadata  Json?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([kind, reference], name: "uniq_kind_reference")
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+// ───── Rewards / gamification ──────────────────────────────────────────────
+
+model Reward {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String   // "daily" | "streak_3" | "first_trade" | "ten_trades" | "referral"
+  coins     Int
+  claimedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, claimedAt(sort: Desc)])
+}
+
+// Cached daily leaderboard. Refreshed by the scheduler — querying live is
+// fine for now, but having this row makes the landing-page widget cheap.
+model LeaderboardEntry {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  username  String
+  xp        Int
+  level     Int
+  netPnl    Int      @default(0)
+  computedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([xp(sort: Desc)])
+}
+
+// ───── Social ──────────────────────────────────────────────────────────────
+
+model Watchlist {
+  id        String   @id @default(cuid())
+  userId    String
+  marketId  String
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, marketId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  marketId  String
+  userId    String
+  body      String   @db.VarChar(500)
+  hidden    Boolean  @default(false)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([marketId, createdAt(sort: Desc)])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  href      String?
+  readAt    DateTime? @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+// ───── Admin ───────────────────────────────────────────────────────────────
+
+// ───── Achievements ────────────────────────────────────────────────────────
+
+/// Catalog of badges. Static rows seeded by `prisma/seed.ts`; the runtime
+/// engine in `lib/achievements.ts` references them by their stable `code`.
+model Achievement {
+  id          String   @id @default(cuid())
+  code        String   @unique  // "first_trade" | "ten_trades" | …
+  title       String
+  description String
+  icon        String   // emoji or lucide icon name
+  rewardCoins Int      @default(0)
+  rewardXp    Int      @default(0)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  unlocks UserAchievement[]
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement  Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@index([userId, unlockedAt(sort: Desc)])
+}
+
+// Email verification token. Hashed in the DB; raw token only exists in the
+// emailed link. 24-hour TTL enforced at use time.
+model EmailVerification {
+  id        String   @id @default(cuid())
+  userId    String
+  codeHash  String
+  expiresAt DateTime @db.Timestamptz(6)
+  consumedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+// Password-reset token. Same shape as EmailVerification but kept separate so
+// rotating reset tokens doesn't invalidate pending verifications.
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String
+  codeHash  String
+  expiresAt DateTime @db.Timestamptz(6)
+  consumedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+/// User-submitted report on a piece of content. Currently only `COMMENT`
+/// is wired through the UI; the polymorphic `targetType + targetId` lets us
+/// flag markets / users without another model later.
+model Report {
+  id          String       @id @default(cuid())
+  reporterId  String
+  targetType  ReportTarget
+  targetId    String
+  reason      String       @db.VarChar(280)
+  status      ReportStatus @default(PENDING)
+  resolverId  String?
+  resolverNote String?     @db.VarChar(280)
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+  resolvedAt  DateTime?    @db.Timestamptz(6)
+
+  reporter User  @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  resolver User? @relation("Resolver", fields: [resolverId], references: [id])
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([targetType, targetId])
+  // One pending report per (reporter, target) — second click is a no-op
+  // rather than spamming the queue.
+  @@unique([reporterId, targetType, targetId, status])
+}
+
+enum ReportTarget {
+  COMMENT
+  MARKET
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+model AdminLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  action    String   // "market.create" | "market.resolve" | "user.ban" | "user.grant" | ...
+  targetId  String?
+  metadata  Json?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  admin User @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt(sort: Desc)])
+}
+
+// ───── Payments (Razorpay) ─────────────────────────────────────────────────
+
+enum PaymentOrderStatus {
+  PENDING
+  CAPTURED
+  FAILED
+}
+
+/// One row per Razorpay order created when a user clicks "Buy" on /wallet.
+/// The (razorpayOrderId) is the idempotency key — replays of the verify
+/// webhook find this row and short-circuit.
+model PaymentOrder {
+  id                String   @id @default(cuid())
+  userId            String
+  packId            String   // matches lib/coin-packs.ts
+  amountInr         Int      // rupees (whole — Razorpay quotes in paise, we store in INR)
+  coins             Int      // coins to credit on capture
+  razorpayOrderId   String   @unique
+  razorpayPaymentId String?  @unique
+  status            PaymentOrderStatus @default(PENDING)
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  capturedAt        DateTime? @db.Timestamptz(6)
+  failureReason     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+}
+
+// ───── Withdrawals ─────────────────────────────────────────────────────────
+
+enum WithdrawalStatus {
+  PENDING     // user submitted, admin not yet reviewed
+  APPROVED    // admin approved, payout in flight
+  PAID        // payout completed (Razorpay payout id captured)
+  REJECTED    // admin rejected, coins refunded
+  CANCELLED   // user cancelled before admin review
+}
+
+enum PayoutMethod {
+  UPI
+  BANK
+}
+
+/// User-initiated withdrawal of coins → INR. Locks the coins on creation
+/// (debits Wallet.balance, the audit row carries the negative delta);
+/// REJECTED / CANCELLED refund them via an inverse credit. APPROVED is
+/// terminal once the admin clicks — actual payout goes through Razorpay
+/// Payouts in production.
+model WithdrawalRequest {
+  id            String   @id @default(cuid())
+  userId        String
+  amountCoins   Int      // = INR at 1:1
+  payoutMethod  PayoutMethod
+  /// JSON shape depends on method: { upiId } | { accountNumber, ifsc, name }.
+  payoutDetails Json
+  status        WithdrawalStatus @default(PENDING)
+  decisionNote  String?
+  decidedById   String?
+  decidedAt     DateTime? @db.Timestamptz(6)
+  paidReference String?  // Razorpay payout id once the transfer completes
+  paidAt        DateTime? @db.Timestamptz(6)
+  /// IP + user-agent at submission time — useful for the admin audit page
+  /// (multi-device patterns, geo anomalies).
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  user      User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  decidedBy User? @relation("WithdrawalDecider", fields: [decidedById], references: [id])
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+}

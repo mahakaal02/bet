@@ -1,0 +1,88 @@
+# Bet (Kalki Exchange) — CI. Runs typecheck + lint + AMM sanity script on
+# every push and pull request that touches the bet/ tree. Kept narrow so the
+# action minutes don't get burned on Android-only or backend-only changes.
+name: Bet CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "bet/**"
+      - ".github/workflows/bet-ci.yml"
+  pull_request:
+    paths:
+      - "bet/**"
+      - ".github/workflows/bet-ci.yml"
+
+# Cancel an in-flight run if a newer commit is pushed to the same PR/branch —
+# avoids burning compute on a stack of obsolete runs.
+concurrency:
+  group: bet-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: bet
+
+    # Postgres available on localhost:5432. Prisma generate doesn't need a
+    # live DB, but having it lets us run a smoke `prisma migrate deploy`
+    # against the empty schema (catches bad migration files early).
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: bet
+          POSTGRES_PASSWORD: bet
+          POSTGRES_DB: bet
+        options: >-
+          --health-cmd "pg_isready -U bet"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+
+    env:
+      DATABASE_URL: postgresql://bet:bet@localhost:5432/bet?schema=public
+      NEXTAUTH_SECRET: ci-only-not-a-real-secret-ci-only-not-a-real-secret
+      NEXTAUTH_URL: http://localhost:3100
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: bet/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      # Migration smoke — runs every migration file fresh. Catches a broken
+      # SQL syntax or missing column reference before it lands in main.
+      - name: Prisma migrate deploy (smoke)
+        run: npx prisma migrate deploy
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npx next lint --max-warnings 0
+
+      # Pure-function trade-engine math. Cheap (<1s) and would catch a
+      # regression in `quoteBuy` / `quoteSell` immediately.
+      - name: AMM sanity script
+        run: npx tsx scripts/amm-sanity.ts
+
+      # Vitest suites — AMM math, orderbook matcher, smart-router planner.
+      - name: Unit tests
+        run: npm test

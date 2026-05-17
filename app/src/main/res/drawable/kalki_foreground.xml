@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wraps the logo PNG so it fills the entire 108dp foreground area; the
+     navy padding inside the PNG reaches the icon bounds and matches the
+     adaptive-icon background, which kills the white-circle effect that
+     Pixel launchers apply to legacy icons. -->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/kalki_logo"
+    android:gravity="fill" />

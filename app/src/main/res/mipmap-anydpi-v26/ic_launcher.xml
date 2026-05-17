@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Navy fill (same as the PNG's edge colour) — so when the launcher mask
+         clips at the corners, the visible composite stays dark. -->
+    <background android:drawable="@drawable/kalki_background" />
+    <!-- Foreground references @drawable/kalki_logo (not @mipmap) to avoid the
+         circular reference that breaks resource resolution on API 26+. -->
+    <foreground android:drawable="@drawable/kalki_foreground" />
+</adaptive-icon>
