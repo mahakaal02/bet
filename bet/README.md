@@ -49,7 +49,7 @@ npm run dev
 The Android app's WebView is wired to `BET_URL` in `app/build.gradle.kts`
 (debug: `http://10.0.2.2:3100/`).
 
-Seeded admin: `admin@bet.local` / `admin123` · Demos: `demo1@bet.local` … `demo5@bet.local` / `demo1234`.
+Seeded admin: `admin@kalki.local` / `password12345` · Demos: `user1@kalki.local` … `user3@kalki.local` / `password12345`.
 
 ## How to use
 

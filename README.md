@@ -38,13 +38,13 @@ npm install
 npm run dev                                # :5173, proxies /api → :4000
 ```
 
-Open <http://localhost:5173>, sign in as `admin@uniquebid.local` / `admin123`,
+Open <http://localhost:5173>, sign in as `admin@kalki.local` / `password12345`,
 create auctions, tune coin economy.
 
 ### Android app
 
 Open `First App/` in Android Studio. Run on the emulator (debug build points
-at `10.0.2.2:4000`). Sign in as `demo1@uniquebid.local` / `demo1234`.
+at `10.0.2.2:4000`). Sign in as `user1@kalki.local` / `password12345`.
 
 ## What's new
 

@@ -41,7 +41,7 @@ cp .env.example .env
 npm install
 docker compose up -d
 npx prisma migrate dev --name init
-npm run prisma:seed   # creates admin@uniquebid.local / admin123 and 3 demo users
+npm run prisma:seed   # creates admin@kalki.local / password12345 and 3 user accounts (user1-3)
 ```
 
 ### Run the engine tests (no DB needed)

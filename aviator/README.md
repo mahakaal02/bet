@@ -13,7 +13,7 @@ npm run dev          # http://localhost:3000
 ```
 
 The backend at `:4000` must be running (`cd backend && npm run start:dev`).
-Sign in with any seeded user (`demo1@uniquebid.local` / `demo1234`).
+Sign in with any seeded user (`user1@kalki.local` / `password12345`).
 
 ## Android WebView pass-through
 
