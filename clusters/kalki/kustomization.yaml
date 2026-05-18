@@ -1,0 +1,10 @@
+# What Flux applies for the kalki namespace. The flux-system Kustomization
+# (`flux-system/kalki-sync`, bootstrapped once via clusters/kalki/_bootstrap.yaml)
+# reconciles this path on every git change.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - helmrelease.yaml
+  - imagerepositories.yaml
+  - imagepolicies.yaml
+  - imageupdateautomation.yaml

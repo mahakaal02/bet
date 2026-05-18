@@ -1,0 +1,32 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kalki
+  namespace: kalki
+spec:
+  releaseName: kalki         # takes over the existing manually-installed release
+  targetNamespace: kalki
+  interval: 5m
+  chart:
+    spec:
+      chart: ./helm/kalki
+      sourceRef:
+        kind: GitRepository
+        name: kalki-gitops
+        namespace: flux-system
+  # Values inline are the safe baseline. Anything cluster-specific (e.g. the
+  # real redis password) is layered on top from the kalki-helm-values Secret
+  # that exists only in-cluster (not in git).
+  valuesFrom:
+    - kind: Secret
+      name: kalki-helm-values
+      valuesKey: values.yaml
+      optional: false
+  install:
+    remediation:
+      retries: 2
+  upgrade:
+    remediation:
+      retries: 2
+      remediateLastFailure: true

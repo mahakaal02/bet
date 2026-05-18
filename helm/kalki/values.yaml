@@ -1,0 +1,113 @@
+# ─── global ────────────────────────────────────────────────────────────────
+global:
+  domain: cloud.podstack.ai
+  hostnamePrefix: kalki-          # → kalki-backend.cloud.podstack.ai, etc.
+  imageRegistry: docker.io/saurav7055
+  # Per-service `imageTag` (below) overrides this when set. Flux's
+  # ImageUpdateAutomation only writes to the per-service field, so this
+  # value is the fallback for any service that doesn't have one yet.
+  imageTag: latest
+  imagePullPolicy: IfNotPresent
+
+# Exclude L40s GPU node. Anti-affinity is applied to every workload.
+excludeNodes:
+  - podstackl40s
+
+traefik:
+  entryPoint: websecure
+  certResolver: letsencrypt        # matches existing kalkai chart
+
+# Cross-service shared secret. JWT_SECRET / BACKEND_JWT_SECRET must match
+# between backend and bet. INTERNAL_API_SECRET likewise. Override these
+# before going live.
+sharedSecret:
+  jwtSecret: "CHANGE_ME_jwt_secret_kalki_default"
+  internalApiSecret: "CHANGE_ME_internal_api_secret_kalki_default"
+  nextauthSecret: "CHANGE_ME_nextauth_secret_kalki_default"
+  razorpayKeyId: ""
+  razorpayKeySecret: ""
+  razorpayWebhookSecret: ""
+
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  user: postgres
+  password: "kalki-postgres-default"
+  storage:
+    size: 20Gi
+    storageClassName: longhorn
+  databases:
+    - uniquebid
+    - bet
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+# External Redis from kalkai namespace. Pass the password via --set at
+# install time (see the README at the chart root for the one-liner).
+redis:
+  host: kalkai-redis-master.kalkai.svc.cluster.local
+  port: 6379
+  keyPrefix: "kalki:"
+  password: ""
+
+# ─── per-service ───────────────────────────────────────────────────────────
+backend:
+  image: kalki-backend
+  imageTag: latest # {"$imagepolicy": "flux-system:kalki-backend:tag"}
+  port: 4000
+  replicas: 1
+  prismaMigrate: true              # init-container runs `prisma migrate deploy`
+  databaseUrl: ""                  # if blank, built from postgres values
+  env: {}
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 1000m, memory: 1Gi }
+  uploads:
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClassName: longhorn
+
+bet:
+  image: kalki-bet
+  imageTag: latest # {"$imagepolicy": "flux-system:kalki-bet:tag"}
+  port: 3100
+  replicas: 1
+  prismaMigrate: true
+  databaseUrl: ""
+  env: {}
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 1000m, memory: 1Gi }
+
+auctions:
+  image: kalki-auctions
+  imageTag: latest # {"$imagepolicy": "flux-system:kalki-auctions:tag"}
+  port: 3200
+  replicas: 1
+  resources:
+    requests: { cpu: 50m,  memory: 128Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+
+aviator:
+  image: kalki-aviator
+  imageTag: latest # {"$imagepolicy": "flux-system:kalki-aviator:tag"}
+  port: 3000
+  replicas: 1
+  resources:
+    requests: { cpu: 50m,  memory: 128Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+
+admin:
+  image: kalki-admin
+  imageTag: latest # {"$imagepolicy": "flux-system:kalki-admin:tag"}
+  port: 80
+  replicas: 1
+  resources:
+    requests: { cpu: 25m,  memory: 64Mi }
+    limits:   { cpu: 200m, memory: 256Mi }

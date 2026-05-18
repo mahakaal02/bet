@@ -1,0 +1,54 @@
+# One-time bootstrap. `kubectl apply -f clusters/kalki/_bootstrap.yaml` wires
+# the cluster's flux-system to start reconciling clusters/kalki/ in this repo.
+# Everything below this file is subsequently managed by Flux from git.
+#
+# Prerequisites (run once before applying this file):
+#
+#   1. Generate an SSH deploy key for this repo:
+#         ssh-keygen -t ed25519 -f /tmp/kalki-flux -C flux@kalki -N ''
+#      Add the public key (/tmp/kalki-flux.pub) to mahakaal02/bet → Settings →
+#      Deploy keys, WITH "Allow write access" checked (ImageUpdateAutomation
+#      pushes commits).
+#
+#   2. Create the deploy-key Secret in flux-system:
+#         flux create secret git kalki-gitops \
+#           --url=ssh://git@github.com/mahakaal02/bet \
+#           --private-key-file=/tmp/kalki-flux \
+#           --namespace=flux-system
+#
+#   3. Create the in-cluster helm values override Secret (carries the real
+#      redis password — never goes into git):
+#         REDIS_PW=$(kubectl -n kalki get secret kalki-redis-creds -o jsonpath='{.data.redis-password}' | base64 -d)
+#         kubectl -n kalki create secret generic kalki-helm-values \
+#           --from-literal=values.yaml="redis:
+#             password: \"${REDIS_PW}\""
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: kalki-gitops
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: ssh://git@github.com/mahakaal02/bet
+  ref:
+    branch: main
+  secretRef:
+    name: kalki-gitops    # the deploy-key Secret created in step 2 above
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: kalki
+  namespace: flux-system
+spec:
+  interval: 2m
+  retryInterval: 1m
+  timeout: 5m
+  prune: true
+  path: ./clusters/kalki
+  sourceRef:
+    kind: GitRepository
+    name: kalki-gitops
+  targetNamespace: kalki   # for namespaced resources that don't set namespace explicitly
+  wait: true

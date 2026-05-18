@@ -1,0 +1,6 @@
+apiVersion: v2
+name: kalki
+description: Kalki Bet platform (backend, bet, auctions, aviator, admin) + in-cluster Postgres
+type: application
+version: 0.1.0
+appVersion: "v1"

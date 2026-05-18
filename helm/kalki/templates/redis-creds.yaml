@@ -1,0 +1,19 @@
+{{/*
+Local-namespace Secret holding the existing Redis password (copied in from
+kalkai/kalkai-redis at install time via --set redis.password=...).
+Run:
+  REDIS_PW=$(kubectl -n kalkai get secret kalkai-redis -o jsonpath='{.data.redis-password}' | base64 -d)
+  helm upgrade --install kalki ./helm/kalki -n kalki --create-namespace \
+    --set redis.password="$REDIS_PW"
+*/}}
+{{- $pw := .Values.redis.password | default "" }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kalki-redis-creds
+  labels:
+    {{- include "kalki.labels" (dict "name" "redis" "ctx" .) | nindent 4 }}
+type: Opaque
+stringData:
+  redis-password: {{ $pw | quote }}
+  redis-url: {{ printf "redis://default:%s@%s:%v/0" $pw .Values.redis.host .Values.redis.port | quote }}

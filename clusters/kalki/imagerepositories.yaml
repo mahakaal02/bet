@@ -1,0 +1,45 @@
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: kalki-backend
+  namespace: flux-system
+spec:
+  image: docker.io/saurav7055/kalki-backend
+  interval: 2m
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: kalki-bet
+  namespace: flux-system
+spec:
+  image: docker.io/saurav7055/kalki-bet
+  interval: 2m
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: kalki-auctions
+  namespace: flux-system
+spec:
+  image: docker.io/saurav7055/kalki-auctions
+  interval: 2m
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: kalki-aviator
+  namespace: flux-system
+spec:
+  image: docker.io/saurav7055/kalki-aviator
+  interval: 2m
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: kalki-admin
+  namespace: flux-system
+spec:
+  image: docker.io/saurav7055/kalki-admin
+  interval: 2m

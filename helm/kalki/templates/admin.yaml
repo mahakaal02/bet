@@ -1,0 +1,74 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kalki-admin
+  labels:
+    {{- include "kalki.labels" (dict "name" "admin" "ctx" .) | nindent 4 }}
+spec:
+  ports:
+    - port: {{ .Values.admin.port }}
+      targetPort: 80
+      name: http
+  selector:
+    app.kubernetes.io/name: admin
+    app.kubernetes.io/part-of: kalki
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kalki-admin
+  labels:
+    {{- include "kalki.labels" (dict "name" "admin" "ctx" .) | nindent 4 }}
+spec:
+  replicas: {{ .Values.admin.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: admin
+      app.kubernetes.io/part-of: kalki
+  template:
+    metadata:
+      labels:
+        {{- include "kalki.labels" (dict "name" "admin" "ctx" .) | nindent 8 }}
+        app.kubernetes.io/name: admin
+    spec:
+      {{- include "kalki.nodeAffinity" . | nindent 6 }}
+      containers:
+        - name: admin
+          image: {{ include "kalki.image" (dict "image" .Values.admin.image "tag" .Values.admin.imageTag "ctx" .) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 80
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.admin.resources | nindent 12 }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: kalki-admin
+  labels:
+    {{- include "kalki.labels" (dict "name" "admin" "ctx" .) | nindent 4 }}
+spec:
+  entryPoints:
+    - {{ .Values.traefik.entryPoint }}
+  routes:
+    - kind: Rule
+      match: Host(`{{ include "kalki.host" (dict "svc" "admin" "ctx" .) }}`)
+      services:
+        - name: kalki-admin
+          port: {{ .Values.admin.port }}
+  tls:
+    certResolver: {{ .Values.traefik.certResolver }}

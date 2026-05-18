@@ -1,0 +1,36 @@
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageUpdateAutomation
+metadata:
+  name: kalki
+  namespace: flux-system
+spec:
+  interval: 2m
+  sourceRef:
+    kind: GitRepository
+    name: kalki-gitops
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        name: fluxbot
+        email: fluxbot@kalki.cloud.podstack.ai
+      messageTemplate: |
+        chore(images): bump tags
+
+        Files changed:
+        {{ range $filename, $_ := .Updated.Files -}}
+        - {{ $filename }}
+        {{ end -}}
+
+        Images:
+        {{ range .Updated.Images -}}
+        - {{ .Name }}:{{ .NewTag }}
+        {{ end -}}
+    push:
+      branch: main
+  update:
+    path: ./helm/kalki/values.yaml
+    strategy: Setters

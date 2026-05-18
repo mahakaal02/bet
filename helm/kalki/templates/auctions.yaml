@@ -1,0 +1,78 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kalki-auctions
+  labels:
+    {{- include "kalki.labels" (dict "name" "auctions" "ctx" .) | nindent 4 }}
+spec:
+  ports:
+    - port: {{ .Values.auctions.port }}
+      targetPort: {{ .Values.auctions.port }}
+      name: http
+  selector:
+    app.kubernetes.io/name: auctions
+    app.kubernetes.io/part-of: kalki
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kalki-auctions
+  labels:
+    {{- include "kalki.labels" (dict "name" "auctions" "ctx" .) | nindent 4 }}
+spec:
+  replicas: {{ .Values.auctions.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auctions
+      app.kubernetes.io/part-of: kalki
+  template:
+    metadata:
+      labels:
+        {{- include "kalki.labels" (dict "name" "auctions" "ctx" .) | nindent 8 }}
+        app.kubernetes.io/name: auctions
+    spec:
+      {{- include "kalki.nodeAffinity" . | nindent 6 }}
+      containers:
+        - name: auctions
+          image: {{ include "kalki.image" (dict "image" .Values.auctions.image "tag" .Values.auctions.imageTag "ctx" .) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.auctions.port }}
+              name: http
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: {{ .Values.auctions.port | quote }}
+            {{- include "kalki.publicUrlEnv" . | nindent 12 }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.auctions.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.auctions.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.auctions.resources | nindent 12 }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: kalki-auctions
+  labels:
+    {{- include "kalki.labels" (dict "name" "auctions" "ctx" .) | nindent 4 }}
+spec:
+  entryPoints:
+    - {{ .Values.traefik.entryPoint }}
+  routes:
+    - kind: Rule
+      match: Host(`{{ include "kalki.host" (dict "svc" "auctions" "ctx" .) }}`)
+      services:
+        - name: kalki-auctions
+          port: {{ .Values.auctions.port }}
+  tls:
+    certResolver: {{ .Values.traefik.certResolver }}

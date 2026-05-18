@@ -1,0 +1,122 @@
+---
+{{- if .Values.backend.uploads.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kalki-backend-uploads
+  labels:
+    {{- include "kalki.labels" (dict "name" "backend" "ctx" .) | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: {{ .Values.backend.uploads.persistence.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.backend.uploads.persistence.size }}
+---
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: kalki-backend
+  labels:
+    {{- include "kalki.labels" (dict "name" "backend" "ctx" .) | nindent 4 }}
+spec:
+  ports:
+    - port: {{ .Values.backend.port }}
+      targetPort: {{ .Values.backend.port }}
+      name: http
+  selector:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: kalki
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kalki-backend
+  labels:
+    {{- include "kalki.labels" (dict "name" "backend" "ctx" .) | nindent 4 }}
+spec:
+  replicas: {{ .Values.backend.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backend
+      app.kubernetes.io/part-of: kalki
+  template:
+    metadata:
+      labels:
+        {{- include "kalki.labels" (dict "name" "backend" "ctx" .) | nindent 8 }}
+        app.kubernetes.io/name: backend
+    spec:
+      {{- include "kalki.nodeAffinity" . | nindent 6 }}
+      {{- if .Values.backend.prismaMigrate }}
+      initContainers:
+        - name: prisma-migrate
+          image: {{ include "kalki.image" (dict "image" .Values.backend.image "tag" .Values.backend.imageTag "ctx" .) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          securityContext:
+            runAsUser: 0
+          command: ["sh","-c","npx prisma migrate deploy --schema=prisma/schema.prisma || npx prisma db push --schema=prisma/schema.prisma --accept-data-loss"]
+          env:
+            - name: DATABASE_URL
+              value: {{ include "kalki.databaseUrl" (dict "dbname" "uniquebid" "override" .Values.backend.databaseUrl "ctx" .) | quote }}
+      {{- end }}
+      containers:
+        - name: backend
+          image: {{ include "kalki.image" (dict "image" .Values.backend.image "tag" .Values.backend.imageTag "ctx" .) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.backend.port }}
+              name: http
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: {{ .Values.backend.port | quote }}
+            - name: DATABASE_URL
+              value: {{ include "kalki.databaseUrl" (dict "dbname" "uniquebid" "override" .Values.backend.databaseUrl "ctx" .) | quote }}
+            {{- include "kalki.redisEnv" . | nindent 12 }}
+            {{- include "kalki.publicUrlEnv" . | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: kalki-shared
+          volumeMounts:
+            {{- if .Values.backend.uploads.persistence.enabled }}
+            - name: uploads
+              mountPath: /app/uploads
+            {{- end }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.backend.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.backend.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+      volumes:
+        {{- if .Values.backend.uploads.persistence.enabled }}
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: kalki-backend-uploads
+        {{- end }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: kalki-backend
+  labels:
+    {{- include "kalki.labels" (dict "name" "backend" "ctx" .) | nindent 4 }}
+spec:
+  entryPoints:
+    - {{ .Values.traefik.entryPoint }}
+  routes:
+    - kind: Rule
+      match: Host(`{{ include "kalki.host" (dict "svc" "backend" "ctx" .) }}`)
+      services:
+        - name: kalki-backend
+          port: {{ .Values.backend.port }}
+  tls:
+    certResolver: {{ .Values.traefik.certResolver }}
