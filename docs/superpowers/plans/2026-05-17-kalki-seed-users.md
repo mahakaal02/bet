@@ -595,6 +595,46 @@ echo "len=${#PGPW}"
 
 Expected: a non-zero length. Do **not** echo the password itself.
 
+- [ ] **Step 2a: FK pre-flight (added after Task 1 code review)**
+
+The seed's `deleteMany` will fail if any `@uniquebid.local` user has
+rows in tables whose FK to `User` lacks `onDelete: Cascade`. Check
+both DBs before snapshotting.
+
+```bash
+kubectl -n kalki port-forward svc/kalki-postgres 5432:5432 &
+PF_PID=$!
+sleep 3
+PGPASSWORD=$PGPW psql -h localhost -U postgres -d uniquebid <<'SQL'
+SELECT u.email,
+       (SELECT COUNT(*) FROM "Bid"             b WHERE b."userId" = u.id) AS bids,
+       (SELECT COUNT(*) FROM "CoinTransaction" t WHERE t."userId" = u.id) AS coin_tx,
+       (SELECT COUNT(*) FROM "AviatorBet"      a WHERE a."userId" = u.id) AS aviator_bets,
+       (SELECT COUNT(*) FROM "AviatorChatMessage" c WHERE c."userId" = u.id) AS aviator_msgs
+FROM "User" u
+WHERE u.email LIKE '%@uniquebid.local'
+  AND u.email <> 'ringmaster@uniquebid.local';
+SQL
+PGPASSWORD=$PGPW psql -h localhost -U postgres -d bet <<'SQL'
+SELECT u.email,
+       (SELECT COUNT(*) FROM "Transaction" t WHERE t."userId" = u.id) AS tx,
+       (SELECT COUNT(*) FROM "Position"    p WHERE p."userId" = u.id) AS positions,
+       (SELECT COUNT(*) FROM "Trade"       tr WHERE tr."userId" = u.id) AS trades
+FROM "User" u
+WHERE u.email LIKE '%@uniquebid.local';
+SQL
+kill $PF_PID; wait $PF_PID 2>/dev/null || true
+```
+
+Expected: all counts zero in both DBs.
+
+**If any count is non-zero:** STOP. The demo rows have transactional
+history that would be cascade-deleted alongside the user (or the
+deletion would fail outright). Surface the counts to the human and
+ask before proceeding — either accept the cascade as part of "demo
+account replacement" (delete the history too) or back out the
+deleteMany and prune manually.
+
 - [ ] **Step 3: Snapshot the live tables before changes**
 
 ```bash
