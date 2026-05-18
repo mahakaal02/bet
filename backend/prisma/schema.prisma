@@ -287,3 +287,22 @@ model AviatorChatMessage {
 
   @@index([createdAt(sort: Desc)])
 }
+
+/// Singleton admin-tunable knobs for Aviator. Exactly one row (id=1).
+///
+///   - maxPayout: optional global ceiling. When set, every round's
+///     computed crashMultiplier is clipped to this value before the
+///     round is published. Default null = uncapped. This does NOT
+///     change the provably-fair RNG (the round is still verifiable
+///     against its seed + nonce + the published cap).
+///   - forcedNextPayout: one-shot admin override. Set by the admin to
+///     pin the next round's crash multiplier to a specific value. The
+///     scheduler consumes (reads + clears) this in a single
+///     transaction at the start of each BETTING phase, so it fires
+///     exactly once and the auction then reverts to normal behaviour.
+model AviatorSettings {
+  id               Int      @id @default(1)
+  maxPayout        Decimal? @db.Decimal(10, 2)
+  forcedNextPayout Decimal? @db.Decimal(10, 2)
+  updatedAt        DateTime @updatedAt
+}

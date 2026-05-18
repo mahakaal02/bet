@@ -11,6 +11,7 @@ import CoinSettings from './pages/CoinSettings';
 import CoinPacks from './pages/CoinPacks';
 import Withdrawals from './pages/Withdrawals';
 import AviatorAnalytics from './pages/AviatorAnalytics';
+import AviatorControls from './pages/AviatorControls';
 import AviatorSeeds from './pages/AviatorSeeds';
 import AviatorChat from './pages/AviatorChat';
 import AviatorRounds from './pages/AviatorRounds';
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="coin-packs" element={<CoinPacks />} />
         <Route path="withdrawals" element={<Withdrawals />} />
         <Route path="aviator/analytics" element={<AviatorAnalytics />} />
+        <Route path="aviator/controls" element={<AviatorControls />} />
         <Route path="aviator/rounds" element={<AviatorRounds />} />
         <Route path="aviator/seeds" element={<AviatorSeeds />} />
         <Route path="aviator/chat" element={<AviatorChat />} />
