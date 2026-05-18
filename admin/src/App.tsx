@@ -5,6 +5,7 @@ import { consumeSsoToken } from './lib/sso';
 import Layout from './pages/Layout';
 import Login from './pages/Login';
 import Auctions from './pages/Auctions';
+import AuctionBids from './pages/AuctionBids';
 import CreateAuction from './pages/CreateAuction';
 import EditAuction from './pages/EditAuction';
 import CoinSettings from './pages/CoinSettings';
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="auctions" element={<Auctions />} />
         <Route path="auctions/new" element={<CreateAuction />} />
         <Route path="auctions/:id/edit" element={<EditAuction />} />
+        <Route path="auctions/:id/bids" element={<AuctionBids />} />
         <Route path="coin-settings" element={<CoinSettings />} />
         <Route path="coin-packs" element={<CoinPacks />} />
         <Route path="withdrawals" element={<Withdrawals />} />

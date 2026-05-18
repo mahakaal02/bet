@@ -92,6 +92,14 @@ export class AdminController {
     return this.auctions.close(id);
   }
 
+  // Exhaustive per-bid inspector for the auction admin "Bidding" view.
+  // Returns one row per bid with both the at-post classification and the
+  // current classification — ringmaster phantoms surface as @ringmaster.
+  @Get('auctions/:id/bids')
+  listAuctionBids(@Param('id') id: string) {
+    return this.auctions.listBids(id);
+  }
+
   // ─── Withdrawals ─────────────────────────────────────────────────────────
   // Moved to Bet's admin (canonical wallet). See `/admin/withdrawals` on
   // the Bet host — that's where pending payouts surface, with the per-user

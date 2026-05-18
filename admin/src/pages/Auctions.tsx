@@ -206,6 +206,15 @@ function AuctionCard({
               Close now
             </button>
           )}
+          {/* The bid inspector lists every bid (incl. ringmaster phantoms)
+              with sort + filter — available for LIVE auctions during a
+              fight and for ENDED auctions for post-mortem audit. */}
+          <Link
+            to={`/auctions/${a.id}/bids`}
+            className="text-slate-700 hover:underline"
+          >
+            Bids
+          </Link>
           <button onClick={onDelete} className="ml-auto text-red-600 hover:underline">
             Delete
           </button>

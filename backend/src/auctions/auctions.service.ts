@@ -3,7 +3,13 @@ import Decimal from 'decimal.js';
 import { PrismaService } from '../prisma/prisma.service';
 import { BidsService } from '../bids/bids.service';
 import { BidEventsService } from '../bids/bid-events.service';
-import { selectWinnerFromBids } from '../bids/bidding-engine';
+import {
+  type BidRow,
+  type BidStatusKind,
+  type ClassifyOpts,
+  classifyBidFor,
+  selectWinnerFromBids,
+} from '../bids/bidding-engine';
 
 @Injectable()
 export class AuctionsService {
@@ -285,6 +291,78 @@ export class AuctionsService {
           winnerAmount: winner ? winner.amount.toFixed(2) : null,
         },
       });
+    });
+  }
+
+  /**
+   * Exhaustive bid log for an auction, for admin inspection. For each
+   * bid returns:
+   *
+   *   - id, amount, createdAt (the raw row)
+   *   - userId + username (ringmaster phantoms surface as @ringmaster)
+   *   - coinsAtBid: how many coins were debited for this bid. Today we
+   *     read `auction.coinsPerBid` directly; if the price ever becomes
+   *     versioned per bid we'd join a snapshot here instead.
+   *   - statusAtPost: classification of THIS bid against the snapshot
+   *     of bids that existed at the moment it was placed (the
+   *     "what the user saw when they placed it" status).
+   *   - statusCurrent: classification of THIS bid against the FULL bid
+   *     pool today. Differs from statusAtPost when later bids changed
+   *     the unique-set (e.g. someone else collided your unique number).
+   *
+   * The bid list is sorted by createdAt asc so the admin can replay
+   * the auction in placement order. Ringmaster rows preserve their
+   * real createdAt — the admin can see exactly when each phantom
+   * collision fired.
+   */
+  async listBids(auctionId: string) {
+    const auction = await this.prisma.auction.findUnique({
+      where: { id: auctionId },
+      select: {
+        id: true,
+        coinsPerBid: true,
+        manipulationMode: true,
+        fixedWinningAmount: true,
+      },
+    });
+    if (!auction) throw new NotFoundException('auction not found');
+
+    const rows = await this.prisma.bid.findMany({
+      where: { auctionId },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        user: { select: { id: true, username: true } },
+      },
+    });
+
+    const opts: ClassifyOpts = {
+      fixedWinningAmount:
+        auction.manipulationMode === 'FIXED_WINNER' && auction.fixedWinningAmount
+          ? new Decimal(auction.fixedWinningAmount.toString())
+          : null,
+    };
+
+    const allBidRows: BidRow[] = rows.map((b) => ({
+      id: b.id,
+      userId: b.userId,
+      amount: new Decimal(b.amount.toString()),
+      createdAt: b.createdAt,
+    }));
+
+    return rows.map((b, idx) => {
+      const upToHere = allBidRows.slice(0, idx + 1);
+      const statusAtPost: BidStatusKind = classifyBidFor(b.id, upToHere, opts);
+      const statusCurrent: BidStatusKind = classifyBidFor(b.id, allBidRows, opts);
+      return {
+        id: b.id,
+        userId: b.userId,
+        username: b.user?.username ?? '—',
+        amount: b.amount.toString(),
+        coinsAtBid: auction.coinsPerBid,
+        createdAt: b.createdAt.toISOString(),
+        statusAtPost,
+        statusCurrent,
+      };
     });
   }
 }
