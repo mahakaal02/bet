@@ -13,11 +13,22 @@ async function main() {
   //
   // `passwordHash` is intentionally null on every row — the credentials
   // provider on Bet won't even look at it.
+  //
+  // Purge legacy @uniquebid.local demo rows so a re-seed produces a
+  // clean kalki-only state. (No ringmaster on the bet side, but we keep
+  // the NOT clause so the two seeds stay symmetrical.)
+  await db.user.deleteMany({
+    where: {
+      email: { endsWith: "@uniquebid.local" },
+      NOT: { email: "ringmaster@uniquebid.local" },
+    },
+  });
+
   const admin = await db.user.upsert({
-    where: { email: "admin@uniquebid.local" },
+    where: { email: "admin@kalki.local" },
     update: { isAdmin: true },
     create: {
-      email: "admin@uniquebid.local",
+      email: "admin@kalki.local",
       username: "admin",
       isAdmin: true,
       referralCode: "ADMIN1",
@@ -25,19 +36,16 @@ async function main() {
     },
   });
 
-  // Demo traders — mirror backend's demo1, demo2, demo3 accounts. The
-  // backend seeds 3 demos; we seed 5 so we still have padding for
-  // leaderboard tiles. Login on Bet rejects any demo4 / demo5 unless
-  // the user creates a matching account on the backend.
+  // Demo traders — mirror backend's user1/2/3 accounts.
   const demos: { id: string }[] = [];
-  for (let i = 1; i <= 5; i++) {
+  for (let i = 1; i <= 3; i++) {
     const u = await db.user.upsert({
-      where: { email: `demo${i}@uniquebid.local` },
+      where: { email: `user${i}@kalki.local` },
       update: {},
       create: {
-        email: `demo${i}@uniquebid.local`,
-        username: `demo${i}`,
-        referralCode: `DEMO0${i}`,
+        email: `user${i}@kalki.local`,
+        username: `user${i}`,
+        referralCode: `USER0${i}`,
         xp: Math.floor(Math.random() * 600),
         wallet: { create: { balance: 10000 } },
       },
@@ -220,7 +228,7 @@ async function main() {
   }
 
   console.log(
-    `Seeded ${markets.length} markets, ${demos.length} demo Bet shadow users (auth lives on the backend) + admin@uniquebid.local, ${achievements.length} achievements`,
+    `Seeded ${markets.length} markets, ${demos.length} demo Bet shadow users (auth lives on the backend) + admin@kalki.local, ${achievements.length} achievements`,
   );
 }
 
