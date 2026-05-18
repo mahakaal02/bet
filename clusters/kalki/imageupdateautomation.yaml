@@ -20,14 +20,13 @@ spec:
       messageTemplate: |
         chore(images): bump tags
 
-        Files changed:
-        {{ range $filename, $_ := .Updated.Files -}}
+        Files:
+        {{ range $filename, $_ := .Changed.FileChanges -}}
         - {{ $filename }}
-        {{ end -}}
-
-        Images:
-        {{ range .Updated.Images -}}
-        - {{ .Name }}:{{ .NewTag }}
+        {{ end }}
+        Updates:
+        {{ range .Changed.Changes -}}
+        - {{ .OldValue }} -> {{ .NewValue }}
         {{ end -}}
     push:
       branch: main
