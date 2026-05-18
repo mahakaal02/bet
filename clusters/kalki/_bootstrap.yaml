@@ -50,5 +50,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: kalki-gitops
-  targetNamespace: kalki   # for namespaced resources that don't set namespace explicitly
+  # No targetNamespace — each resource declares its own (HelmRelease lives in
+  # kalki, ImageRepository/Policy/UpdateAutomation in flux-system so the
+  # image-reflector + image-automation controllers can see them).
   wait: true

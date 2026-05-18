@@ -11,7 +11,10 @@ spec:
   imageRepositoryRef:
     name: kalki-backend
   filterTags:
-    pattern: '^[0-9]{8}T[0-9]{6}Z-[a-f0-9]{7}$'
+    # Match both old GH-Actions tag formats:
+    #   - YYYYMMDD-HHMM-<sha7>          (pre-9fae565)
+    #   - YYYYMMDDTHHMMSSZ-<sha7>       (post-9fae565)
+    pattern: '^[0-9]{8}[T-][0-9]+Z?-[a-f0-9]{7}$'
   policy:
     alphabetical:
       order: asc
@@ -25,7 +28,10 @@ spec:
   imageRepositoryRef:
     name: kalki-bet
   filterTags:
-    pattern: '^[0-9]{8}T[0-9]{6}Z-[a-f0-9]{7}$'
+    # Match both old GH-Actions tag formats:
+    #   - YYYYMMDD-HHMM-<sha7>          (pre-9fae565)
+    #   - YYYYMMDDTHHMMSSZ-<sha7>       (post-9fae565)
+    pattern: '^[0-9]{8}[T-][0-9]+Z?-[a-f0-9]{7}$'
   policy:
     alphabetical:
       order: asc
@@ -39,7 +45,10 @@ spec:
   imageRepositoryRef:
     name: kalki-auctions
   filterTags:
-    pattern: '^[0-9]{8}T[0-9]{6}Z-[a-f0-9]{7}$'
+    # Match both old GH-Actions tag formats:
+    #   - YYYYMMDD-HHMM-<sha7>          (pre-9fae565)
+    #   - YYYYMMDDTHHMMSSZ-<sha7>       (post-9fae565)
+    pattern: '^[0-9]{8}[T-][0-9]+Z?-[a-f0-9]{7}$'
   policy:
     alphabetical:
       order: asc
@@ -53,7 +62,10 @@ spec:
   imageRepositoryRef:
     name: kalki-aviator
   filterTags:
-    pattern: '^[0-9]{8}T[0-9]{6}Z-[a-f0-9]{7}$'
+    # Match both old GH-Actions tag formats:
+    #   - YYYYMMDD-HHMM-<sha7>          (pre-9fae565)
+    #   - YYYYMMDDTHHMMSSZ-<sha7>       (post-9fae565)
+    pattern: '^[0-9]{8}[T-][0-9]+Z?-[a-f0-9]{7}$'
   policy:
     alphabetical:
       order: asc
@@ -67,7 +79,10 @@ spec:
   imageRepositoryRef:
     name: kalki-admin
   filterTags:
-    pattern: '^[0-9]{8}T[0-9]{6}Z-[a-f0-9]{7}$'
+    # Match both old GH-Actions tag formats:
+    #   - YYYYMMDD-HHMM-<sha7>          (pre-9fae565)
+    #   - YYYYMMDDTHHMMSSZ-<sha7>       (post-9fae565)
+    pattern: '^[0-9]{8}[T-][0-9]+Z?-[a-f0-9]{7}$'
   policy:
     alphabetical:
       order: asc
