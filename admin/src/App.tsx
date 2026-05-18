@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { isAuthed } from './lib/auth';
+import { consumeSsoToken } from './lib/sso';
 import Layout from './pages/Layout';
 import Login from './pages/Login';
 import Auctions from './pages/Auctions';
@@ -17,7 +19,28 @@ function Protected({ children }: { children: JSX.Element }) {
   return isAuthed() ? children : <Navigate to="/login" replace />;
 }
 
+// SSO from the Kalki hub: when an admin lands here with `?token=…`,
+// we exchange it for a session before rendering any route. Without
+// this gate `<Protected>` would bounce to /login before the async
+// exchange completes.
+const hasSsoToken = new URLSearchParams(window.location.search).has('token');
+
 export default function App() {
+  const [bootstrapping, setBootstrapping] = useState(hasSsoToken);
+
+  useEffect(() => {
+    if (!hasSsoToken) return;
+    consumeSsoToken().finally(() => setBootstrapping(false));
+  }, []);
+
+  if (bootstrapping) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-indigo to-brand-indigo-dark text-white">
+        <div className="text-sm opacity-80">Signing you in…</div>
+      </div>
+    );
+  }
+
   return (
     <Routes>
       <Route path="/login" element={<Login />} />

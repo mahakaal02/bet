@@ -42,11 +42,24 @@ export default async function HubPage() {
 
   const aviatorBase = process.env.NEXT_PUBLIC_AVIATOR_URL ?? "http://localhost:3000";
   const exchangeBase = process.env.NEXT_PUBLIC_EXCHANGE_URL ?? "http://localhost:3100";
+  const adminBase = process.env.NEXT_PUBLIC_ADMIN_URL ?? "http://localhost:4173";
   // SSO links carry the JWT so the destination's TokenBridge can sign
   // the user in. Local route stays clean — no need to leak the token
   // back to the URL bar.
-  const aviatorHref = `${aviatorBase.replace(/\/$/, "")}/?token=${encodeURIComponent(token)}`;
-  const exchangeHref = `${exchangeBase.replace(/\/$/, "")}/?token=${encodeURIComponent(token)}`;
+  const tokenQs = `?token=${encodeURIComponent(token)}`;
+  const isAdmin = !!me?.isAdmin;
+  const auctionsHref = isAdmin
+    ? `${adminBase.replace(/\/$/, "")}/auctions${tokenQs}`
+    : "/auctions";
+  const aviatorHref = isAdmin
+    ? `${adminBase.replace(/\/$/, "")}/aviator/analytics${tokenQs}`
+    : `${aviatorBase.replace(/\/$/, "")}/${tokenQs}`;
+  const exchangeHref = isAdmin
+    ? `${exchangeBase.replace(/\/$/, "")}/admin${tokenQs}`
+    : `${exchangeBase.replace(/\/$/, "")}/${tokenQs}`;
+  // Admin tiles all leave this origin, so they open externally just
+  // like the user-facing Aviator/Exchange tiles do.
+  const auctionsExternal = isAdmin;
 
   return (
     <main className="min-h-screen pb-20">
@@ -55,25 +68,40 @@ export default async function HubPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-black tracking-tight">
             Hi <span className="text-cyan-300">@{me?.username}</span>
+            {isAdmin && (
+              <span className="ml-3 align-middle rounded-md border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-amber-300">
+                Admin
+              </span>
+            )}
           </h1>
           <p className="text-sm text-slate-400">
-            Pick a product to dive in. Your coins move with you — same
-            wallet across all three.
+            {isAdmin
+              ? "Pick a product to manage. Each tile opens its admin console."
+              : "Pick a product to dive in. Your coins move with you — same wallet across all three."}
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <ProductTile
-            href="/auctions"
+            href={auctionsHref}
             title="Live Auctions"
-            tagline="Lowest unique bid wins. Each bid costs coins from your wallet."
+            tagline={
+              isAdmin
+                ? "Manage live auctions, close rounds, inspect bids."
+                : "Lowest unique bid wins. Each bid costs coins from your wallet."
+            }
             tone="cyan"
             icon="🛒"
+            external={auctionsExternal}
           />
           <ProductTile
             href={aviatorHref}
             title="Aviator"
-            tagline="Cash out before the multiplier crashes."
+            tagline={
+              isAdmin
+                ? "Analytics, round log, seeds, chat moderation."
+                : "Cash out before the multiplier crashes."
+            }
             tone="orange"
             icon="✈️"
             external
@@ -81,7 +109,11 @@ export default async function HubPage() {
           <ProductTile
             href={exchangeHref}
             title="Kalki Exchange"
-            tagline="Trade YES / NO shares on prediction markets."
+            tagline={
+              isAdmin
+                ? "Markets, users, withdrawals, comment moderation."
+                : "Trade YES / NO shares on prediction markets."
+            }
             tone="emerald"
             icon="📈"
             external

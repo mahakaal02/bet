@@ -60,6 +60,8 @@ public Traefik-fronted URLs (HTTPS).
   value: "https://{{ include "kalki.host" (dict "svc" "aviator" "ctx" .) }}"
 - name: NEXT_PUBLIC_EXCHANGE_URL
   value: "https://{{ include "kalki.host" (dict "svc" "bet" "ctx" .) }}"
+- name: NEXT_PUBLIC_ADMIN_URL
+  value: "https://{{ include "kalki.host" (dict "svc" "admin" "ctx" .) }}"
 - name: NEXT_PUBLIC_API_URL
   value: "https://{{ include "kalki.host" (dict "svc" "backend" "ctx" .) }}"
 - name: AUCTIONS_BACKEND_URL
