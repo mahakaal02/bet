@@ -27,6 +27,7 @@ export default function Layout() {
             Aviator
           </div>
           <SideLink to="/aviator/analytics" label="Analytics" />
+          <SideLink to="/aviator/controls" label="Controls" />
           <SideLink to="/aviator/rounds" label="Round log" />
           <SideLink to="/aviator/seeds" label="Seeds" />
           <SideLink to="/aviator/chat" label="Chat moderation" />

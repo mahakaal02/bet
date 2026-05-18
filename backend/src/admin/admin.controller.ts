@@ -97,6 +97,20 @@ export class AdminController {
   // the Bet host — that's where pending payouts surface, with the per-user
   // audit page showing all coin flow + IP overlap warnings.
 
+  // Admin knobs for Aviator: (1) global max-payout ceiling, (2) one-shot
+  // forced-payout override for the next round. See `AviatorSettings` model.
+  @Get('aviator/settings')
+  aviatorSettings() {
+    return this.aviator.getAdminSettings();
+  }
+
+  @Patch('aviator/settings')
+  updateAviatorSettings(
+    @Body() dto: { maxPayout?: string | null; forcedNextPayout?: string | null },
+  ) {
+    return this.aviator.updateAdminSettings(dto);
+  }
+
   @Get('aviator/rounds')
   aviatorRounds(
     @Query('limit') limit?: string,
