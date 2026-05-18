@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import ImageManager from './ImageManager';
@@ -53,6 +53,58 @@ export default function EditAuction() {
       ? 'FIXED_WINNER'
       : 'NORMAL';
 
+  // Snapshot of every editable field as it was when the auction was
+  // loaded from the server. Save is disabled until at least one value
+  // diverges from this snapshot, so opening an auction and saving
+  // immediately can't accidentally re-PATCH the same data.
+  type Snapshot = {
+    title: string;
+    description: string;
+    retailPrice: string;
+    coinsPerBid: number;
+    startImmediately: boolean;
+    startsAt: string;
+    endsAt: string;
+    imageUrls: string[];
+    noWinner: boolean;
+    fixedWinningAmount: string;
+  };
+  const [initial, setInitial] = useState<Snapshot | null>(null);
+
+  // Compare current form values to the loaded snapshot. Arrays use
+  // length + per-index equality (URLs are stable strings, so a shallow
+  // pass is enough). Trim string comparisons so leading/trailing
+  // whitespace from manual typing doesn't count as a "change".
+  const hasChanges = useMemo(() => {
+    if (!initial) return false;
+    if (initial.title !== title) return true;
+    if (initial.description !== description) return true;
+    if (initial.retailPrice !== retailPrice) return true;
+    if (initial.coinsPerBid !== coinsPerBid) return true;
+    if (initial.startImmediately !== startImmediately) return true;
+    if (initial.startsAt !== startsAt) return true;
+    if (initial.endsAt !== endsAt) return true;
+    if (initial.noWinner !== noWinner) return true;
+    if (initial.fixedWinningAmount.trim() !== fixedWinningAmount.trim()) return true;
+    if (initial.imageUrls.length !== imageUrls.length) return true;
+    for (let i = 0; i < imageUrls.length; i += 1) {
+      if (initial.imageUrls[i] !== imageUrls[i]) return true;
+    }
+    return false;
+  }, [
+    initial,
+    title,
+    description,
+    retailPrice,
+    coinsPerBid,
+    startImmediately,
+    startsAt,
+    endsAt,
+    noWinner,
+    fixedWinningAmount,
+    imageUrls,
+  ]);
+
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
@@ -81,11 +133,27 @@ export default function EditAuction() {
         // control is non-default, open the disclosure so the admin sees
         // what's already wired without hunting for it.
         const mode = (a.manipulationMode ?? 'NORMAL') as ManipulationMode;
-        setNoWinner(mode === 'NO_WINNER');
-        setFixedWinningAmount(
-          mode === 'FIXED_WINNER' ? a.fixedWinningAmount ?? '' : '',
-        );
+        const loadedNoWinner = mode === 'NO_WINNER';
+        const loadedFixedAmount =
+          mode === 'FIXED_WINNER' ? a.fixedWinningAmount ?? '' : '';
+        setNoWinner(loadedNoWinner);
+        setFixedWinningAmount(loadedFixedAmount);
         if (mode !== 'NORMAL') setAdvancedOpen(true);
+        // Snapshot the loaded state. `hasChanges` compares the current
+        // form against this so save stays disabled until something
+        // diverges.
+        setInitial({
+          title: a.title,
+          description: a.description,
+          retailPrice: a.retailPrice,
+          coinsPerBid: a.coinsPerBid,
+          startImmediately: !a.startsAt,
+          startsAt: a.startsAt ? toLocalInput(a.startsAt) : '',
+          endsAt: toLocalInput(a.endsAt),
+          imageUrls: a.imageUrls ?? [],
+          noWinner: loadedNoWinner,
+          fixedWinningAmount: loadedFixedAmount,
+        });
       } catch (e) {
         setError(e instanceof ApiError ? e.message : 'failed to load auction');
       } finally {
@@ -272,14 +340,20 @@ export default function EditAuction() {
 
         {error && <div className="text-sm text-red-600">{error}</div>}
 
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
           <button
             type="submit"
-            disabled={submitting}
-            className="px-4 py-2 bg-brand-indigo text-white rounded font-medium hover:bg-brand-indigo-dark transition disabled:opacity-50"
+            disabled={submitting || !hasChanges}
+            // `disabled:cursor-not-allowed` makes the "nothing to save"
+            // state obvious — disabling opacity alone reads as a hover
+            // state on some browsers.
+            className="px-4 py-2 bg-brand-indigo text-white rounded font-medium hover:bg-brand-indigo-dark transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? 'Saving…' : 'Save changes'}
           </button>
+          {!submitting && !hasChanges && (
+            <span className="text-xs text-slate-500">No changes to save.</span>
+          )}
           <button
             type="button"
             onClick={() => navigate('/auctions')}

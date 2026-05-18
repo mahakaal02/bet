@@ -27,7 +27,10 @@ export default function Login() {
       }
       setToken(res.token);
       setUser(res.user);
-      navigate('/auctions', { replace: true });
+      // Land on the three-tile hub instead of jumping straight into a
+      // single product — mirrors the Kalki user-facing hub and lets an
+      // admin pick which surface to dive into.
+      navigate('/', { replace: true });
     } catch (e) {
       const msg = e instanceof ApiError ? (e.status === 401 ? 'invalid credentials' : e.message) : 'login failed';
       setError(msg);
