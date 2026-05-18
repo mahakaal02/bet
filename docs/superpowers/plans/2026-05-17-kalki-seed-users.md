@@ -619,7 +619,9 @@ PGPASSWORD=$PGPW psql -h localhost -U postgres -d bet <<'SQL'
 SELECT u.email,
        (SELECT COUNT(*) FROM "Transaction" t WHERE t."userId" = u.id) AS tx,
        (SELECT COUNT(*) FROM "Position"    p WHERE p."userId" = u.id) AS positions,
-       (SELECT COUNT(*) FROM "Trade"       tr WHERE tr."userId" = u.id) AS trades
+       (SELECT COUNT(*) FROM "Trade"       tr WHERE tr."userId" = u.id) AS trades,
+       (SELECT COUNT(*) FROM "Report" r WHERE r."resolverId" = u.id) AS reports_resolved,
+       (SELECT COUNT(*) FROM "WithdrawalRequest" w WHERE w."decidedById" = u.id) AS withdrawals_decided
 FROM "User" u
 WHERE u.email LIKE '%@uniquebid.local';
 SQL
