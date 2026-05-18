@@ -11,6 +11,10 @@ spec:
   chart:
     spec:
       chart: ./helm/kalki
+      # Re-fetch the chart on any GitRepository revision change, not just on
+      # Chart.yaml.version bump. Without this, source-controller caches the
+      # tar artifact and template edits don't take effect until version bumps.
+      reconcileStrategy: Revision
       sourceRef:
         kind: GitRepository
         name: kalki-gitops
