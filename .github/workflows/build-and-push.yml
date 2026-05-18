@@ -1,0 +1,93 @@
+name: Build & push container images
+
+on:
+  workflow_dispatch:
+    inputs:
+      services:
+        description: "Comma-separated subset to build (blank = all four UI apps)"
+        required: false
+        default: "bet,auctions,aviator,admin"
+
+concurrency:
+  group: build-push-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false  # never cancel an in-flight prod build
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: bet
+            build_args: |
+              NEXT_PUBLIC_AUCTIONS_URL=https://kalki-auctions.cloud.podstack.ai
+              NEXT_PUBLIC_AVIATOR_URL=https://kalki-aviator.cloud.podstack.ai
+              NEXT_PUBLIC_GOOGLE_ENABLED=false
+          - service: auctions
+            build_args: |
+              NEXT_PUBLIC_AUCTIONS_URL=https://kalki-auctions.cloud.podstack.ai
+              NEXT_PUBLIC_AVIATOR_URL=https://kalki-aviator.cloud.podstack.ai
+              NEXT_PUBLIC_BACKEND_URL=https://kalki-backend.cloud.podstack.ai
+              NEXT_PUBLIC_EXCHANGE_URL=https://kalki-bet.cloud.podstack.ai
+          - service: aviator
+            build_args: |
+              NEXT_PUBLIC_API_URL=https://kalki-backend.cloud.podstack.ai
+              NEXT_PUBLIC_AUCTIONS_URL=https://kalki-auctions.cloud.podstack.ai
+              NEXT_PUBLIC_EXCHANGE_URL=https://kalki-bet.cloud.podstack.ai
+          - service: admin
+            build_args: |
+              VITE_API_BASE_URL=https://kalki-backend.cloud.podstack.ai
+              VITE_BET_BASE_URL=https://kalki-bet.cloud.podstack.ai
+
+    steps:
+      - name: Skip if not requested
+        id: gate
+        run: |
+          requested="${{ github.event.inputs.services || 'bet,auctions,aviator,admin' }}"
+          if [[ ",${requested}," == *",${{ matrix.service }},"* ]]; then
+            echo "selected=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "selected=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::skipping ${{ matrix.service }} (not in requested set: ${requested})"
+          fi
+
+      - name: Checkout
+        if: steps.gate.outputs.selected == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        if: steps.gate.outputs.selected == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        if: steps.gate.outputs.selected == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        if: steps.gate.outputs.selected == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Compute tag
+        if: steps.gate.outputs.selected == 'true'
+        id: tag
+        run: echo "value=$(date -u +%Y%m%d-%H%M)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push ${{ matrix.service }}
+        if: steps.gate.outputs.selected == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          file: ./${{ matrix.service }}/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/kalki-${{ matrix.service }}:latest
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/kalki-${{ matrix.service }}:${{ steps.tag.outputs.value }}
+          build-args: ${{ matrix.build_args }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
