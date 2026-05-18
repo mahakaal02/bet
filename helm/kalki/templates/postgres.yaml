@@ -61,7 +61,6 @@ spec:
     metadata:
       labels:
         {{- include "kalki.labels" (dict "name" "postgres" "ctx" .) | nindent 8 }}
-        app.kubernetes.io/name: postgres
     spec:
       {{- include "kalki.nodeAffinity" . | nindent 6 }}
       containers:
