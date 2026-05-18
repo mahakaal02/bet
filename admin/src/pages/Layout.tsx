@@ -14,8 +14,19 @@ export default function Layout() {
     <div className="min-h-screen flex">
       <aside className="w-64 bg-brand-indigo-dark text-white flex flex-col">
         <div className="px-6 py-6 border-b border-white/10">
-          <div className="text-brand-gold text-xl font-semibold tracking-tight">Kalki Bet</div>
+          <NavLink
+            to="/"
+            className="block text-brand-gold text-xl font-semibold tracking-tight hover:opacity-90"
+          >
+            Kalki Bet
+          </NavLink>
           <div className="text-xs opacity-70 mt-1">Admin console</div>
+          <NavLink
+            to="/"
+            className="mt-2 inline-block text-[11px] uppercase tracking-wider text-white/60 hover:text-brand-gold"
+          >
+            ← All games
+          </NavLink>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1">
           <SideLink to="/auctions" label="Auctions" />
