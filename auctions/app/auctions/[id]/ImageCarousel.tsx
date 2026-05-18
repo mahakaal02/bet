@@ -62,8 +62,10 @@ export function ImageCarousel({
   }, [active]);
 
   if (images.length === 0) {
+    // Empty-state square is capped so an imageless auction doesn't
+    // dominate the layout the way a 4:3 box did on wider viewports.
     return (
-      <div className="flex aspect-[4/3] items-center justify-center rounded-xl border border-[var(--color-divider)] bg-slate-900 text-slate-700">
+      <div className="mx-auto flex aspect-square w-full max-w-[420px] items-center justify-center rounded-xl border border-[var(--color-divider)] bg-slate-900 text-4xl text-slate-700">
         🛒
       </div>
     );
@@ -79,12 +81,16 @@ export function ImageCarousel({
   const next = () => scrollTo(Math.min(images.length - 1, active + 1));
 
   return (
-    <div className="space-y-2">
-      {/* Hero strip — scroll-snap on the X axis, one slide per page. */}
+    <div className="mx-auto w-full max-w-[480px] space-y-2">
+      {/* Hero strip — scroll-snap on the X axis, one slide per page.
+          Amazon-style: square aspect, `object-contain` so portrait /
+          landscape product photos both fit without cropping, soft
+          backdrop. Width is capped so the image doesn't dominate the
+          page on wide viewports. */}
       <div className="relative">
         <div
           ref={scrollRef}
-          className="flex aspect-[4/3] w-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden rounded-xl border border-[var(--color-divider)] bg-slate-950 [&::-webkit-scrollbar]:hidden"
+          className="flex aspect-square w-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden rounded-xl border border-[var(--color-divider)] bg-slate-900 [&::-webkit-scrollbar]:hidden"
           style={{ scrollbarWidth: "none" }}
         >
           {images.map((src, i) => (
@@ -94,14 +100,14 @@ export function ImageCarousel({
               ref={(el) => {
                 slideRefs.current[i] = el;
               }}
-              className="relative aspect-[4/3] h-full w-full shrink-0 snap-center"
+              className="relative aspect-square h-full w-full shrink-0 snap-center"
             >
               <Image
                 src={src}
                 alt={`${title} — image ${i + 1}`}
                 fill
-                sizes="(min-width: 768px) 60vw, 100vw"
-                className="object-cover"
+                sizes="(min-width: 768px) 480px, 100vw"
+                className="object-contain"
                 unoptimized
                 priority={i === 0}
               />

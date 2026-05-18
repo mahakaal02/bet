@@ -47,7 +47,7 @@ export default async function AuctionDetailPage({
           ← All auctions
         </Link>
 
-        <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-[1.2fr_1fr]">
+        <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
           <ImageCarousel title={auction.title} images={auction.imageUrls} />
 
           <div className="space-y-4">
@@ -118,14 +118,16 @@ export default async function AuctionDetailPage({
           </div>
         </div>
 
-        <Card className="mt-6">
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-            About this auction
-          </h2>
-          <p className="whitespace-pre-line text-sm text-slate-300">
-            {auction.description}
-          </p>
-        </Card>
+        {auction.description?.trim() && (
+          <section className="mt-10 border-t border-[var(--color-divider)] pt-6">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">
+              About this item
+            </h2>
+            <p className="whitespace-pre-line text-sm leading-relaxed text-slate-300">
+              {auction.description}
+            </p>
+          </section>
+        )}
       </div>
     </main>
   );
