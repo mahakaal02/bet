@@ -5,6 +5,16 @@ RUN npm ci
 
 FROM node:20-alpine AS builder
 WORKDIR /app
+# Next.js inlines NEXT_PUBLIC_* at build time. They must be present in env
+# when `next build` runs — supplying via runtime container env does nothing.
+ARG NEXT_PUBLIC_AUCTIONS_URL
+ARG NEXT_PUBLIC_AVIATOR_URL
+ARG NEXT_PUBLIC_BACKEND_URL
+ARG NEXT_PUBLIC_EXCHANGE_URL
+ENV NEXT_PUBLIC_AUCTIONS_URL=$NEXT_PUBLIC_AUCTIONS_URL
+ENV NEXT_PUBLIC_AVIATOR_URL=$NEXT_PUBLIC_AVIATOR_URL
+ENV NEXT_PUBLIC_BACKEND_URL=$NEXT_PUBLIC_BACKEND_URL
+ENV NEXT_PUBLIC_EXCHANGE_URL=$NEXT_PUBLIC_EXCHANGE_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
