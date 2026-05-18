@@ -1,19 +1,54 @@
 name: Build & push container images
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "bet/**"
+      - "auctions/**"
+      - "aviator/**"
+      - "admin/**"
+      - ".github/workflows/build-and-push.yml"
   workflow_dispatch:
     inputs:
       services:
-        description: "Comma-separated subset to build (blank = all four UI apps)"
+        description: "Comma-separated subset to build (blank on push = auto-detect from changed paths; blank on manual = all four)"
         required: false
-        default: "bet,auctions,aviator,admin"
+        default: ""
 
 concurrency:
   group: build-push-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false  # never cancel an in-flight prod build
 
 jobs:
+  # Detect which service trees changed in this push. Outputs one boolean per
+  # service so the matrix can gate itself without rebuilding everything when
+  # only a single app touched.
+  detect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      bet: ${{ steps.filter.outputs.bet }}
+      auctions: ${{ steps.filter.outputs.auctions }}
+      aviator: ${{ steps.filter.outputs.aviator }}
+      admin: ${{ steps.filter.outputs.admin }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            bet:
+              - 'bet/**'
+            auctions:
+              - 'auctions/**'
+            aviator:
+              - 'aviator/**'
+            admin:
+              - 'admin/**'
+
   build:
+    needs: detect
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -21,36 +56,63 @@ jobs:
       matrix:
         include:
           - service: bet
+            changed: ${{ needs.detect.outputs.bet }}
             build_args: |
               NEXT_PUBLIC_AUCTIONS_URL=https://kalki-auctions.cloud.podstack.ai
               NEXT_PUBLIC_AVIATOR_URL=https://kalki-aviator.cloud.podstack.ai
               NEXT_PUBLIC_GOOGLE_ENABLED=false
           - service: auctions
+            changed: ${{ needs.detect.outputs.auctions }}
             build_args: |
               NEXT_PUBLIC_AUCTIONS_URL=https://kalki-auctions.cloud.podstack.ai
               NEXT_PUBLIC_AVIATOR_URL=https://kalki-aviator.cloud.podstack.ai
               NEXT_PUBLIC_BACKEND_URL=https://kalki-backend.cloud.podstack.ai
               NEXT_PUBLIC_EXCHANGE_URL=https://kalki-bet.cloud.podstack.ai
           - service: aviator
+            changed: ${{ needs.detect.outputs.aviator }}
             build_args: |
               NEXT_PUBLIC_API_URL=https://kalki-backend.cloud.podstack.ai
               NEXT_PUBLIC_AUCTIONS_URL=https://kalki-auctions.cloud.podstack.ai
               NEXT_PUBLIC_EXCHANGE_URL=https://kalki-bet.cloud.podstack.ai
           - service: admin
+            changed: ${{ needs.detect.outputs.admin }}
             build_args: |
               VITE_API_BASE_URL=https://kalki-backend.cloud.podstack.ai
               VITE_BET_BASE_URL=https://kalki-bet.cloud.podstack.ai
 
     steps:
-      - name: Skip if not requested
+      # Resolve "should this matrix leg run?" per event + input:
+      #   - workflow_dispatch with explicit services input → respect the list
+      #   - workflow_dispatch with blank input → run all four
+      #   - push → only run if the service's tree changed (from detect job)
+      - name: Gate
         id: gate
         run: |
-          requested="${{ github.event.inputs.services || 'bet,auctions,aviator,admin' }}"
-          if [[ ",${requested}," == *",${{ matrix.service }},"* ]]; then
-            echo "selected=true" >> "$GITHUB_OUTPUT"
+          input="${{ github.event.inputs.services }}"
+          event="${{ github.event_name }}"
+          changed="${{ matrix.changed }}"
+          svc="${{ matrix.service }}"
+
+          if [ "$event" = "workflow_dispatch" ]; then
+            if [ -n "$input" ]; then
+              if [[ ",${input}," == *",${svc},"* ]]; then
+                echo "selected=true"  >> "$GITHUB_OUTPUT"
+              else
+                echo "selected=false" >> "$GITHUB_OUTPUT"
+                echo "::notice::skipping ${svc} (not in dispatch input: ${input})"
+              fi
+            else
+              # blank input on manual run = build all four
+              echo "selected=true" >> "$GITHUB_OUTPUT"
+            fi
           else
-            echo "selected=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::skipping ${{ matrix.service }} (not in requested set: ${requested})"
+            # push event — only build if files in this service tree changed
+            if [ "$changed" = "true" ]; then
+              echo "selected=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "selected=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::skipping ${svc} (no path changes)"
+            fi
           fi
 
       - name: Checkout
@@ -72,10 +134,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      # Tag: UTC YYYYMMDDTHHMMSSZ + 7-char SHA. Both pieces are useful — the
+      # timestamp sorts lexicographically, the SHA traces back to source.
       - name: Compute tag
         if: steps.gate.outputs.selected == 'true'
         id: tag
-        run: echo "value=$(date -u +%Y%m%d-%H%M)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        run: echo "value=$(date -u +%Y%m%dT%H%M%SZ)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Build & push ${{ matrix.service }}
         if: steps.gate.outputs.selected == 'true'
