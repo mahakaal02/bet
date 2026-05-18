@@ -98,7 +98,7 @@ export function LoginForm({
         <div className="space-y-2 pt-2">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
             Demo users · password{" "}
-            <code className="rounded bg-slate-800 px-1 text-slate-300">password12345</code>
+            <code className="rounded bg-slate-800 px-1 text-slate-300">{SHARED_PASSWORD}</code>
           </p>
           <div className="flex flex-wrap gap-1.5">
             {DEMO_USERS.map((u) => (
