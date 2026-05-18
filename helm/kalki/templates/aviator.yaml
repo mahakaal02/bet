@@ -30,7 +30,6 @@ spec:
     metadata:
       labels:
         {{- include "kalki.labels" (dict "name" "aviator" "ctx" .) | nindent 8 }}
-        app.kubernetes.io/name: aviator
     spec:
       {{- include "kalki.nodeAffinity" . | nindent 6 }}
       containers:

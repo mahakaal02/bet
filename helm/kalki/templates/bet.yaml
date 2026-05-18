@@ -30,7 +30,6 @@ spec:
     metadata:
       labels:
         {{- include "kalki.labels" (dict "name" "bet" "ctx" .) | nindent 8 }}
-        app.kubernetes.io/name: bet
     spec:
       {{- include "kalki.nodeAffinity" . | nindent 6 }}
       {{- if .Values.bet.prismaMigrate }}

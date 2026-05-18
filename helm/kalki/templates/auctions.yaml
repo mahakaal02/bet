@@ -30,7 +30,6 @@ spec:
     metadata:
       labels:
         {{- include "kalki.labels" (dict "name" "auctions" "ctx" .) | nindent 8 }}
-        app.kubernetes.io/name: auctions
     spec:
       {{- include "kalki.nodeAffinity" . | nindent 6 }}
       containers:

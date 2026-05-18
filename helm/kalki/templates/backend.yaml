@@ -45,7 +45,6 @@ spec:
     metadata:
       labels:
         {{- include "kalki.labels" (dict "name" "backend" "ctx" .) | nindent 8 }}
-        app.kubernetes.io/name: backend
     spec:
       {{- include "kalki.nodeAffinity" . | nindent 6 }}
       {{- if .Values.backend.prismaMigrate }}
