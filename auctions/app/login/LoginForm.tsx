@@ -6,20 +6,21 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
 /**
- * Demo accounts seeded in the auctions backend (see
- * `backend/prisma/seed.ts`). All have password `demo1234`. We show them
- * as click-to-fill chips so the user can flip between identities while
- * testing real-time bid updates — open one browser as demo1, another
- * as demo2, watch the "outbid" status flip live.
+ * Seed accounts created by `backend/prisma/seed.ts` and
+ * `bet/prisma/seed.ts`. All four share the password `password12345`.
+ * Chip-to-fill helps QA flip between identities while testing
+ * real-time bid updates — open one browser as user1, another as
+ * user2, watch the "outbid" status flip live.
  */
+const SHARED_PASSWORD = "password12345";
 const DEMO_USERS = [
-  { email: "demo1@uniquebid.local", label: "demo1" },
-  { email: "demo2@uniquebid.local", label: "demo2" },
-  { email: "demo3@uniquebid.local", label: "demo3" },
+  { email: "user1@kalki.local", label: "user1" },
+  { email: "user2@kalki.local", label: "user2" },
+  { email: "user3@kalki.local", label: "user3" },
 ];
 const ADMIN_USER = {
-  email: "admin@uniquebid.local",
-  password: "admin123",
+  email: "admin@kalki.local",
+  password: SHARED_PASSWORD,
   label: "admin",
 };
 
@@ -72,7 +73,7 @@ export function LoginForm({
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="demo1@uniquebid.local"
+          placeholder="user1@kalki.local"
         />
       </label>
       <label className="block">
@@ -85,7 +86,7 @@ export function LoginForm({
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="demo1234"
+          placeholder="password12345"
         />
       </label>
       {error && <p className="text-xs text-rose-300">{error}</p>}
@@ -97,7 +98,7 @@ export function LoginForm({
         <div className="space-y-2 pt-2">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
             Demo users · password{" "}
-            <code className="rounded bg-slate-800 px-1 text-slate-300">demo1234</code>
+            <code className="rounded bg-slate-800 px-1 text-slate-300">password12345</code>
           </p>
           <div className="flex flex-wrap gap-1.5">
             {DEMO_USERS.map((u) => (
@@ -106,7 +107,7 @@ export function LoginForm({
                 type="button"
                 onClick={() => {
                   setEmail(u.email);
-                  setPassword("demo1234");
+                  setPassword(SHARED_PASSWORD);
                 }}
                 className="rounded-md border border-slate-700 bg-slate-900/60 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800/60"
               >
