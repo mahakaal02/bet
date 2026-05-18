@@ -29,7 +29,13 @@ export async function GET(req: Request) {
   // Defensive: only follow local same-origin redirects so a forged URL
   // can't pivot the user to a phishing host.
   const safeNext = nextParam.startsWith("/") ? nextParam : "/";
-  const failureRedirect = NextResponse.redirect(new URL("/login", req.url));
+  // Behind Traefik, `req.url` carries the pod-internal host
+  // (`localhost:3100`) — building Location headers off it sends the
+  // browser to localhost. Anchor redirects to `NEXTAUTH_URL`, which the
+  // helm chart pins to the public hostname.
+  const publicOrigin =
+    process.env.NEXTAUTH_URL?.replace(/\/$/, "") ?? url.origin;
+  const failureRedirect = NextResponse.redirect(`${publicOrigin}/login`);
 
   if (!token || !isBackendBridgeEnabled()) return failureRedirect;
 
@@ -105,7 +111,7 @@ export async function GET(req: Request) {
     ? "__Secure-next-auth.session-token"
     : "next-auth.session-token";
 
-  const res = NextResponse.redirect(new URL(safeNext, req.url));
+  const res = NextResponse.redirect(`${publicOrigin}${safeNext}`);
   res.cookies.set(cookieName, sessionJwt, {
     httpOnly: true,
     sameSite: "lax",
