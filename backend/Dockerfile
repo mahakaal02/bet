@@ -1,5 +1,3 @@
-# Bet — production image. Debian base (bookworm-slim) so Prisma's OpenSSL 3
-# detection works out of the box.
 FROM node:20-bookworm-slim AS deps
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
@@ -16,14 +14,16 @@ RUN npm run build
 
 FROM node:20-bookworm-slim AS runner
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates tini && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
-RUN groupadd --system nextjs && useradd --system --gid nextjs nextjs
+RUN groupadd --system nodejs && useradd --system --gid nodejs nodejs
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
+COPY --from=builder /app/package-lock.json ./package-lock.json
+COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
-USER nextjs
-EXPOSE 3100
-CMD ["npm","run","start"]
+RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app
+USER nodejs
+EXPOSE 4000
+ENTRYPOINT ["/usr/bin/tini","--"]
+CMD ["node","dist/src/main.js"]
