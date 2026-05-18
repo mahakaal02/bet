@@ -35,6 +35,15 @@ async function main() {
       wallet: { create: { balance: 50000 } },
     },
   });
+  // Wallet is nested-created above on first seed. On re-seed the user
+  // row already exists so the nested create never runs — if the wallet
+  // was manually cleared, the user would be wallet-less. Re-asserting
+  // it here with `update: {}` preserves any live balance.
+  await db.wallet.upsert({
+    where: { userId: admin.id },
+    update: {},
+    create: { userId: admin.id, balance: 50000 },
+  });
 
   // Demo traders — mirror backend's user1/2/3 accounts.
   const demos: { id: string }[] = [];
@@ -49,6 +58,11 @@ async function main() {
         xp: Math.floor(Math.random() * 600),
         wallet: { create: { balance: 10000 } },
       },
+    });
+    await db.wallet.upsert({
+      where: { userId: u.id },
+      update: {},
+      create: { userId: u.id, balance: 10000 },
     });
     demos.push({ id: u.id });
   }
