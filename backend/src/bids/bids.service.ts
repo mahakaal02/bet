@@ -262,4 +262,43 @@ export class BidsService {
       `ringmaster placed collision @${amount.toFixed(2)} on auction ${auctionId}`,
     );
   }
+
+  /**
+   * Iteratively neutralise every existing `LOWEST_UNIQUE` bid in the
+   * pool by spawning a ringmaster collision at its amount. Used when an
+   * admin flips a LIVE auction into NO_WINNER mode — bids placed BEFORE
+   * the flip might already be winning, and the per-placement collision
+   * in `placeBid` only fires on incoming bids, never retroactively.
+   *
+   * Each iteration removes one "winning" amount from the pool (turning
+   * the previously-unique amount into a duplicate). Because that can
+   * promote a previously-LOSING bid to LOWEST_UNIQUE — there's always
+   * a new "next-lowest unique" while any unique amounts remain — we
+   * loop. Termination is guaranteed by the bounded number of distinct
+   * amounts; the iteration cap is a defensive ceiling against any
+   * pathological state.
+   *
+   * Returns the number of phantoms placed. Safe to call when nothing
+   * needs neutralising (returns 0 immediately).
+   */
+  async cascadeRingmasterCollisions(auctionId: string): Promise<number> {
+    let placed = 0;
+    const MAX_ITER = 200;
+    for (let i = 0; i < MAX_ITER; i++) {
+      const allBids = await this.fetchBidRows(auctionId);
+      const opts = await this.classifyOptsForAuction(auctionId);
+      const target = allBids.find(
+        (b) => classifyBidFor(b.id, allBids, opts) === 'LOWEST_UNIQUE',
+      );
+      if (!target) break;
+      await this.placeRingmasterCollision(auctionId, target.amount);
+      placed += 1;
+    }
+    if (placed > 0) {
+      this.logger.log(
+        `ringmaster cascade placed ${placed} collisions on auction ${auctionId}`,
+      );
+    }
+    return placed;
+  }
 }

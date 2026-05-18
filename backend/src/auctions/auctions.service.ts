@@ -1,13 +1,19 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import { PrismaService } from '../prisma/prisma.service';
+import { BidsService } from '../bids/bids.service';
+import { BidEventsService } from '../bids/bid-events.service';
 import { selectWinnerFromBids } from '../bids/bidding-engine';
 
 @Injectable()
 export class AuctionsService {
   private readonly logger = new Logger(AuctionsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly bids: BidsService,
+    private readonly bidEvents: BidEventsService,
+  ) {}
 
   /**
    * Return every auction with its winner info. The list is sorted client-side
@@ -136,7 +142,7 @@ export class AuctionsService {
       fixedWinningAmount = data.fixedWinningAmount ?? null;
     }
 
-    return this.prisma.auction.update({
+    const updated = await this.prisma.auction.update({
       where: { id },
       data: {
         ...(data.title !== undefined && { title: data.title }),
@@ -153,6 +159,40 @@ export class AuctionsService {
         ...(fixedWinningAmount !== undefined && { fixedWinningAmount }),
       },
     });
+
+    // Retroactive ringmaster backfill: when admin flips a LIVE auction
+    // into NO_WINNER mid-stream, any already-placed LOWEST_UNIQUE bid
+    // is "winning" until a new bid lands and the per-placement
+    // collision in `BidsService.placeBid` kicks in. That leaves users
+    // staring at a stale "you're winning" status for an indefinite
+    // period. Cascade ringmaster collisions over the current pool so
+    // every winning amount is neutralised right now, then broadcast a
+    // bid event so connected WS subscribers receive the freshly
+    // re-classified status.
+    const flippedIntoNoWinner =
+      existing.manipulationMode !== 'NO_WINNER' &&
+      updated.manipulationMode === 'NO_WINNER' &&
+      updated.status === 'LIVE';
+    if (flippedIntoNoWinner) {
+      try {
+        const placed = await this.bids.cascadeRingmasterCollisions(updated.id);
+        if (placed > 0) {
+          // Empty userId is fine — gateway uses auctionId to enumerate
+          // subscribers, the userId field on the event is only kept
+          // for future per-user filtering.
+          await this.bidEvents.broadcastBidPlaced(updated.id, '');
+        }
+      } catch (err) {
+        // Don't fail the admin write because the cascade fell over —
+        // the auction is already in NO_WINNER mode; the next real bid
+        // will trigger the per-placement collision and self-heal.
+        this.logger.error(
+          `ringmaster backfill on auction ${updated.id} failed: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    return updated;
   }
 
   async delete(id: string) {

@@ -1,11 +1,15 @@
 import { Module } from '@nestjs/common';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { BidsModule } from '../bids/bids.module';
 import { AuctionsController } from './auctions.controller';
 import { AuctionsService } from './auctions.service';
 import { AuctionScheduler } from './auction-scheduler';
 
 @Module({
-  imports: [NotificationsModule],
+  // BidsModule re-export gives us `BidsService` + `BidEventsService` —
+  // the admin update path needs them to run the ringmaster cascade and
+  // notify subscribers when a LIVE auction flips into NO_WINNER mode.
+  imports: [NotificationsModule, BidsModule],
   controllers: [AuctionsController],
   providers: [AuctionsService, AuctionScheduler],
   exports: [AuctionsService],
