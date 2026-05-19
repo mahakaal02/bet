@@ -68,7 +68,7 @@ backend:
       storageClassName: longhorn
 bet:
   image: kalki-bet
-  imageTag: 20260519T020336Z-3077425 # {"$imagepolicy": "flux-system:kalki-bet:tag"}
+  imageTag: 20260519T023714Z-30a8647 # {"$imagepolicy": "flux-system:kalki-bet:tag"}
   port: 3100
   replicas: 1
   prismaMigrate: true
