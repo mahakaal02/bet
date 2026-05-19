@@ -185,6 +185,120 @@ async function main() {
       category: "ENTERTAINMENT",
       endsAt: days(110),
     },
+
+    // ─── India-specific markets ────────────────────────────────────────
+    // Added so the catalog reads well for an India-first user base. Mix
+    // of politics + cricket / IPL. Resolution sources lean on official
+    // bodies (ECI, BCCI, ICC) so the contract is unambiguous; bannerUrls
+    // intentionally omitted — admin uploads will land on the markets
+    // table directly via /admin/markets.
+
+    // Politics
+    {
+      slug: "in-bjp-2029-majority",
+      title: "Will BJP retain a Lok Sabha majority in the 2029 general election?",
+      description:
+        "Resolves YES if BJP wins ≥272 seats on its own in the 2029 Lok Sabha general election. Coalition seats (NDA partners) do NOT count.",
+      category: "POLITICS",
+      featured: true,
+      endsAt: days(330),
+      resolutionSource: "Election Commission of India final tally",
+    },
+    {
+      slug: "in-aap-delhi-2027",
+      title: "Will AAP win the 2027 Delhi assembly election?",
+      description:
+        "Resolves YES if Aam Aadmi Party wins ≥36 seats (a simple majority of 70) in the next Delhi Vidhan Sabha election.",
+      category: "POLITICS",
+      endsAt: days(280),
+      resolutionSource: "Election Commission of India",
+    },
+    {
+      slug: "in-rahul-pm-2029",
+      title: "Will Rahul Gandhi be sworn in as PM after the 2029 election?",
+      description:
+        "Resolves YES if Rahul Gandhi takes oath as Prime Minister of India following the 2029 general election. NO for any other PM.",
+      category: "POLITICS",
+      endsAt: days(360),
+      resolutionSource: "Rashtrapati Bhavan oath ceremony",
+    },
+    {
+      slug: "in-ai-policy-2026",
+      title: "Will India publish a national AI regulation framework this year?",
+      description:
+        "Resolves YES if MeitY publishes a binding national AI regulation (not just guidelines) before December 31. White papers + draft bills do not count.",
+      category: "POLITICS",
+      endsAt: days(210),
+      resolutionSource: "Gazette of India + MeitY press release",
+    },
+
+    // Sports — IPL + cricket
+    {
+      slug: "ipl-2026-mi-champion",
+      title: "Will Mumbai Indians win IPL 2026?",
+      description:
+        "Resolves YES if Mumbai Indians win the IPL 2026 final. Bracket eliminations + qualifier losses resolve NO.",
+      category: "SPORTS",
+      featured: true,
+      endsAt: days(35),
+      resolutionSource: "BCCI / IPL official",
+    },
+    {
+      slug: "ipl-2026-csk-playoffs",
+      title: "Will Chennai Super Kings make the IPL 2026 playoffs?",
+      description:
+        "Resolves YES if CSK finishes top 4 in the IPL 2026 league stage. League-stage exit resolves NO.",
+      category: "SPORTS",
+      endsAt: days(28),
+      resolutionSource: "IPL points table on closing day of league phase",
+    },
+    {
+      slug: "ipl-2026-rcb-first-title",
+      title: "Will Royal Challengers Bengaluru win their first IPL title in 2026?",
+      description:
+        "Resolves YES if RCB win the IPL 2026 final. After 17 seasons without a title — does 2026 finally break the streak?",
+      category: "SPORTS",
+      featured: true,
+      endsAt: days(35),
+      resolutionSource: "BCCI / IPL official",
+    },
+    {
+      slug: "ipl-2026-kohli-orange-cap",
+      title: "Will Virat Kohli win the Orange Cap in IPL 2026?",
+      description:
+        "Resolves YES if Virat Kohli ends IPL 2026 as the season's leading run-scorer.",
+      category: "SPORTS",
+      endsAt: days(35),
+      resolutionSource: "Official IPL Orange Cap standings",
+    },
+    {
+      slug: "in-bgt-2026",
+      title: "Will India win the 2026 Border-Gavaskar Trophy?",
+      description:
+        "Resolves YES if India win the next Border-Gavaskar Test series outright (drawn series with India holding the trophy resolves YES; otherwise NO).",
+      category: "SPORTS",
+      endsAt: days(220),
+      resolutionSource: "BCCI / Cricket Australia final scorecard",
+    },
+    {
+      slug: "icc-wc-2027-india",
+      title: "Will India win the 2027 ICC Men's ODI World Cup?",
+      description:
+        "Resolves YES if India lift the trophy at the 2027 ICC ODI World Cup final in South Africa / Zimbabwe / Namibia.",
+      category: "SPORTS",
+      featured: true,
+      endsAt: days(530),
+      resolutionSource: "ICC official",
+    },
+    {
+      slug: "in-t20i-double-century",
+      title: "Will any Indian batter score a T20I double-century this year?",
+      description:
+        "Resolves YES if any batter scores ≥200 in a men's or women's full-member T20I innings before December 31.",
+      category: "SPORTS",
+      endsAt: days(220),
+      resolutionSource: "ICC + ESPNcricinfo scorecards",
+    },
   ];
 
   for (const m of markets) {
@@ -241,8 +355,9 @@ async function main() {
     });
   }
 
+  const indianCount = markets.filter((m) => m.slug.startsWith("in-") || m.slug.startsWith("ipl-")).length;
   console.log(
-    `Seeded ${markets.length} markets, ${demos.length} demo Bet shadow users (auth lives on the backend) + admin@kalki.local, ${achievements.length} achievements`,
+    `Seeded ${markets.length} markets (${indianCount} India-specific), ${demos.length} demo Bet shadow users (auth lives on the backend) + admin@kalki.local, ${achievements.length} achievements`,
   );
 }
 

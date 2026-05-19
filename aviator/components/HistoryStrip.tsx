@@ -37,7 +37,14 @@ export default function HistoryStrip() {
                   Waiting for first round…
                 </motion.span>
               )}
-              {history.slice(0, 24).map((h, idx) => {
+              {/* Cap at 10 chips so the rail stays scannable on phones.
+                  The store keeps up to 30 historical rounds (see
+                  `aviator/lib/store.ts::onCrash`); the rail is the
+                  scrollable lens onto the most-recent slice. Players
+                  can swipe horizontally to reveal older entries — the
+                  parent container has `overflow-x-auto` and the inner
+                  flex is `min-w-max`. */}
+              {history.slice(0, 10).map((h, idx) => {
                 const tier = tierFor(h.crashMultiplier);
                 const isLegendary = h.crashMultiplier >= 10;
                 return (
