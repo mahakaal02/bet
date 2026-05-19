@@ -39,7 +39,21 @@ export function useAviator() {
 
     const sock = getSocket();
 
-    sock.on('connect', () => useGame.getState().setConnected(true));
+    sock.on('connect', () => {
+      useGame.getState().setConnected(true);
+      // Re-fetch the wallet on every (re)connect so a brief network
+      // blip during a placeBet / cashout can't leave the displayed
+      // balance drifting from the server. Cheap REST hit on the same
+      // host the socket already opened to.
+      void api
+        .get<{ balance: number }>('/wallet/balance')
+        .then((b) => useGame.getState().setWalletBalance(b.balance))
+        .catch(() => {});
+      // Server pushes a `STATE_SNAPSHOT` automatically on connect
+      // (see `aviator.gateway.ts::handleConnection`), so the
+      // multiplier + phase re-sync on reconnect is already handled
+      // — we don't need to request one explicitly.
+    });
     sock.on('disconnect', () => useGame.getState().setConnected(false));
 
     sock.on('STATE_SNAPSHOT', (s: StateSnapshot) => useGame.getState().applySnapshot(s));

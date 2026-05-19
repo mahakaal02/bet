@@ -28,6 +28,33 @@ postgres:
   enabled: true
   image: postgres:16-alpine
   user: postgres
+  # ⚠️  KNOWN ISSUE — the production cluster was initialised with this
+  # literal value as the actual postgres password (the StatefulSet
+  # PV stores the password hash on first boot; subsequent env-var
+  # changes are ignored). Until that password is rotated in-cluster
+  # via `ALTER USER postgres WITH PASSWORD …` + a coordinated update
+  # of the `kalki-helm-values` Secret, this file must keep matching
+  # the live credential or every client app loses DB access.
+  #
+  # Rotation runbook (do once, off-hours):
+  #   1. Generate a strong password:
+  #        NEW_PW=$(openssl rand -hex 32)
+  #   2. Apply inside the running PG:
+  #        kubectl -n kalki exec -it kalki-postgres-0 -- \
+  #          psql -U postgres -c "ALTER USER postgres WITH PASSWORD '$NEW_PW';"
+  #   3. Add `postgres.password: "<new>"` to the `kalki-helm-values`
+  #      Secret in cluster (the values-from-Secret overrides this
+  #      file's value):
+  #        kubectl -n kalki get secret kalki-helm-values -o jsonpath='{.data.values\.yaml}' | base64 -d > /tmp/v.yaml
+  #        # add `postgres: { password: "<new>" }` to /tmp/v.yaml
+  #        kubectl -n kalki create secret generic kalki-helm-values \
+  #          --from-file=values.yaml=/tmp/v.yaml --dry-run=client -o yaml \
+  #          | kubectl -n kalki apply -f -
+  #   4. Bounce backend + bet pods so their DATABASE_URL pulls the new
+  #      password on next start.
+  #   5. Replace this default with another `CHANGE_ME_*` sentinel and
+  #      land a follow-up PR adding a fail-fast guard in postgres.yaml
+  #      so the default can never silently ship again.
   password: "kalki-postgres-default"
   storage:
     size: 20Gi
