@@ -3,26 +3,27 @@
 import { useRouter } from 'next/navigation';
 import { useGame } from '@/lib/store';
 import { getToken } from '@/lib/auth';
+import { formatRupees } from '@/lib/format';
 
 /**
- * Wallet quick-actions panel in the Aviator UI. Two buttons:
+ * Wallet quick-actions panel — premium glass card with two CTAs.
  *
- *   - **Pay**: opens the Exchange wallet topup at `:3100/wallet` with
- *     the user's bearer token attached so the SSO middleware signs
- *     them in transparently. The previous Razorpay-inline flow was
- *     dropped — coin purchases should happen at the unified topup
- *     page, not embedded in every game.
+ *   Pay     →  hands off to the Exchange wallet (`:3100/wallet`)
+ *              with the user's bearer token attached so the SSO
+ *              middleware signs them in transparently.
  *
- *   - **Encash**: routes to `/withdraw` (Aviator's withdrawal form),
- *     but only when the wallet has enough balance to cover the minimum
- *     payout. Below the threshold the button is visibly disabled with
- *     a small hint so users don't click into the form just to be
- *     bounced. The form itself still enforces the same threshold
- *     server-side, this is the front-of-house guard.
+ *   Encash  →  routes to Aviator's `/withdraw` form, but only
+ *              after the wallet balance crosses the `WITHDRAW_MIN`
+ *              threshold. Below the threshold the button visibly
+ *              disables and a hint surfaces the gap; the form itself
+ *              still enforces the same threshold server-side.
+ *
+ * Visual changes vs. the previous version: full-width buttons inside
+ * a single card with a bold balance readout above. Withdrawal-locked
+ * state shows a slim progress bar so the player feels the gap close.
  */
 const WITHDRAW_MIN = 2_000;
 
-/** Browser/emulator-aware exchange origin (matches lib/api.ts logic). */
 function exchangeOrigin(): string {
   const fromEnv = process.env.NEXT_PUBLIC_EXCHANGE_URL;
   if (fromEnv) return fromEnv.replace(/\/$/, '');
@@ -39,11 +40,12 @@ export default function WalletPanel() {
   const router = useRouter();
   const walletBalance = useGame((s) => s.walletBalance);
   const canWithdraw = (walletBalance ?? 0) >= WITHDRAW_MIN;
+  const remaining = Math.max(0, WITHDRAW_MIN - (walletBalance ?? 0));
+  const pct = canWithdraw
+    ? 100
+    : Math.min(100, Math.round(((walletBalance ?? 0) / WITHDRAW_MIN) * 100));
 
   function clickPay() {
-    // Hand off to the Exchange wallet — one canonical topup surface
-    // serves all three games. Pass the bearer token so Bet's SSO
-    // middleware signs the user in without a second prompt.
     const token = getToken();
     const base = `${exchangeOrigin()}/wallet`;
     window.location.href = token
@@ -57,22 +59,22 @@ export default function WalletPanel() {
   }
 
   return (
-    <div className="glass rounded-2xl p-3 lg:rounded-3xl lg:p-5 space-y-2 lg:space-y-3">
-      <div className="flex items-center justify-between gap-2">
+    <div className="glass rounded-3xl p-4 lg:p-5 space-y-3">
+      <div className="flex items-center justify-between">
         <div>
-          <div className="text-[10px] lg:text-xs uppercase tracking-widest text-text-secondary">
-            Wallet
+          <div className="text-[10px] font-bold uppercase tracking-[0.20em] text-text-secondary">
+            Wallet balance
           </div>
-          <div className="font-mono text-xl lg:text-2xl font-extrabold leading-tight">
-            ₹{walletBalance ?? '—'}
+          <div className="font-mono text-2xl lg:text-3xl font-black leading-tight text-text-primary tabular-nums">
+            {formatRupees(walletBalance)}
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={clickPay}
-            className="px-4 py-2 rounded-lg text-sm font-bold text-white bg-gradient-to-br from-[var(--color-accent-red)] to-[#FF7A59] hover:brightness-110 transition"
+            className="px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-gradient-to-br from-aurora-violet to-[#5C2BFF] hover:brightness-110 transition chip-press shadow-card"
           >
-            Pay
+            + Top up
           </button>
           <button
             onClick={clickWithdraw}
@@ -80,9 +82,9 @@ export default function WalletPanel() {
             title={
               canWithdraw
                 ? 'Withdraw to your bank / UPI'
-                : `Reach ₹${WITHDRAW_MIN.toLocaleString('en-IN')} to enable withdrawals`
+                : `Reach ${formatRupees(WITHDRAW_MIN)} to enable withdrawals`
             }
-            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-br from-[var(--color-neon-green)] to-[var(--color-neon-green-deep)] hover:brightness-110 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100"
+            className="px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-gradient-to-br from-success to-[#10A38A] hover:brightness-110 transition chip-press shadow-card disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:brightness-100"
           >
             Encash
           </button>
@@ -90,10 +92,17 @@ export default function WalletPanel() {
       </div>
 
       {!canWithdraw && (
-        <p className="text-[11px] text-text-secondary">
-          Encash unlocks at ₹{WITHDRAW_MIN.toLocaleString('en-IN')} —
-          you&apos;ve got {WITHDRAW_MIN - (walletBalance ?? 0)} more to go.
-        </p>
+        <div className="space-y-1.5">
+          <div className="h-1.5 rounded-full bg-elevated overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-aurora-violet to-success transition-[width] duration-500"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <p className="text-[11px] text-text-secondary">
+            Encash unlocks at {formatRupees(WITHDRAW_MIN)} — {formatRupees(remaining)} to go.
+          </p>
+        </div>
       )}
     </div>
   );

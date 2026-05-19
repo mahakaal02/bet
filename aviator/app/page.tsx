@@ -7,16 +7,30 @@ import { useGame } from '@/lib/store';
 import { getToken, getUser, setToken, setUser } from '@/lib/auth';
 import type { AuthUser } from '@/lib/types';
 import Navbar from '@/components/Navbar';
-// `Stage` is a feature-flagged wrapper that picks PlaneStage or
-// RocketStage based on `NEXT_PUBLIC_AVIATOR_ROCKET`. Direct import of
-// PlaneStage is gone so the unused branch tree-shakes correctly.
 import Stage from '@/components/Stage';
 import BetControls from '@/components/BetControls';
+import HistoryStrip from '@/components/HistoryStrip';
 import WalletPanel from '@/components/WalletPanel';
 import RosterPanel from '@/components/RosterPanel';
 import ChatPanel from '@/components/ChatPanel';
 import WinnersPanel from '@/components/WinnersPanel';
 
+/**
+ * Main game page. Three-column desktop layout:
+ *
+ *   ┌──────────┬─────────────────────────────┬──────────┐
+ *   │ Players  │ History rail               │ Winners  │
+ *   │          │ ┌─────────────────────────┐│          │
+ *   │ (roster) │ │ Stage (canvas + multi)  ││ (chat)   │
+ *   │          │ └─────────────────────────┘│          │
+ *   │          │ Bet controls               │          │
+ *   │          │ Wallet                     │          │
+ *   └──────────┴─────────────────────────────┴──────────┘
+ *
+ * On mobile the columns stack — the stage stays first so the player
+ * always sees the active round above the fold, followed by bet
+ * controls, then secondary panels.
+ */
 export default function GamePage() {
   return (
     <Suspense fallback={<LoadingShell />}>
@@ -26,12 +40,13 @@ export default function GamePage() {
 }
 
 /**
- * Resolves the JWT before mounting any socket-using components. WebView
- * callers pass `?token=…`; if present we store it, decode the payload
- * for the navbar's display name, strip the URL, and proceed.
+ * Resolves the JWT before mounting any socket-using components.
+ * WebView callers pass `?token=…`; if present we store it, decode
+ * the payload for the navbar's display name, strip the URL, and
+ * proceed.
  *
  * Without a token we bounce to the auctions login (port 3200) —
- * Aviator's old standalone /login page is gone; user identity now
+ * Aviator's standalone /login page is gone; user identity now
  * lives on the auctions backend and a single login surface owns it.
  *
  * Decoding the JWT for display is intentionally unverified — the
@@ -47,16 +62,12 @@ function AuthGate() {
     if (t) {
       setToken(t);
       hydrateUserFromToken(t);
-      // Strip the token from the URL bar (and avoid re-running the effect).
       window.history.replaceState({}, '', '/');
       setReady(true);
       return;
     }
     const existing = getToken();
     if (existing) {
-      // Cold reload with a stored token but no cached user blob — that
-      // can happen after a localStorage user wipe. Re-hydrate from the
-      // JWT so the navbar avatar shows the right initial.
       if (!getUser()) hydrateUserFromToken(existing);
       setReady(true);
     } else {
@@ -68,11 +79,6 @@ function AuthGate() {
   return <Game />;
 }
 
-/**
- * Resolve the auctions login URL — bounced to whenever Aviator is
- * opened without a token. Handles both the desktop-browser case
- * (`localhost:3200`) and the Android emulator case (`10.0.2.2:3200`).
- */
 function auctionsLoginUrl(): string {
   if (typeof window === 'undefined') return 'http://localhost:3200/login';
   const fromEnv = process.env.NEXT_PUBLIC_AUCTIONS_URL;
@@ -84,12 +90,6 @@ function auctionsLoginUrl(): string {
   return 'http://localhost:3200/login';
 }
 
-/**
- * Decode the JWT payload (no signature check) to extract `username`
- * and `email`, then cache as the user blob so `getUser()` returns
- * something for the navbar avatar. The backend has already vouched
- * for this token by the time it lands here.
- */
 function hydrateUserFromToken(token: string): void {
   try {
     const [, payload] = token.split('.');
@@ -117,59 +117,66 @@ function hydrateUserFromToken(token: string): void {
 function LoadingShell() {
   return (
     <main className="min-h-screen flex items-center justify-center">
-      <div className="text-text-secondary text-sm">Loading…</div>
+      <div className="flex flex-col items-center gap-3 text-text-secondary text-sm">
+        <div className="h-1 w-24 rounded-full bg-elevated overflow-hidden">
+          <div className="h-full w-1/3 bg-gradient-to-r from-aurora-violet to-aurora-cyan animate-pulse" />
+        </div>
+        Connecting to arena…
+      </div>
     </main>
   );
 }
 
 function Game() {
   useAviator();
-
-  const phase = useGame((s) => s.phase);
+  const connected = useGame((s) => s.connected);
 
   return (
     <main className="min-h-screen flex flex-col">
       <Navbar />
-      <div
-        className={`flex-1 mx-auto w-full max-w-7xl px-3 py-3 lg:px-4 lg:py-6 ${
-          phase === 'CRASHED' ? 'screen-shake' : ''
-        }`}
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)_300px] gap-3 lg:gap-4">
-          <div className="hidden lg:block lg:order-1 space-y-4">
+      <div className="flex-1 mx-auto w-full max-w-7xl px-3 py-3 lg:px-6 lg:py-5">
+        <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_320px] gap-3 lg:gap-4">
+          {/* Left column — players (hidden on mobile, surfaced via a
+              future bottom-sheet if needed). */}
+          <div className="hidden lg:flex lg:flex-col gap-4 order-2 lg:order-1">
             <RosterPanel />
           </div>
 
+          {/* Centre column — the show. */}
           <div className="space-y-3 lg:space-y-4 order-1 lg:order-2 min-w-0">
-            <section className="glass rounded-2xl px-3 py-2 lg:rounded-3xl lg:px-4 lg:py-3">
-              <div className="flex items-center justify-center text-xs text-text-secondary">
-                <span
-                  className={`font-mono uppercase tracking-[0.25em] ${
-                    phase === 'BETTING'
-                      ? 'text-accent-orange'
-                      : phase === 'RUNNING'
-                      ? 'text-neon-green'
-                      : phase === 'CRASHED'
-                      ? 'text-accent-red'
-                      : 'text-text-secondary'
-                  }`}
-                >
-                  {phase}
-                </span>
-              </div>
-
-              <Stage />
-            </section>
-
+            <HistoryStrip />
+            <Stage />
             <BetControls />
             <WalletPanel />
+            {/* Mobile-only: chat under the wallet so the social side
+                of the round is still reachable without leaving the
+                tab. Hidden on lg where it lives in the right rail. */}
+            <div className="lg:hidden">
+              <ChatPanel />
+            </div>
+            <div className="lg:hidden">
+              <WinnersPanel />
+            </div>
+            <div className="lg:hidden">
+              <RosterPanel />
+            </div>
           </div>
 
-          <div className="hidden lg:block lg:order-3 space-y-4">
+          {/* Right column — chat + winners. */}
+          <div className="hidden lg:flex lg:flex-col gap-4 order-3">
             <ChatPanel />
             <WinnersPanel />
           </div>
         </div>
+
+        {!connected && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40">
+            <div className="glass-strong rounded-full px-3 py-1.5 flex items-center gap-2 text-xs">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
+              <span className="text-text-secondary">Reconnecting…</span>
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
