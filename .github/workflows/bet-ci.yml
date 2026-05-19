@@ -75,7 +75,18 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # `next lint` is advisory for now: the bet/ app has no .eslintrc /
+      # `eslint-config-next` installed, so Next.js drops into its
+      # interactive setup prompt which can't be answered in CI. Every
+      # main-branch run has been failing on this step since the workflow
+      # was first added — the gate effectively isn't enforcing anything.
+      # `continue-on-error: true` keeps the visibility (warnings still
+      # show up in the run) while not blocking PRs. Wiring real ESLint
+      # back up is its own (small) follow-up: `npm i -D eslint
+      # eslint-config-next` + a `.eslintrc.json` extending
+      # `next/core-web-vitals`.
       - name: Lint
+        continue-on-error: true
         run: npx next lint --max-warnings 0
 
       # Pure-function trade-engine math. Cheap (<1s) and would catch a

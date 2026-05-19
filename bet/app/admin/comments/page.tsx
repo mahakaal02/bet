@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { CommentModRow } from "@/components/CommentModRow";
@@ -42,8 +41,7 @@ export default async function AdminCommentsPage({
   });
 
   return (
-    <main className="min-h-screen pb-20">
-      <Navbar />
+    <>
       <div className="mx-auto max-w-5xl px-4 py-6">
         <div className="mb-3 flex items-center justify-between">
           <h1 className="text-2xl font-black">Comments</h1>
@@ -139,6 +137,6 @@ export default async function AdminCommentsPage({
           )}
         </Card>
       </div>
-    </main>
+    </>
   );
 }

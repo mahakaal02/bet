@@ -1,7 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { Navbar } from "@/components/Navbar";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { db } from "@/lib/db";
@@ -128,8 +127,7 @@ export default async function UserAuditPage({
       : [];
 
   return (
-    <main className="min-h-screen pb-20">
-      <Navbar />
+    <>
       <div className="mx-auto max-w-5xl px-4 py-6">
         <Link
           href="/admin/withdrawals"
@@ -371,7 +369,7 @@ export default async function UserAuditPage({
           )}
         </Card>
       </div>
-    </main>
+    </>
   );
 }
 

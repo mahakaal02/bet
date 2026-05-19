@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { WithdrawalActions } from "@/components/WithdrawalActions";
@@ -59,8 +58,7 @@ export default async function AdminWithdrawalsPage({
     counts.find((c) => c.status === s)?._count.status ?? 0;
 
   return (
-    <main className="min-h-screen pb-20">
-      <Navbar />
+    <>
       <div className="mx-auto max-w-6xl px-4 py-6">
         <div className="mb-3 flex items-center justify-between">
           <h1 className="text-2xl font-black">Withdrawals</h1>
@@ -180,6 +178,6 @@ export default async function AdminWithdrawalsPage({
           </div>
         )}
       </div>
-    </main>
+    </>
   );
 }
