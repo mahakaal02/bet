@@ -3,11 +3,23 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 
+/**
+ * Admin user-moderation patch. Permitted actions:
+ *
+ *   - `adjustBalance` + `reason` — credit/debit coins with audit row.
+ *   - `banned`                  — toggle the user's ban flag.
+ *
+ * `isAdmin` is INTENTIONALLY not editable. Only one admin exists, set
+ * by the database seed (admin@kalki.local). Allowing it to flow
+ * through this endpoint risks accidental promotion via a misclick on
+ * the moderation panel, and the product spec is "one admin, ever".
+ * Sub-admins with scoped permissions will be added as a separate
+ * role/permission system later, not by reusing this boolean.
+ */
 const Body = z.object({
   adjustBalance: z.number().int().optional(),
   reason: z.string().max(120).optional(),
   banned: z.boolean().optional(),
-  isAdmin: z.boolean().optional(),
 });
 
 export async function PATCH(
@@ -22,13 +34,6 @@ export async function PATCH(
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
-  }
-
-  if (id === me.id && parsed.data.isAdmin === false) {
-    return NextResponse.json(
-      { error: "cannot_demote_self" },
-      { status: 409 },
-    );
   }
 
   await db.$transaction(async (tx) => {
@@ -47,31 +52,21 @@ export async function PATCH(
         },
       });
     }
-    if (parsed.data.banned !== undefined || parsed.data.isAdmin !== undefined) {
+    if (parsed.data.banned !== undefined) {
       await tx.user.update({
         where: { id },
-        data: {
-          ...(parsed.data.banned !== undefined && {
-            banned: parsed.data.banned,
-          }),
-          ...(parsed.data.isAdmin !== undefined && {
-            isAdmin: parsed.data.isAdmin,
-          }),
-        },
+        data: { banned: parsed.data.banned },
       });
     }
     await tx.adminLog.create({
       data: {
         adminId: me.id,
-        action: parsed.data.banned
-          ? "user.ban"
-          : parsed.data.banned === false
-            ? "user.unban"
-            : parsed.data.isAdmin
-              ? "user.grant_admin"
-              : parsed.data.isAdmin === false
-                ? "user.revoke_admin"
-                : "user.adjust_balance",
+        action:
+          parsed.data.banned === true
+            ? "user.ban"
+            : parsed.data.banned === false
+              ? "user.unban"
+              : "user.adjust_balance",
         targetId: id,
         metadata: parsed.data,
       },

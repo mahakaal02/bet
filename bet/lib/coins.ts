@@ -1,15 +1,12 @@
 /**
- * Env-driven coin constants. One source of truth so the signup bonus,
- * daily faucet and coin-pack defaults don't drift across the codebase.
+ * Env-driven coin constants. One source of truth so the signup bonus
+ * and coin-pack defaults don't drift across the codebase. The daily
+ * faucet was removed — no free-coin path exists outside the signup
+ * grant and payment-backed top-ups.
  */
 export function signupCoins(): number {
   const n = Number(process.env.SIGNUP_COIN_BONUS ?? "10000");
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 10000;
-}
-
-export function dailyReward(): number {
-  const n = Number(process.env.DAILY_REWARD_COINS ?? "500");
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 500;
 }
 
 /**

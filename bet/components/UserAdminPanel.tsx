@@ -8,6 +8,10 @@ import { toast } from "@/components/ui/Toaster";
 
 interface Props {
   userId: string;
+  // `isAdmin` is shown read-only on the parent page — there's no
+  // toggle here because only one admin can ever exist (the seeded
+  // admin@kalki.local). Sub-admins with scoped permissions are a
+  // separate role/permission system planned for later.
   initial: { isAdmin: boolean; banned: boolean; balance: number };
 }
 
@@ -91,15 +95,13 @@ export function UserAdminPanel({ userId, initial }: Props) {
           >
             {initial.banned ? "Unban user" : "Ban user"}
           </Button>
-          <Button
-            variant={initial.isAdmin ? "danger" : "secondary"}
-            size="sm"
-            disabled={busy}
-            onClick={() => send({ isAdmin: !initial.isAdmin })}
-          >
-            {initial.isAdmin ? "Revoke admin" : "Grant admin"}
-          </Button>
         </div>
+        {initial.isAdmin && (
+          <p className="mt-2 text-[11px] text-slate-500">
+            This account is the platform admin. The admin flag is
+            seed-only — there is no UI to grant or revoke it.
+          </p>
+        )}
       </div>
     </div>
   );

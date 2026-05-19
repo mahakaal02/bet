@@ -484,7 +484,7 @@ function Row({ label, value, hint }: { label: string; value: string; hint?: stri
 function prettyTradeError(code?: string): string {
   switch (code) {
     case "insufficient_coins":
-      return "Not enough coins. Claim daily or top up via faucet.";
+      return "Not enough coins. Top up your wallet to keep trading.";
     case "insufficient_shares":
       return "You don't have enough shares to sell that much.";
     case "market_not_open":
