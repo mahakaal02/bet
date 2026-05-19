@@ -1,18 +1,39 @@
+'use client';
+
+import { useGame } from '@/lib/store';
+import GameStage from './GameStage';
+import MultiplierDisplay from './MultiplierDisplay';
+
 /**
- * Stage selector — flips between the classic plane stage and the new
- * astronaut-on-rocket art based on the build-time env flag
- * `NEXT_PUBLIC_AVIATOR_ROCKET`. Set the flag to `"1"` in the build args
- * to ship the rocket art; omit / leave empty to keep the plane.
+ * Stage container — owns the aspect ratio, layered DOM stack
+ * (canvas behind, multiplier readout in front), and the round-edge
+ * shake that fires on crash.
  *
- * The flag is read once at module-load (Next.js inlines NEXT_PUBLIC_*
- * at build time anyway) so the chosen stage is baked into the bundle
- * and the unused component tree-shakes out.
+ * The two children are decoupled on purpose:
+ *   - GameStage renders particles, the curve, the mascot.
+ *   - MultiplierDisplay renders the big number, badge, countdown.
+ *
+ * Keeping them separate means the canvas can repaint at 60 fps
+ * without React having to re-render the text element every frame.
  */
-import PlaneStage from './PlaneStage';
-import RocketStage from './RocketStage';
-
-const USE_ROCKET = process.env.NEXT_PUBLIC_AVIATOR_ROCKET === '1';
-
 export default function Stage() {
-  return USE_ROCKET ? <RocketStage /> : <PlaneStage />;
+  const phase = useGame((s) => s.phase);
+  return (
+    <div
+      className={`relative w-full overflow-hidden rounded-[28px] border border-border bg-surface/40 stage-grain ${
+        phase === 'CRASHED' ? 'crash-shake' : ''
+      }`}
+      style={{ aspectRatio: 'var(--stage-aspect, 16 / 9)' }}
+    >
+      <GameStage />
+      <div className="absolute inset-x-0 top-[18%] flex justify-center pointer-events-none z-10">
+        <MultiplierDisplay />
+      </div>
+
+      {/* Bottom-edge gradient — guarantees text on the curve always
+          reads against a darker base no matter what colour the canvas
+          paints behind it. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-bg/80 to-transparent" />
+    </div>
+  );
 }

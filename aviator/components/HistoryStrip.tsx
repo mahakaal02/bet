@@ -1,29 +1,79 @@
 'use client';
 
+import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from '@/lib/store';
+import { tierFor } from '@/lib/tiers';
+import { formatMultiplier } from '@/lib/format';
 
-function colorFor(m: number) {
-  if (m < 1.5) return 'bg-accent-red/20 text-accent-red border-accent-red/40';
-  if (m < 2) return 'bg-accent-orange/20 text-accent-orange border-accent-orange/40';
-  return 'bg-neon-green/20 text-neon-green border-neon-green/40';
-}
-
+/**
+ * Recent-rounds rail. Tier-tinted chips, horizontally scrollable on
+ * small screens. The freshest crash is on the left and animates in
+ * from the top — gives the player a felt "another round just ended"
+ * beat without needing a sound.
+ *
+ * Legendary crashes (≥10×) shimmer; everything below uses a static
+ * tier-tinted chip so the rail doesn't strobe.
+ */
 export default function HistoryStrip() {
   const history = useGame((s) => s.history);
-  if (history.length === 0) return null;
 
   return (
-    <div className="overflow-x-auto">
-      <div className="flex gap-2 px-1 py-2 min-w-max">
-        {history.slice(0, 16).map((h) => (
-          <div
-            key={h.roundNumber}
-            className={`px-3 py-1 rounded-full text-xs font-mono border ${colorFor(h.crashMultiplier)}`}
-            title={`Round ${h.roundNumber}`}
-          >
-            {h.crashMultiplier.toFixed(2)}×
+    <div className="glass rounded-2xl px-3 py-2 lg:rounded-3xl lg:px-4 lg:py-2.5">
+      <div className="flex items-center gap-3">
+        <span className="hidden sm:inline-block text-[10px] font-bold uppercase tracking-[0.22em] text-text-secondary whitespace-nowrap">
+          Recent
+        </span>
+        <div className="relative flex-1 overflow-hidden fade-edge-x">
+          <div className="flex gap-1.5 overflow-x-auto scroll-cool min-w-max">
+            <AnimatePresence initial={false}>
+              {history.length === 0 && (
+                <motion.span
+                  key="empty"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="text-text-muted text-xs px-2 py-1"
+                >
+                  Waiting for first round…
+                </motion.span>
+              )}
+              {history.slice(0, 24).map((h, idx) => {
+                const tier = tierFor(h.crashMultiplier);
+                const isLegendary = h.crashMultiplier >= 10;
+                return (
+                  <motion.div
+                    key={h.roundNumber}
+                    layout
+                    initial={
+                      idx === 0
+                        ? { opacity: 0, y: -8, scale: 0.85 }
+                        : { opacity: 1, scale: 1 }
+                    }
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 360, damping: 26 }}
+                    className="relative px-2.5 py-1 rounded-full text-[11px] font-mono font-bold border"
+                    style={{
+                      borderColor: `${tier.color}50`,
+                      backgroundColor: `${tier.color}1A`,
+                      color: tier.color,
+                    }}
+                    title={`Round #${h.roundNumber} — ${tier.label}`}
+                  >
+                    {isLegendary ? (
+                      <span className="shimmer-text">
+                        {formatMultiplier(h.crashMultiplier)}
+                      </span>
+                    ) : (
+                      <span className="tabular-nums">
+                        {formatMultiplier(h.crashMultiplier)}
+                      </span>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
           </div>
-        ))}
+        </div>
       </div>
     </div>
   );
