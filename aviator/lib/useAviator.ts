@@ -86,7 +86,11 @@ export function useAviator() {
     // the "let it ride" reset rule when the user lost the round.
     sock.on('GAME_CRASH', () => {
       const state = useGame.getState();
-      // If the user had a bet that never cashed out, they lost — stake → 0.
+      // If the user had a bet that never cashed out they lost. The
+      // `setNextStake` reducer floors at the platform minimum (100
+      // coins) — we send 0 and it clamps up — so the next round
+      // starts with a ready-to-bet default instead of an empty input
+      // the user has to retype before they can place.
       if (state.currentBet && state.currentBet.cashedOutAt === null) {
         state.setNextStake(0);
       }

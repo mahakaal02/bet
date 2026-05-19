@@ -1,118 +1,36 @@
 'use client';
 
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { useGame } from '@/lib/store';
-import { tierFor } from '@/lib/tiers';
-import { formatMultiplier } from '@/lib/format';
 
 /**
- * Hero multiplier overlay. The three states map 1-to-1 to the
- * round lifecycle:
+ * Top-of-stage status pill. The big numerical multiplier is now
+ * drawn on the canvas alongside the mascot (`GameStage.tsx`), so
+ * this overlay carries only the round-state metadata the player
+ * needs to read at a glance:
  *
- *   BETTING   →  "STARTING IN 0:03" + tier-cool tag
- *   RUNNING   →  "2.47×" with tier-coloured glow + LIVE tag
- *   CRASHED   →  "FLEW AWAY · 1.42×" with crash-red glow
+ *   BETTING   →  "Starts in 0.8s"  (violet, ember in the final 3s)
+ *   RUNNING   →  small "In flight" pill (tier-coloured dot pulse)
+ *   CRASHED   →  brief "Flew away" pill that fades out automatically
  *
- * Lives on top of the canvas, so it owns no background of its own —
- * just text + a small tier badge. Framer Motion drives the entrance
- * and exit; the colour ramp is driven directly off the live multiplier
- * via the shared `tierFor()` helper, so every ramp transition (1.5×,
- * 2×, 5×, 10×) hits at the same value across the whole UI.
+ * Designed to sit unobtrusively at top-centre so it never competes
+ * for attention with the mascot + curve. Earlier versions had a
+ * giant centred multiplier readout that fought with the canvas for
+ * focus and pushed the curve out of view on phones — replaced by
+ * this medium-weight pill.
  */
 export default function MultiplierDisplay() {
   const phase = useGame((s) => s.phase);
-  const multiplier = useGame((s) => s.multiplier);
-  const lastCrash = useGame((s) => s.lastCrash);
   const bettingEndsAt = useGame((s) => s.bettingEndsAt);
 
-  if (phase === 'BETTING') {
-    return <BettingState bettingEndsAt={bettingEndsAt} />;
-  }
-  if (phase === 'CRASHED') {
-    const m = lastCrash?.multiplier ?? multiplier ?? 1;
-    return <CrashedState multiplier={m} />;
-  }
-  if (phase === 'RUNNING') {
-    return <RunningState multiplier={multiplier} />;
-  }
-  return <ConnectingState />;
+  if (phase === 'BETTING') return <BettingPill bettingEndsAt={bettingEndsAt} />;
+  if (phase === 'CRASHED') return <CrashedPill />;
+  if (phase === 'RUNNING') return <RunningPill />;
+  return <ConnectingPill />;
 }
 
-function RunningState({ multiplier }: { multiplier: number }) {
-  const tier = tierFor(multiplier);
-
-  // Re-trigger the "tick-bump" CSS animation on each new whole-tick
-  // value (1.00, 1.01, 1.02, …) so the readout subtly punches with
-  // every tick. We key on `tickKey` to force React to remount the
-  // span and replay the keyframes.
-  const tickKey = Math.floor(multiplier * 100);
-
-  return (
-    <div className="pointer-events-none flex flex-col items-center select-none no-caret">
-      <motion.div
-        key={tier.name}
-        initial={{ opacity: 0, y: -4 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25 }}
-        className="mb-1 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em]"
-        style={{
-          borderColor: `${tier.color}55`,
-          backgroundColor: `${tier.color}1A`,
-          color: tier.color,
-        }}
-      >
-        <span
-          className="inline-block h-1.5 w-1.5 rounded-full glow-breath"
-          style={{ backgroundColor: tier.color, boxShadow: `0 0 8px ${tier.color}` }}
-        />
-        {tier.label}
-      </motion.div>
-      <div
-        className={`font-mono font-black leading-none ${tier.textGlow}`}
-        style={{
-          color: tier.color,
-          fontSize: 'clamp(56px, 12vw, 132px)',
-          letterSpacing: '-0.04em',
-        }}
-      >
-        <span key={tickKey} className="inline-block tick-bump">
-          {formatMultiplier(multiplier)}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function CrashedState({ multiplier }: { multiplier: number }) {
-  const tier = tierFor(multiplier);
-  return (
-    <motion.div
-      key="crashed"
-      initial={{ scale: 0.92, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ type: 'spring', stiffness: 320, damping: 22 }}
-      className="pointer-events-none flex flex-col items-center select-none no-caret"
-    >
-      <div className="mb-1 inline-flex items-center gap-1.5 rounded-full border border-danger/60 bg-danger/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.22em] text-danger">
-        <span className="inline-block h-1.5 w-1.5 rounded-full bg-danger" />
-        Flew away
-      </div>
-      <div
-        className={`font-mono font-black leading-none ${tier.textGlow}`}
-        style={{
-          color: tier.color,
-          fontSize: 'clamp(56px, 12vw, 132px)',
-          letterSpacing: '-0.04em',
-        }}
-      >
-        {formatMultiplier(multiplier)}
-      </div>
-    </motion.div>
-  );
-}
-
-function BettingState({ bettingEndsAt }: { bettingEndsAt: number | null }) {
+function BettingPill({ bettingEndsAt }: { bettingEndsAt: number | null }) {
   const [remaining, setRemaining] = useState<number>(0);
   useEffect(() => {
     if (!bettingEndsAt) return;
@@ -123,66 +41,87 @@ function BettingState({ bettingEndsAt }: { bettingEndsAt: number | null }) {
     return () => clearInterval(id);
   }, [bettingEndsAt]);
 
-  // Visual urgency — last 3 seconds tip from violet to ember orange.
+  // Visual urgency — last 3 seconds shift the pill from cool violet
+  // to ember orange so the eye is drawn to the countdown.
   const urgent = remaining <= 3.0;
   const color = urgent ? '#FF8A3D' : '#8B5CFF';
-  const glow = urgent ? 'text-glow-hot' : 'text-glow-violet';
-  const label = urgent ? 'Almost!' : 'Place your bet';
+  const label = urgent ? 'Almost!' : 'Starts in';
 
   return (
-    <div className="pointer-events-none flex flex-col items-center select-none no-caret">
-      <motion.div
-        key={urgent ? 'urgent' : 'calm'}
-        initial={{ opacity: 0, y: -4 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25 }}
-        className="mb-1 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.22em]"
-        style={{
-          borderColor: `${color}55`,
-          backgroundColor: `${color}1A`,
-          color,
-        }}
-      >
-        <span
-          className={`inline-block h-1.5 w-1.5 rounded-full ${urgent ? 'anticipate' : 'glow-breath'}`}
-          style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}` }}
-        />
+    <motion.div
+      key={urgent ? 'urgent' : 'calm'}
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+      className="inline-flex items-center gap-2 rounded-full border px-3 py-1 backdrop-blur"
+      style={{
+        borderColor: `${color}55`,
+        backgroundColor: `${color}1F`,
+        color,
+      }}
+    >
+      <span
+        className={`inline-block h-1.5 w-1.5 rounded-full ${urgent ? 'anticipate' : 'glow-breath'}`}
+        style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}` }}
+      />
+      <span className="text-[10px] font-bold uppercase tracking-[0.22em]">
         {label}
-      </motion.div>
-      <div
-        className={`font-mono font-black leading-none ${glow}`}
-        style={{
-          color,
-          fontSize: 'clamp(56px, 12vw, 132px)',
-          letterSpacing: '-0.04em',
-        }}
-      >
+      </span>
+      <span className="font-mono text-sm font-black tabular-nums leading-none">
         {remaining.toFixed(1)}s
-      </div>
-    </div>
+      </span>
+    </motion.div>
   );
 }
 
-function ConnectingState() {
+function RunningPill() {
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="pointer-events-none flex flex-col items-center select-none no-caret"
-      >
-        <div className="mb-1 inline-flex items-center gap-1.5 rounded-full border border-divider bg-elevated/60 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.22em] text-text-secondary">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-text-muted animate-pulse" />
-          Connecting
-        </div>
-        <div
-          className="font-mono font-black leading-none text-text-secondary"
-          style={{ fontSize: 'clamp(48px, 10vw, 96px)', letterSpacing: '-0.04em' }}
-        >
-          —
-        </div>
-      </motion.div>
-    </AnimatePresence>
+    <motion.div
+      key="running"
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+      className="inline-flex items-center gap-2 rounded-full border border-success/45 bg-success/15 px-3 py-1 backdrop-blur text-success"
+    >
+      <span
+        className="inline-block h-1.5 w-1.5 rounded-full bg-success glow-breath"
+        style={{ boxShadow: '0 0 8px #22E0BD' }}
+      />
+      <span className="text-[10px] font-bold uppercase tracking-[0.22em]">
+        In flight
+      </span>
+    </motion.div>
+  );
+}
+
+function CrashedPill() {
+  return (
+    <motion.div
+      key="crashed"
+      initial={{ opacity: 0, scale: 0.94 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 320, damping: 22 }}
+      className="inline-flex items-center gap-2 rounded-full border border-danger/55 bg-danger/15 px-3 py-1 backdrop-blur text-danger"
+    >
+      <span className="inline-block h-1.5 w-1.5 rounded-full bg-danger" />
+      <span className="text-[10px] font-bold uppercase tracking-[0.22em]">
+        Flew away
+      </span>
+    </motion.div>
+  );
+}
+
+function ConnectingPill() {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="inline-flex items-center gap-2 rounded-full border border-divider bg-elevated/60 px-3 py-1 backdrop-blur text-text-secondary"
+    >
+      <span className="inline-block h-1.5 w-1.5 rounded-full bg-text-muted animate-pulse" />
+      <span className="text-[10px] font-bold uppercase tracking-[0.22em]">
+        Connecting
+      </span>
+    </motion.div>
   );
 }

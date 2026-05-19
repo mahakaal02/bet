@@ -4,20 +4,20 @@ import { useEffect, useRef } from 'react';
 import { useGame } from '@/lib/store';
 import { multiplierAt, timeForMultiplier, velocityAt } from '@/lib/curve';
 import { drawMascot, drawMascotCrashing, hexToRgba } from '@/lib/mascot';
-import { tierFor, tierProgress } from '@/lib/tiers';
+import { tierFor, tierProgress, type Tier } from '@/lib/tiers';
+import { formatMultiplier } from '@/lib/format';
 
 /**
  * The visual heart of the game. A single `<canvas>` renders the
  * parallax starfield, multiplier curve, mascot, particle trails,
- * auto-cashout marker, and crash sequence — all driven from the
- * Zustand store via `useGame.getState()` inside the rAF loop so
- * the component itself only re-mounts on phase boundary, not on
- * every MULTIPLIER_UPDATE.
+ * auto-cashout marker, crash sequence — and now the live multiplier
+ * value as a label travelling with the mascot on the curve, so the
+ * eye doesn't bounce between a static centre-screen readout and the
+ * mascot itself.
  *
- * Numerical text (the multiplier readout, countdown, crash chip)
- * is layered as DOM siblings on top of the canvas — text rendering
- * is sharper, easier to animate with Framer Motion, and accessible
- * to screen readers. See `MultiplierDisplay.tsx`.
+ * Numerical context that doesn't move with the mascot (countdown,
+ * crash result chip) lives in the DOM siblings layered on top of
+ * the canvas — see `MultiplierDisplay.tsx`.
  *
  * Frame budget:
  *   ~1 starfield repaint  (cheap, 70 stars)
@@ -53,6 +53,11 @@ interface Star {
 const STAR_COUNT = 70;
 const PARTICLE_CAP = 220;
 const PADDING = { top: 36, bottom: 28, left: 28, right: 56 } as const;
+
+/** Sprite size — also acts as the "safe inset" we clamp mascot
+ *  position to, so the wings never disappear past the canvas edge. */
+const MASCOT_SIZE = 72;
+const MASCOT_RADIUS = MASCOT_SIZE * 0.55; // half-width including aura ring
 
 export default function GameStage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -147,7 +152,7 @@ export default function GameStage() {
           state.lastCrash?.multiplier ?? state.multiplier ?? 1,
         );
       } else {
-        local.mascotPos = drawIdleMascot(ctx, cssW, cssH, ts, local.particles);
+        local.mascotPos = drawIdleMascot(ctx, cssW, cssH, ts, local.particles, phase);
       }
 
       if (
@@ -211,9 +216,6 @@ function drawBackdrop(
   h: number,
   multiplier: number,
 ) {
-  // A subtle vertical fade plus a tier-tinted bloom at the top-right
-  // corner where the mascot is heading. Bloom intensifies with the
-  // multiplier so the whole stage visibly "heats up".
   const grad = ctx.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, 'rgba(14, 18, 38, 0.95)');
   grad.addColorStop(1, 'rgba(8, 11, 26, 1)');
@@ -278,18 +280,42 @@ function drawHorizonGrid(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.restore();
 }
 
+/**
+ * Clamp a mascot world position so the entire sprite (including the
+ * outer aura ring) is always inside the canvas — never half-clipped
+ * past the right or top edge. Fixes the "mascot flies off-screen and
+ * comes back" effect on tall, thin viewports.
+ */
+function clampMascotPos(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): { x: number; y: number } {
+  return {
+    x: Math.min(w - MASCOT_RADIUS, Math.max(MASCOT_RADIUS, x)),
+    y: Math.min(h - MASCOT_RADIUS, Math.max(MASCOT_RADIUS, y)),
+  };
+}
+
 function drawIdleMascot(
   ctx: CanvasRenderingContext2D,
-  _w: number,
+  w: number,
   h: number,
   ts: number,
   particles: Particle[],
+  phase: string,
 ): { x: number; y: number; angle: number } {
-  const y = h - 64 + Math.sin(ts / 380) * 5;
-  const x = 90;
+  // Idle position: roughly bottom-quarter, left-quarter — same as
+  // where the curve will start from on takeoff so the eye doesn't
+  // have to jump when RUNNING begins.
+  const rawY = h - 80 + Math.sin(ts / 380) * 5;
+  const rawX = Math.max(MASCOT_RADIUS + 14, w * 0.13);
   const angle = -0.18 + Math.sin(ts / 700) * 0.05;
+  const { x, y } = clampMascotPos(rawX, rawY, w, h);
 
-  if (particles.length < PARTICLE_CAP && Math.random() < 0.25) {
+  // Small thruster sparks while waiting — keeps the scene alive.
+  if (phase !== 'CRASHED' && particles.length < PARTICLE_CAP && Math.random() < 0.25) {
     particles.push({
       x: x - 18,
       y: y + 6 + (Math.random() - 0.5) * 6,
@@ -305,7 +331,7 @@ function drawIdleMascot(
 
   drawMascot(ctx, {
     x, y, angle,
-    size: 70,
+    size: MASCOT_SIZE,
     multiplier: 1.0,
     velocity: 0,
     bobPhase: ts / 380,
@@ -385,10 +411,15 @@ function drawCurveAndMascot(
   ctx.stroke();
   ctx.restore();
 
-  // Mascot — at the leading edge, aligned to the local tangent.
-  const [px, py] = last;
+  // Mascot — at the leading edge, aligned to the local tangent, with
+  // a hard clamp so it can't slide past the right/top edge of the
+  // canvas (previously it could briefly disappear past padding.right
+  // on the first frames of takeoff before the viewport scaling
+  // caught up).
+  const [rawPx, rawPy] = last;
+  const { x: px, y: py } = clampMascotPos(rawPx, rawPy, w, h);
   const prev = points[points.length - 2] ?? last;
-  const angle = Math.atan2(py - prev[1], px - prev[0]);
+  const angle = Math.atan2(rawPy - prev[1], rawPx - prev[0]);
   const velocity = velocityAt(elapsedMs);
 
   // Trail particles spawn rate scales with velocity.
@@ -403,17 +434,99 @@ function drawCurveAndMascot(
     x: px,
     y: py,
     angle,
-    size: 72,
+    size: MASCOT_SIZE,
     multiplier: currentMultiplier,
     velocity,
     bobPhase: ts / 380,
     ignition: Math.min(1, elapsedMs / 700),
   });
 
+  // Live multiplier label — drawn next to the mascot so the eye
+  // tracks one focal point instead of bouncing between a giant
+  // centred number and the leading edge of the curve.
+  drawMultiplierLabel(ctx, px, py, currentMultiplier, tier, w, h);
+
   return {
     trailSpawnAt: nextTrailSpawnAt,
     mascotPos: { x: px, y: py, angle },
   };
+}
+
+/**
+ * Multiplier label that travels with the mascot. Auto-flips its
+ * anchor so it stays inside the canvas: prefers right-of-mascot,
+ * but falls back to left-of-mascot if that would clip, and bumps
+ * vertically off the top edge if the mascot is in the top stripe.
+ *
+ * Tier glow + bold mono digits — small enough to never compete
+ * with the mascot for attention, big enough to read at a glance.
+ */
+function drawMultiplierLabel(
+  ctx: CanvasRenderingContext2D,
+  mascotX: number,
+  mascotY: number,
+  multiplier: number,
+  tier: Tier,
+  w: number,
+  _h: number,
+) {
+  const label = formatMultiplier(multiplier);
+  const fontPx = 30;
+  ctx.save();
+  ctx.font = `900 ${fontPx}px "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace`;
+  ctx.textBaseline = 'middle';
+  const metrics = ctx.measureText(label);
+  const textW = metrics.width;
+  const padX = 10;
+  const boxW = textW + padX * 2;
+  const boxH = fontPx + 12;
+
+  // Anchor preference — right of mascot, vertically centred on it.
+  let bx = mascotX + MASCOT_RADIUS + 6;
+  let by = mascotY - boxH / 2;
+
+  // Flip to left side if the right anchor would overflow.
+  if (bx + boxW > w - 8) {
+    bx = mascotX - MASCOT_RADIUS - 6 - boxW;
+  }
+  // Nudge down if it would clip the top edge (mascot near the apex).
+  if (by < 8) by = 8;
+
+  // Chip background — same dark base everywhere, tier-tinted border.
+  ctx.fillStyle = 'rgba(8, 11, 26, 0.72)';
+  ctx.strokeStyle = hexToRgba(tier.color, 0.55);
+  ctx.lineWidth = 1.2;
+  roundedRect(ctx, bx, by, boxW, boxH, 10);
+  ctx.fill();
+  ctx.stroke();
+
+  // Glow + text.
+  ctx.fillStyle = tier.color;
+  ctx.shadowColor = tier.color;
+  ctx.shadowBlur = 14;
+  ctx.fillText(label, bx + padX, by + boxH / 2);
+  ctx.restore();
+}
+
+function roundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 function emitTrailParticles(
@@ -425,8 +538,6 @@ function emitTrailParticles(
   colorDeep: string,
 ) {
   if (particles.length > PARTICLE_CAP) return;
-  // Two cone-shaped emitters offset back from the keel — matches the
-  // visual position of the afterburners on the mascot sprite.
   const c = Math.cos(angle);
   const s = Math.sin(angle);
   const sx = x + -28 * c;
@@ -455,8 +566,6 @@ function spawnCrashBurst(
   y: number,
   crashMultiplier: number,
 ) {
-  // Denser + warmer the higher the crash multiplier — a 50× crash
-  // should feel cinematic, not the same as a 1.01× bust.
   const tier = tierFor(crashMultiplier);
   const palette = [tier.color, tier.colorDeep, '#F2F5FF', '#FFC857'];
   const count = 48 + Math.floor(Math.min(40, crashMultiplier * 2));
@@ -483,7 +592,6 @@ function updateParticles(
   dt: number,
 ) {
   const dtSec = dt / 1000;
-  // Tick everyone once.
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
     p.life += dt;
@@ -496,7 +604,6 @@ function updateParticles(
     p.vy += 280 * dtSec;
     p.vx *= 0.985;
   }
-  // Draw additive (screen-blended) particles behind, normal in front.
   for (const blend of ['screen', 'normal'] as const) {
     ctx.save();
     ctx.globalCompositeOperation = blend === 'screen' ? 'lighter' : 'source-over';
@@ -529,16 +636,32 @@ function drawCrashState(
   ctx.fillRect(0, 0, w, h);
 
   if (pos.x > 0 && pos.y > 0) {
+    // Clamp the tumble destination so the mascot doesn't fall below
+    // the canvas — better to see it slow-spin in the lower third
+    // than disappear off the bottom edge.
+    const tumbleY = Math.min(pos.y + (sinceCrashMs / 900) ** 2 * 320, h - MASCOT_RADIUS);
     drawMascotCrashing(ctx, {
       x: pos.x,
-      y: pos.y,
+      y: tumbleY - (sinceCrashMs / 900) ** 2 * 320,
       angle: pos.angle,
-      size: 72,
+      size: MASCOT_SIZE,
       multiplier: crashMultiplier,
       velocity: 0,
       bobPhase: sinceCrashMs / 380,
       sinceCrashMs,
     });
+
+    // Crash-multiplier label on the tumbling mascot so the result
+    // is right where the player's eye is.
+    drawMultiplierLabel(
+      ctx,
+      pos.x,
+      Math.min(tumbleY, h - MASCOT_RADIUS),
+      crashMultiplier,
+      tierFor(crashMultiplier),
+      w,
+      h,
+    );
   }
 }
 
