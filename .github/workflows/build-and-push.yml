@@ -72,6 +72,7 @@ jobs:
             build_args: |
               NEXT_PUBLIC_AUCTIONS_URL=https://kalki-auctions.cloud.podstack.ai
               NEXT_PUBLIC_AVIATOR_URL=https://kalki-aviator.cloud.podstack.ai
+              NEXT_PUBLIC_BACKEND_URL=https://kalki-backend.cloud.podstack.ai
               NEXT_PUBLIC_GOOGLE_ENABLED=false
           - service: auctions
             changed: ${{ needs.detect.outputs.auctions }}
