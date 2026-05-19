@@ -10,9 +10,15 @@ WORKDIR /app
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_AUCTIONS_URL
 ARG NEXT_PUBLIC_EXCHANGE_URL
+# Feature flag for the astronaut-on-rocket stage (vs. the legacy plane
+# canvas). Set to "1" in build args to ship the rocket art; omit /
+# leave empty to keep the plane. The flag must be set at build time
+# because Next.js inlines NEXT_PUBLIC_* — runtime env won't flip it.
+ARG NEXT_PUBLIC_AVIATOR_ROCKET
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_AUCTIONS_URL=$NEXT_PUBLIC_AUCTIONS_URL
 ENV NEXT_PUBLIC_EXCHANGE_URL=$NEXT_PUBLIC_EXCHANGE_URL
+ENV NEXT_PUBLIC_AVIATOR_ROCKET=$NEXT_PUBLIC_AVIATOR_ROCKET
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build

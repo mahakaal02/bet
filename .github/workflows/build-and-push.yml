@@ -88,6 +88,10 @@ jobs:
               NEXT_PUBLIC_API_URL=https://kalki-backend.cloud.podstack.ai
               NEXT_PUBLIC_AUCTIONS_URL=https://kalki-auctions.cloud.podstack.ai
               NEXT_PUBLIC_EXCHANGE_URL=https://kalki-bet.cloud.podstack.ai
+              # Stage selector. Set to `1` to ship the astronaut-on-rocket
+              # art; leave empty to keep the legacy plane canvas. Defaults
+              # to disabled so this PR doesn't flip the live UI on merge.
+              NEXT_PUBLIC_AVIATOR_ROCKET=
           - service: admin
             changed: ${{ needs.detect.outputs.admin }}
             build_args: |

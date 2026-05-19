@@ -7,7 +7,10 @@ import { useGame } from '@/lib/store';
 import { getToken, getUser, setToken, setUser } from '@/lib/auth';
 import type { AuthUser } from '@/lib/types';
 import Navbar from '@/components/Navbar';
-import PlaneStage from '@/components/PlaneStage';
+// `Stage` is a feature-flagged wrapper that picks PlaneStage or
+// RocketStage based on `NEXT_PUBLIC_AVIATOR_ROCKET`. Direct import of
+// PlaneStage is gone so the unused branch tree-shakes correctly.
+import Stage from '@/components/Stage';
 import BetControls from '@/components/BetControls';
 import WalletPanel from '@/components/WalletPanel';
 import RosterPanel from '@/components/RosterPanel';
@@ -155,7 +158,7 @@ function Game() {
                 </span>
               </div>
 
-              <PlaneStage />
+              <Stage />
             </section>
 
             <BetControls />
