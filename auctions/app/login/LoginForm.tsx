@@ -64,25 +64,28 @@ export function LoginForm({
   return (
     <form onSubmit={onSubmit} className="space-y-3">
       <label className="block">
-        <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Mobile or email
+        {/* Field labels deliberately literal, lowercase, no placeholder
+            hint inside the input — the visible text above each input
+            *is* the affordance now, so the input itself stays clean
+            until the user types. */}
+        <span className="mb-1 block text-xs font-medium text-slate-400">
+          mobile/email
         </span>
-        {/* `type="text"` (not "email") because the placeholder advertises
-            mobile or email — browser-level email validation would block
-            mobile entries before the form even submits. Server still
-            decides what's accepted; this only widens the input. */}
+        {/* `type="text"` (not "email") so the field will accept either
+            a mobile number or an email without HTML5 rejecting non-email
+            strings before submit. Server still decides what's actually
+            accepted. */}
         <Input
           type="text"
           autoComplete="username"
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="mobile/email"
         />
       </label>
       <label className="block">
-        <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Password
+        <span className="mb-1 block text-xs font-medium text-slate-400">
+          password
         </span>
         <Input
           type="password"
@@ -90,7 +93,6 @@ export function LoginForm({
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="password"
         />
       </label>
       {error && <p className="text-xs text-rose-300">{error}</p>}
