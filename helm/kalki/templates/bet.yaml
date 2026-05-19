@@ -40,7 +40,19 @@ spec:
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           securityContext:
             runAsUser: 0
-          command: ["sh","-c","npx prisma migrate deploy --schema=prisma/schema.prisma || npx prisma db push --schema=prisma/schema.prisma --accept-data-loss"]
+          # Pre-cleanup of any genuinely-stuck `_prisma_migrations`
+          # row (in-flight + older than 5 minutes), so a previously
+          # failed migration with corrected SQL gets a clean retry
+          # on the next pod boot. Same self-healing pattern as the
+          # backend prisma-migrate init container.
+          command:
+            - sh
+            - -c
+            - |
+              echo "DELETE FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL AND started_at < NOW() - INTERVAL '5 minutes';" \
+                | npx prisma db execute --stdin --schema=prisma/schema.prisma 2>/dev/null || true
+              npx prisma migrate deploy --schema=prisma/schema.prisma \
+                || npx prisma db push --schema=prisma/schema.prisma --accept-data-loss
           env:
             - name: DATABASE_URL
               value: {{ include "kalki.databaseUrl" (dict "dbname" "bet" "override" .Values.bet.databaseUrl "ctx" .) | quote }}

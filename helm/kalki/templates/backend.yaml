@@ -71,7 +71,25 @@ spec:
           securityContext:
             runAsUser: 0
             runAsGroup: 0
-          command: ["sh","-c","npx prisma migrate deploy --schema=prisma/schema.prisma || npx prisma db push --schema=prisma/schema.prisma --accept-data-loss"]
+          # Pre-cleanup: any migration recorded as in-flight
+          # (`finished_at IS NULL`) blocks every subsequent
+          # `migrate deploy` until it's resolved. That happens whenever
+          # a migration's SQL fails — Postgres rolls back the
+          # transaction but Prisma's tracking row stays half-written.
+          # The `db execute --stdin` snippet idempotently deletes such
+          # rows so a corrected migration file gets a clean retry on
+          # the next pod boot. `2>/dev/null || true` makes the whole
+          # step a no-op when `_prisma_migrations` is healthy or when
+          # the table doesn't exist yet (fresh DB). Then the regular
+          # `migrate deploy || db push` runs as before.
+          command:
+            - sh
+            - -c
+            - |
+              echo "DELETE FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL AND started_at < NOW() - INTERVAL '5 minutes';" \
+                | npx prisma db execute --stdin --schema=prisma/schema.prisma 2>/dev/null || true
+              npx prisma migrate deploy --schema=prisma/schema.prisma \
+                || npx prisma db push --schema=prisma/schema.prisma --accept-data-loss
           env:
             - name: DATABASE_URL
               value: {{ include "kalki.databaseUrl" (dict "dbname" "uniquebid" "override" .Values.backend.databaseUrl "ctx" .) | quote }}
