@@ -21,5 +21,12 @@ export const COIN_RATE_INR = 1 as const;
  *  below ₹1 anyway; we set a higher floor so the payments UX is sane. */
 export const MIN_TOPUP_COINS = 100;
 
-/** Min withdrawal. Keeps the admin queue from drowning in ₹1 requests. */
-export const MIN_WITHDRAW_COINS = 100;
+/** Min withdrawal in coins (= ₹ same). Set high enough that the admin
+ *  payout queue doesn't drown in micro-requests, while still being
+ *  accessible to regular players. The Zod validator in
+ *  `app/api/wallet/withdraw/route.ts` enforces this server-side; the
+ *  form on `app/wallet/withdraw/page.tsx` surfaces it as the input's
+ *  `min` and the helper text. The Aviator `WalletPanel`'s encash
+ *  threshold mirrors this so the "Encash unlocks at …" hint stays
+ *  in sync with the server contract. */
+export const MIN_WITHDRAW_COINS = 2000;
