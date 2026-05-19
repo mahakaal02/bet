@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Navbar } from "@/components/Navbar";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { ReportRowActions } from "@/components/ReportRowActions";
@@ -63,8 +62,7 @@ export default async function ReportsPage({
     counts.find((c) => c.status === s)?._count.status ?? 0;
 
   return (
-    <main className="min-h-screen pb-20">
-      <Navbar />
+    <>
       <div className="mx-auto max-w-5xl px-4 py-6">
         <div className="mb-3 flex items-center justify-between">
           <h1 className="text-2xl font-black">Reports</h1>
@@ -184,6 +182,6 @@ export default async function ReportsPage({
           </div>
         )}
       </div>
-    </main>
+    </>
   );
 }

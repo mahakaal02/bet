@@ -1,6 +1,5 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { Navbar } from "@/components/Navbar";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { UserAdminPanel } from "@/components/UserAdminPanel";
@@ -27,8 +26,7 @@ export default async function AdminUserPage({
   if (!user) notFound();
 
   return (
-    <main className="min-h-screen pb-20">
-      <Navbar />
+    <>
       <div className="mx-auto max-w-3xl px-4 py-6">
         <Link
           href="/admin/users"
@@ -71,6 +69,6 @@ export default async function AdminUserPage({
           />
         </Card>
       </div>
-    </main>
+    </>
   );
 }

@@ -1,48 +1,54 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Navbar } from "@/components/Navbar";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { AdminAnalytics } from "@/components/AdminAnalytics";
 import { db } from "@/lib/db";
-import { getAuthedUser } from "@/lib/auth";
 import { fmtCoins, timeAgo } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  const u = await getAuthedUser();
-  if (!u) redirect("/login?next=/admin");
-  if (!u.isAdmin) redirect("/");
-
-  const [marketCount, userCount, tradeCount, recentMarkets, recentUsers, recentLogs] =
-    await Promise.all([
-      db.market.count(),
-      db.user.count(),
-      db.trade.count(),
-      db.market.findMany({
-        orderBy: { createdAt: "desc" },
-        take: 20,
-        include: { _count: { select: { trades: true, positions: true } } },
-      }),
-      db.user.findMany({
-        orderBy: { createdAt: "desc" },
-        take: 20,
-        include: { wallet: true },
-      }),
-      db.adminLog.findMany({
-        orderBy: { createdAt: "desc" },
-        take: 10,
-        include: { admin: { select: { username: true } } },
-      }),
-    ]);
+  // Auth gate lives in `app/admin/layout.tsx` — no per-page recheck.
+  const [
+    marketCount,
+    openMarketCount,
+    userCount,
+    tradeCount,
+    pendingWithdrawals,
+    pendingReports,
+    openOrders,
+    recentMarkets,
+    recentUsers,
+    recentLogs,
+  ] = await Promise.all([
+    db.market.count(),
+    db.market.count({ where: { status: "OPEN" } }),
+    db.user.count(),
+    db.trade.count(),
+    db.withdrawalRequest.count({ where: { status: "PENDING" } }),
+    db.report.count({ where: { status: "PENDING" } }),
+    db.order.count({ where: { status: { in: ["OPEN", "PARTIAL"] } } }),
+    db.market.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      include: { _count: { select: { trades: true, positions: true } } },
+    }),
+    db.user.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      include: { wallet: true },
+    }),
+    db.adminLog.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      include: { admin: { select: { username: true } } },
+    }),
+  ]);
 
   return (
-    <main className="min-h-screen pb-20">
-      <Navbar />
-      <div className="mx-auto max-w-7xl px-4 py-6">
+    <div className="py-6">
         <div className="mb-4 flex items-center justify-between">
-          <h1 className="text-2xl font-black">Admin</h1>
+          <h1 className="text-2xl font-black">Dashboard</h1>
           <Link
             href="/admin/markets/new"
             className="rounded-lg bg-gradient-to-br from-cyan-400 to-indigo-500 px-4 py-2 text-sm font-bold text-slate-950"
@@ -51,39 +57,40 @@ export default async function AdminPage() {
           </Link>
         </div>
 
+        {/* Top row: lifetime stats. */}
         <div className="grid gap-3 sm:grid-cols-3">
-          <StatBig label="Markets" value={marketCount} />
+          <StatBig
+            label="Markets"
+            value={marketCount}
+            sublabel={`${openMarketCount} open`}
+          />
           <StatBig label="Users" value={userCount} />
           <StatBig label="Trades" value={tradeCount} />
         </div>
 
-        {/* Moderation shortcuts — these have their own dedicated pages, the
-            chips here are just the discoverable entry points. */}
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Link
+        {/* Second row: action-item counts. These are the queues that
+            require admin attention — surface them as their own tiles
+            so unread items aren't buried inside a chips strip. */}
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <ActionTile
             href="/admin/withdrawals"
-            className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20"
-          >
-            Withdrawals queue →
-          </Link>
-          <Link
+            label="Withdrawals queue"
+            value={pendingWithdrawals}
+            tone={pendingWithdrawals > 0 ? "emerald" : "muted"}
+          />
+          <ActionTile
             href="/admin/reports"
-            className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-200 hover:bg-amber-500/20"
-          >
-            Reports queue →
-          </Link>
-          <Link
-            href="/admin/comments"
-            className="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-800"
-          >
-            Moderate comments →
-          </Link>
-          <Link
-            href="/admin/users"
-            className="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-800"
-          >
-            Manage users →
-          </Link>
+            label="Reports queue"
+            value={pendingReports}
+            tone={pendingReports > 0 ? "amber" : "muted"}
+          />
+          <ActionTile
+            href="/admin/audit"
+            label="Open orders"
+            value={openOrders}
+            tone="muted"
+            sub={`Activity log →`}
+          />
         </div>
 
         <div className="mt-4">
@@ -210,6 +217,12 @@ export default async function AdminPage() {
           <Card>
             <CardHeader>
               <CardTitle>Audit log</CardTitle>
+              <Link
+                href="/admin/audit"
+                className="text-xs text-cyan-300 hover:text-cyan-200"
+              >
+                Full log →
+              </Link>
             </CardHeader>
             {recentLogs.length === 0 ? (
               <p className="py-4 text-sm text-slate-500">No admin actions yet.</p>
@@ -236,17 +249,64 @@ export default async function AdminPage() {
           </Card>
         </div>
       </div>
-    </main>
   );
 }
 
-function StatBig({ label, value }: { label: string; value: number }) {
+function StatBig({
+  label,
+  value,
+  sublabel,
+}: {
+  label: string;
+  value: number;
+  sublabel?: string;
+}) {
   return (
     <div className="glass rounded-xl p-4">
       <div className="text-3xl font-black text-slate-100">{fmtCoins(value)}</div>
       <div className="text-xs uppercase tracking-wider text-slate-500">
         {label}
+        {sublabel && (
+          <span className="ml-2 normal-case text-slate-400">· {sublabel}</span>
+        )}
       </div>
     </div>
+  );
+}
+
+const TILE_TONE = {
+  emerald: "border-emerald-500/40 bg-emerald-500/10 text-emerald-200",
+  amber: "border-amber-500/40 bg-amber-500/10 text-amber-200",
+  muted: "border-slate-700 bg-slate-900/60 text-slate-300",
+} as const;
+
+/**
+ * Action-item tile — same visual weight as a StatBig but linked, with
+ * a value (queue depth) and a colour cue when there's work to do.
+ */
+function ActionTile({
+  href,
+  label,
+  value,
+  tone,
+  sub,
+}: {
+  href: string;
+  label: string;
+  value: number;
+  tone: keyof typeof TILE_TONE;
+  sub?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`rounded-xl border px-4 py-3 transition hover:bg-opacity-100 ${TILE_TONE[tone]}`}
+    >
+      <div className="text-2xl font-black">{fmtCoins(value)}</div>
+      <div className="text-xs font-semibold uppercase tracking-wider opacity-80">
+        {label}
+      </div>
+      {sub && <div className="mt-1 text-[10px] opacity-70">{sub}</div>}
+    </Link>
   );
 }

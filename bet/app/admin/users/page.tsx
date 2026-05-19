@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { db } from "@/lib/db";
@@ -36,8 +35,7 @@ export default async function AdminUsersPage({
   });
 
   return (
-    <main className="min-h-screen pb-20">
-      <Navbar />
+    <>
       <div className="mx-auto max-w-5xl px-4 py-6">
         <div className="mb-3 flex items-center justify-between">
           <h1 className="text-2xl font-black">Users</h1>
@@ -100,6 +98,6 @@ export default async function AdminUsersPage({
           </div>
         </Card>
       </div>
-    </main>
+    </>
   );
 }
