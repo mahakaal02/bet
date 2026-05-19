@@ -56,6 +56,12 @@ backend:
   port: 4000
   replicas: 1
   prismaMigrate: true # init-container runs `prisma migrate deploy`
+  # init-container runs `prisma db seed` (idempotent — every row is an
+  # upsert). Lets us ship new auctions / coin packs / demo users by
+  # editing `backend/prisma/seed.ts` without a manual kubectl exec
+  # step. Turn off if you intend to manage seed data exclusively from
+  # outside the repo (e.g. via the admin surface).
+  prismaSeed: true
   databaseUrl: "" # if blank, built from postgres values
   env: {}
   resources:
@@ -72,6 +78,11 @@ bet:
   port: 3100
   replicas: 1
   prismaMigrate: true
+  # init-container runs `prisma db seed`. The Bet seed upserts every
+  # market by slug, every achievement by code, every demo user by
+  # email — so re-running adds new markets without touching existing
+  # trading volume / price points on already-seeded rows.
+  prismaSeed: true
   databaseUrl: ""
   env: {}
   resources:

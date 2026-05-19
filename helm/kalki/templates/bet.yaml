@@ -32,8 +32,9 @@ spec:
         {{- include "kalki.labels" (dict "name" "bet" "ctx" .) | nindent 8 }}
     spec:
       {{- include "kalki.nodeAffinity" . | nindent 6 }}
-      {{- if .Values.bet.prismaMigrate }}
+      {{- if or .Values.bet.prismaMigrate .Values.bet.prismaSeed }}
       initContainers:
+        {{- if .Values.bet.prismaMigrate }}
         - name: prisma-migrate
           image: {{ include "kalki.image" (dict "image" .Values.bet.image "tag" .Values.bet.imageTag "ctx" .) }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
@@ -43,6 +44,28 @@ spec:
           env:
             - name: DATABASE_URL
               value: {{ include "kalki.databaseUrl" (dict "dbname" "bet" "override" .Values.bet.databaseUrl "ctx" .) | quote }}
+        {{- end }}
+        {{- if .Values.bet.prismaSeed }}
+        # Idempotent seed — `bet/prisma/seed.ts` is `upsert`-only on
+        # stable keys (market.slug, user.email, achievement.code), so
+        # re-running on every pod restart adds new markets +
+        # achievements without disturbing existing trading volume or
+        # price points on already-seeded rows.
+        - name: prisma-seed
+          image: {{ include "kalki.image" (dict "image" .Values.bet.image "tag" .Values.bet.imageTag "ctx" .) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          securityContext:
+            runAsUser: 0
+          # Invoke tsx directly (the runner already does the same
+          # thing under the hood when called via `prisma db seed`).
+          # Avoids tying the chart change to whichever image build
+          # rolls out first; `tsx` ships in devDependencies which the
+          # Dockerfile keeps in `node_modules`.
+          command: ["sh","-c","npx --no-install tsx prisma/seed.ts"]
+          env:
+            - name: DATABASE_URL
+              value: {{ include "kalki.databaseUrl" (dict "dbname" "bet" "override" .Values.bet.databaseUrl "ctx" .) | quote }}
+        {{- end }}
       {{- end }}
       containers:
         - name: bet
