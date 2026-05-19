@@ -56,8 +56,9 @@ spec:
         runAsUser: 1001
         runAsGroup: 1001
         fsGroup: 1001
-      {{- if .Values.backend.prismaMigrate }}
+      {{- if or .Values.backend.prismaMigrate .Values.backend.prismaSeed }}
       initContainers:
+        {{- if .Values.backend.prismaMigrate }}
         - name: prisma-migrate
           image: {{ include "kalki.image" (dict "image" .Values.backend.image "tag" .Values.backend.imageTag "ctx" .) }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
@@ -74,6 +75,39 @@ spec:
           env:
             - name: DATABASE_URL
               value: {{ include "kalki.databaseUrl" (dict "dbname" "uniquebid" "override" .Values.backend.databaseUrl "ctx" .) | quote }}
+        {{- end }}
+        {{- if .Values.backend.prismaSeed }}
+        # Idempotent seed — every entry in `backend/prisma/seed.ts` is
+        # an `upsert` keyed by a stable id (auction.id / coinPack.id /
+        # user.email), so re-running on every pod restart only inserts
+        # missing rows and refreshes the descriptive fields of existing
+        # ones. Lets us ship new auctions / coin packs without a manual
+        # `kubectl exec ... prisma db seed` step.
+        #
+        # Failures here block the pod from starting, by design — a
+        # silent seed error would mean operators don't see the new
+        # rows in prod and have no signal to investigate. Logs surface
+        # as the init-container's stdout/stderr (kubectl logs -c
+        # prisma-seed).
+        - name: prisma-seed
+          image: {{ include "kalki.image" (dict "image" .Values.backend.image "tag" .Values.backend.imageTag "ctx" .) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          # Invoke ts-node directly (not `prisma db seed`) so this
+          # works even on backend image builds that predate the
+          # `"prisma": { "seed": ... }` package.json entry — avoids
+          # a chicken-and-egg between this chart change and the image
+          # rebuild Flux schedules right after it. `ts-node` ships in
+          # devDependencies which the Dockerfile keeps in
+          # `node_modules` (no production prune step), so `npx` finds
+          # it.
+          command: ["sh","-c","npx --no-install ts-node prisma/seed.ts"]
+          env:
+            - name: DATABASE_URL
+              value: {{ include "kalki.databaseUrl" (dict "dbname" "uniquebid" "override" .Values.backend.databaseUrl "ctx" .) | quote }}
+        {{- end }}
       {{- end }}
       containers:
         - name: backend
