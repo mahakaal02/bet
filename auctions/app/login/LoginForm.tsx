@@ -65,15 +65,19 @@ export function LoginForm({
     <form onSubmit={onSubmit} className="space-y-3">
       <label className="block">
         <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Email
+          Mobile or email
         </span>
+        {/* `type="text"` (not "email") because the placeholder advertises
+            mobile or email — browser-level email validation would block
+            mobile entries before the form even submits. Server still
+            decides what's accepted; this only widens the input. */}
         <Input
-          type="email"
+          type="text"
           autoComplete="username"
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="user1@kalki.local"
+          placeholder="mobile/email"
         />
       </label>
       <label className="block">
@@ -86,7 +90,7 @@ export function LoginForm({
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="password12345"
+          placeholder="password"
         />
       </label>
       {error && <p className="text-xs text-rose-300">{error}</p>}
