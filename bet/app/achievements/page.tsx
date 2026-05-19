@@ -67,8 +67,8 @@ export default async function AchievementsPage() {
           <div>
             <h1 className="text-2xl font-black">Achievements</h1>
             <p className="text-sm text-slate-400">
-              Earn badges by trading, claiming daily rewards, and inviting
-              friends. Coins + XP for every unlock.
+              Earn badges by trading, inviting friends, and hitting milestones.
+              XP for every unlock.
             </p>
           </div>
           {u && (

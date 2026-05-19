@@ -3,7 +3,6 @@ import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { ClaimFaucet } from "@/components/ClaimFaucet";
 import { AchievementsGrid } from "@/components/AchievementsGrid";
 import { VerifyEmailBanner } from "@/components/VerifyEmailBanner";
 import { AvatarUploader } from "@/components/AvatarUploader";
@@ -90,7 +89,6 @@ export default async function ProfilePage() {
                 <Coins className="h-3.5 w-3.5" />
                 Buy coins
               </Link>
-              <ClaimFaucet />
             </div>
           </Card>
         </div>
