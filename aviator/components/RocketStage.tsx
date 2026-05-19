@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import type { TargetAndTransition, Transition } from 'framer-motion';
 import { useGame } from '@/lib/store';
 
 /**
@@ -311,7 +312,7 @@ function ExhaustParticleNode({
 function computeRocketTransform(
   phase: string,
   liveMultiplier: number,
-): { animate: Record<string, unknown>; transition: Record<string, unknown> } {
+): { animate: TargetAndTransition; transition: Transition } {
   if (phase === 'CRASHED') {
     return {
       animate: { x: 60, y: 220, rotate: 35, scale: 0.85 },
