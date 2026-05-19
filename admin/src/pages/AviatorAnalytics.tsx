@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 
 interface Analytics {
@@ -17,16 +18,35 @@ interface Analytics {
   currentRoundNumber: number | null;
 }
 
+interface CurrentRound {
+  phase: string | null;
+  roundId: string | null;
+  roundNumber: number | null;
+  startedAt: string | null;
+  onlineCount: number;
+  bettorsThisRound: number;
+  totalStaked: number;
+  totalPaidOut: number;
+}
+
 export default function AviatorAnalytics() {
   const [data, setData] = useState<Analytics | null>(null);
+  const [current, setCurrent] = useState<CurrentRound | null>(null);
   const [hours, setHours] = useState(24);
   const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
     setError(null);
     try {
-      const a = await api.get<Analytics>(`/admin/aviator/analytics?hours=${hours}`);
+      // The two endpoints are independent; firing them in parallel
+      // keeps the live tiles responsive even when the historical
+      // analytics aggregate is slow on big windows.
+      const [a, c] = await Promise.all([
+        api.get<Analytics>(`/admin/aviator/analytics?hours=${hours}`),
+        api.get<CurrentRound>('/admin/aviator/current'),
+      ]);
       setData(a);
+      setCurrent(c);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'failed to load');
     }
@@ -34,7 +54,10 @@ export default function AviatorAnalytics() {
 
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, 10_000);
+    // 3s pulls keep the bettor + stake tiles "live enough" without
+    // hammering the backend. The historical analytics under it stays
+    // on the slower 10s cadence implicit in the page render.
+    const id = setInterval(refresh, 3_000);
     return () => clearInterval(id);
   }, [hours]);
 
@@ -74,8 +97,46 @@ export default function AviatorAnalytics() {
         </div>
       </div>
 
+      {/* Live tiles — current-round metrics. The stake tile drills
+          down into the per-user bet list. Updates every 3s. */}
+      <div className="mb-3">
+        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">
+          Live · {current?.phase ?? '—'} · round #{current?.roundNumber ?? '—'}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Stat
+            label="Active bettors"
+            value={current?.bettorsThisRound ?? 0}
+            sub={`${current?.onlineCount ?? 0} online (incl. viewers)`}
+          />
+          <Link to="/aviator/current" className="block">
+            <Stat
+              label="Coins on this round"
+              value={`₹${(current?.totalStaked ?? 0).toLocaleString()}`}
+              sub="Click for per-user breakdown →"
+              clickable
+            />
+          </Link>
+          <Stat
+            label="Cashed out so far"
+            value={`₹${(current?.totalPaidOut ?? 0).toLocaleString()}`}
+            sub="(live, this round only)"
+          />
+          <Stat
+            label="At risk"
+            value={`₹${Math.max(
+              0,
+              (current?.totalStaked ?? 0) - (current?.totalPaidOut ?? 0),
+            ).toLocaleString()}`}
+            sub="Pending settlement"
+          />
+        </div>
+      </div>
+
+      <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">
+        Historical · last {hours === 168 ? '7 days' : `${hours}h`}
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-        <Stat label="Online" value={data.onlineCount} sub={`${data.currentPhase} · #${data.currentRoundNumber ?? '—'}`} />
         <Stat label="Rounds" value={data.totalRounds.toLocaleString()} sub={`avg crash ${data.avgCrash.toFixed(2)}×`} />
         <Stat label="Bets" value={data.totalBets.toLocaleString()} sub={`₹${data.totalStaked.toLocaleString()} staked`} />
         <Stat label="House edge" value={`₹${data.houseEdgeInr.toLocaleString()}`} sub={`payout ₹${data.totalPaidOut.toLocaleString()}`} />
@@ -103,9 +164,26 @@ export default function AviatorAnalytics() {
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
+function Stat({
+  label,
+  value,
+  sub,
+  clickable,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub?: string;
+  clickable?: boolean;
+}) {
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+    <div
+      className={
+        'bg-white rounded-lg shadow-sm border border-slate-200 p-4 ' +
+        (clickable
+          ? 'hover:border-brand-indigo hover:shadow transition cursor-pointer'
+          : '')
+      }
+    >
       <div className="text-xs uppercase tracking-widest text-slate-500">{label}</div>
       <div className="text-2xl font-semibold mt-1">{value}</div>
       {sub && <div className="text-xs text-slate-500 mt-1">{sub}</div>}

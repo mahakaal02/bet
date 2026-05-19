@@ -105,6 +105,49 @@ export class AdminController {
   // the Bet host — that's where pending payouts surface, with the per-user
   // audit page showing all coin flow + IP overlap warnings.
 
+  // Live snapshot of the current Aviator round (phase, bettor count,
+  // total stake on this round). Drives the live-tile row on the admin
+  // analytics page.
+  @Get('aviator/current')
+  aviatorCurrentRound() {
+    return this.aviator.adminCurrentRound();
+  }
+
+  // Per-user breakdown of bets on the current round. Drill-down from
+  // the "Coins riding on this round" tile.
+  @Get('aviator/current/bets')
+  aviatorCurrentRoundBets() {
+    return this.aviator.adminCurrentRoundBets();
+  }
+
+  // Per-round P&L for the historical round log. Each row: round number,
+  // stake, payout, house P/L, bettor count. Cursor paginate by
+  // `before=<roundNumber>` to walk older.
+  @Get('aviator/rounds-pnl')
+  aviatorRoundsPnl(
+    @Query('limit') limit?: string,
+    @Query('before') before?: string,
+  ) {
+    const n = Math.min(500, Math.max(1, Number(limit) || 50));
+    const beforeNum = before ? Number(before) : undefined;
+    return this.aviator.adminRoundsPnl(
+      n,
+      Number.isFinite(beforeNum) ? beforeNum : undefined,
+    );
+  }
+
+  // Day / month / fiscal-year (Indian, Apr–Mar) rollup of stake +
+  // payout + house P/L. Used for the finance summary tabs.
+  @Get('aviator/finance-rollup')
+  aviatorFinanceRollup(
+    @Query('period') period?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const p = period === 'month' ? 'month' : period === 'fy' ? 'fy' : 'day';
+    const n = Math.min(120, Math.max(1, Number(limit) || 30));
+    return this.aviator.adminFinanceRollup(p, n);
+  }
+
   // Admin knobs for Aviator: (1) global max-payout ceiling, (2) one-shot
   // forced-payout override for the next round. See `AviatorSettings` model.
   @Get('aviator/settings')

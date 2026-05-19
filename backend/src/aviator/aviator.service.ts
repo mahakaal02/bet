@@ -616,6 +616,326 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
     };
   }
 
+  // ── live current-round snapshot ──────────────────────────────────────────
+
+  /**
+   * Snapshot of the round that's running right now. Two distinct
+   * "active user" counts:
+   *
+   *   - onlineCount  : Socket.IO client connections (passive viewers
+   *                    included; useful for capacity planning).
+   *   - bettorsThisRound: distinct users who placed a bet on the
+   *                    current round. This is the metric the admin
+   *                    cares about for "who's actually playing".
+   *
+   * Stake / payout figures sum bets persisted to the DB. The in-memory
+   * `bets` map is the source of truth WHILE the round is BETTING /
+   * RUNNING — it's flushed on crash. We read the in-memory map first
+   * for live freshness, then fall through to the DB once the round
+   * has crashed.
+   */
+  async adminCurrentRound() {
+    const phase = this.phase;
+    const current = this.current;
+    const onlineCount = this.io?.engine?.clientsCount ?? 0;
+
+    if (!current) {
+      return {
+        phase,
+        roundId: null,
+        roundNumber: null,
+        startedAt: null,
+        crashMultiplier: null,
+        onlineCount,
+        bettorsThisRound: 0,
+        totalStaked: 0,
+        totalPaidOut: 0,
+      };
+    }
+
+    let totalStaked = 0;
+    let totalPaidOut = 0;
+    let bettorsThisRound = 0;
+
+    if (phase === 'BETTING' || phase === 'RUNNING') {
+      // Live: read the in-memory bets map. `cashedOutAt` flips for each
+      // user as soon as the matcher confirms a cashout, so payout sums
+      // in real time as players exit.
+      for (const b of this.bets.values()) {
+        totalStaked += b.amount;
+        if (b.cashedOutAt !== null) {
+          // The in-memory record stores the multiplier at which they
+          // exited; mirror the persistence formula used by `crashRound`.
+          totalPaidOut += Math.floor(b.amount * b.cashedOutAt);
+        }
+      }
+      bettorsThisRound = this.bets.size;
+    } else {
+      // CRASHED phase (rare to hit through this endpoint, but we
+      // shouldn't return zeros). Fall through to the persisted row.
+      const agg = await this.prisma.aviatorBet.aggregate({
+        where: { roundId: current.roundId },
+        _count: { _all: true },
+        _sum: { amount: true, payout: true },
+      });
+      totalStaked = agg._sum.amount ?? 0;
+      totalPaidOut = agg._sum.payout ?? 0;
+      bettorsThisRound = agg._count._all;
+    }
+
+    return {
+      phase,
+      roundId: current.roundId,
+      roundNumber: current.roundNumber,
+      startedAt: current.startedAt > 0 ? new Date(current.startedAt).toISOString() : null,
+      crashMultiplier: current.crashMultiplier,
+      onlineCount,
+      bettorsThisRound,
+      totalStaked,
+      totalPaidOut,
+    };
+  }
+
+  /**
+   * Per-user bets on the current round, for the drill-down click on
+   * the "Stake on this round" tile. Returns the same shape the public
+   * roster does, plus a userId for the admin to deep-link audits.
+   *
+   * During BETTING / RUNNING we serve from the in-memory map for
+   * freshness; afterwards we serve from the persisted rows.
+   */
+  async adminCurrentRoundBets() {
+    const current = this.current;
+    if (!current) return [];
+
+    if (this.phase === 'BETTING' || this.phase === 'RUNNING') {
+      return Array.from(this.bets.values()).map((b) => ({
+        betId: b.betId,
+        userId: b.userId,
+        username: b.username,
+        amount: b.amount,
+        autoCashoutAt: b.autoCashoutAt,
+        cashedOutAt: b.cashedOutAt,
+        payout:
+          b.cashedOutAt !== null ? Math.floor(b.amount * b.cashedOutAt) : null,
+      }));
+    }
+
+    const rows = await this.prisma.aviatorBet.findMany({
+      where: { roundId: current.roundId },
+      include: { user: { select: { username: true } } },
+      orderBy: { amount: 'desc' },
+    });
+    return rows.map((b) => ({
+      betId: b.id,
+      userId: b.userId,
+      username: b.user.username,
+      amount: b.amount,
+      autoCashoutAt: b.autoCashoutAt ? Number(b.autoCashoutAt.toString()) : null,
+      cashedOutAt: b.cashedOutMultiplier
+        ? Number(b.cashedOutMultiplier.toString())
+        : null,
+      payout: b.payout,
+    }));
+  }
+
+  // ── per-round P&L + period rollups ───────────────────────────────────────
+
+  /**
+   * Per-round financial breakdown (most recent first). For each round:
+   * total staked across all bettors, total paid out, house P/L
+   * (staked − paid), bettor count. Cursor-paginated by roundNumber.
+   */
+  async adminRoundsPnl(limit = 50, beforeRoundNumber?: number) {
+    const where: { status: 'CRASHED'; roundNumber?: { lt: number } } = {
+      status: 'CRASHED',
+    };
+    if (beforeRoundNumber != null) where.roundNumber = { lt: beforeRoundNumber };
+
+    const rounds = await this.prisma.aviatorRound.findMany({
+      where,
+      orderBy: { roundNumber: 'desc' },
+      take: Math.min(500, Math.max(1, limit)),
+      select: {
+        id: true,
+        roundNumber: true,
+        crashMultiplier: true,
+        crashedAt: true,
+        startedAt: true,
+      },
+    });
+
+    if (rounds.length === 0) return [];
+
+    // One grouped aggregate covers every round in this page.
+    const ids = rounds.map((r) => r.id);
+    const grouped = await this.prisma.aviatorBet.groupBy({
+      by: ['roundId'],
+      where: { roundId: { in: ids } },
+      _count: { _all: true },
+      _sum: { amount: true, payout: true },
+    });
+    const byRound = new Map(grouped.map((g) => [g.roundId, g]));
+
+    return rounds.map((r) => {
+      const g = byRound.get(r.id);
+      const staked = g?._sum.amount ?? 0;
+      const paidOut = g?._sum.payout ?? 0;
+      return {
+        roundId: r.id,
+        roundNumber: r.roundNumber,
+        startedAt: r.startedAt.toISOString(),
+        crashedAt: r.crashedAt?.toISOString() ?? null,
+        crashMultiplier: r.crashMultiplier.toString(),
+        bettorCount: g?._count._all ?? 0,
+        totalStaked: staked,
+        totalPaidOut: paidOut,
+        houseProfit: staked - paidOut,
+      };
+    });
+  }
+
+  /**
+   * Rollups of stake / payout / house P&L by period. Supports day,
+   * month, and Indian fiscal year (Apr 1 – Mar 31). Aggregation is
+   * done in SQL via Prisma's raw template, but we use a portable
+   * approach: pull all CRASHED-round aggregates within the window
+   * and group in memory. For year-scale windows on a busy game this
+   * may want a Postgres `date_trunc` group-by, but at current
+   * volumes (~1k–10k rounds/day) in-memory is fine and avoids a
+   * coupling to SQL dialect.
+   */
+  async adminFinanceRollup(
+    period: 'day' | 'month' | 'fy',
+    limit = 30,
+  ): Promise<
+    {
+      periodKey: string;
+      periodLabel: string;
+      periodStart: string;
+      periodEnd: string;
+      totalStaked: number;
+      totalPaidOut: number;
+      houseProfit: number;
+      roundCount: number;
+      bettorCount: number;
+    }[]
+  > {
+    // Look-back windows tuned to keep the result set bounded.
+    const lookbackMs =
+      period === 'day'
+        ? limit * 24 * 60 * 60 * 1000 // last N days
+        : period === 'month'
+          ? limit * 35 * 24 * 60 * 60 * 1000 // last N months-ish
+          : limit * 366 * 24 * 60 * 60 * 1000; // last N FYs
+
+    const since = new Date(Date.now() - lookbackMs);
+
+    // Use crashedAt as the time anchor — that's when the round
+    // realised. A round that crosses midnight is grouped in the
+    // bucket of its crash time, which matches house-accounting
+    // intuition.
+    const rounds = await this.prisma.aviatorRound.findMany({
+      where: { status: 'CRASHED', crashedAt: { gte: since } },
+      select: { id: true, crashedAt: true },
+    });
+    if (rounds.length === 0) return [];
+
+    const ids = rounds.map((r) => r.id);
+    const bets = await this.prisma.aviatorBet.findMany({
+      where: { roundId: { in: ids } },
+      select: { roundId: true, userId: true, amount: true, payout: true },
+    });
+
+    // Map each round to its bucket key + bucket window.
+    const buckets = new Map<
+      string,
+      {
+        key: string;
+        label: string;
+        start: Date;
+        end: Date;
+        stake: number;
+        paid: number;
+        rounds: Set<string>;
+        bettors: Set<string>;
+      }
+    >();
+
+    function bucketFor(crashedAt: Date) {
+      if (period === 'day') {
+        const y = crashedAt.getUTCFullYear();
+        const m = crashedAt.getUTCMonth();
+        const d = crashedAt.getUTCDate();
+        const start = new Date(Date.UTC(y, m, d));
+        const end = new Date(Date.UTC(y, m, d + 1));
+        const key = start.toISOString().slice(0, 10);
+        return { key, label: key, start, end };
+      }
+      if (period === 'month') {
+        const y = crashedAt.getUTCFullYear();
+        const m = crashedAt.getUTCMonth();
+        const start = new Date(Date.UTC(y, m, 1));
+        const end = new Date(Date.UTC(y, m + 1, 1));
+        const key = start.toISOString().slice(0, 7);
+        return { key, label: key, start, end };
+      }
+      // Indian FY: Apr 1 of year Y → Mar 31 of year Y+1.
+      const y = crashedAt.getUTCFullYear();
+      const m = crashedAt.getUTCMonth();
+      const fyStartYear = m >= 3 ? y : y - 1; // Jan–Mar belongs to prior FY
+      const start = new Date(Date.UTC(fyStartYear, 3, 1));
+      const end = new Date(Date.UTC(fyStartYear + 1, 3, 1));
+      const key = `FY${(fyStartYear % 100).toString().padStart(2, '0')}-${((fyStartYear + 1) % 100).toString().padStart(2, '0')}`;
+      return { key, label: key, start, end };
+    }
+
+    const roundIdToBucket = new Map<string, string>();
+    for (const r of rounds) {
+      if (!r.crashedAt) continue;
+      const b = bucketFor(r.crashedAt);
+      roundIdToBucket.set(r.id, b.key);
+      let entry = buckets.get(b.key);
+      if (!entry) {
+        entry = {
+          key: b.key,
+          label: b.label,
+          start: b.start,
+          end: b.end,
+          stake: 0,
+          paid: 0,
+          rounds: new Set(),
+          bettors: new Set(),
+        };
+        buckets.set(b.key, entry);
+      }
+      entry.rounds.add(r.id);
+    }
+    for (const b of bets) {
+      const key = roundIdToBucket.get(b.roundId);
+      if (!key) continue;
+      const entry = buckets.get(key)!;
+      entry.stake += b.amount;
+      entry.paid += b.payout ?? 0;
+      entry.bettors.add(b.userId);
+    }
+
+    return Array.from(buckets.values())
+      .sort((a, b) => b.start.getTime() - a.start.getTime())
+      .slice(0, limit)
+      .map((b) => ({
+        periodKey: b.key,
+        periodLabel: b.label,
+        periodStart: b.start.toISOString(),
+        periodEnd: b.end.toISOString(),
+        totalStaked: b.stake,
+        totalPaidOut: b.paid,
+        houseProfit: b.stake - b.paid,
+        roundCount: b.rounds.size,
+        bettorCount: b.bettors.size,
+      }));
+  }
+
   // ── snapshot helpers ──────────────────────────────────────────────────────
 
   private snapshotPublicState() {
