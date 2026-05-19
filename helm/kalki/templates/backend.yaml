@@ -47,13 +47,29 @@ spec:
         {{- include "kalki.labels" (dict "name" "backend" "ctx" .) | nindent 8 }}
     spec:
       {{- include "kalki.nodeAffinity" . | nindent 6 }}
+      # `fsGroup: 1001` matches the nodejs UID/GID baked into the
+      # backend Dockerfile. Kubernetes recursively chowns mounted
+      # volumes (including the longhorn-provisioned uploads PVC) to
+      # this GID at mount time, so multer disk writes succeed instead
+      # of failing with EACCES.
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
       {{- if .Values.backend.prismaMigrate }}
       initContainers:
         - name: prisma-migrate
           image: {{ include "kalki.image" (dict "image" .Values.backend.image "tag" .Values.backend.imageTag "ctx" .) }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          # Prisma migrate still needs root to handle init scenarios
+          # (creating extensions, etc.) before the main container takes
+          # over. Override the pod-level securityContext just for this
+          # init step. `runAsUser: 0` is well-bounded — Prisma exits
+          # immediately afterwards and the main container drops back to
+          # the nodejs UID via the pod-level securityContext.
           securityContext:
             runAsUser: 0
+            runAsGroup: 0
           command: ["sh","-c","npx prisma migrate deploy --schema=prisma/schema.prisma || npx prisma db push --schema=prisma/schema.prisma --accept-data-loss"]
           env:
             - name: DATABASE_URL
