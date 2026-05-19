@@ -453,13 +453,24 @@ function drawCurveAndMascot(
 }
 
 /**
- * Multiplier label that travels with the mascot. Auto-flips its
- * anchor so it stays inside the canvas: prefers right-of-mascot,
- * but falls back to left-of-mascot if that would clip, and bumps
- * vertically off the top edge if the mascot is in the top stripe.
+ * Multiplier label that travels with the mascot, anchored to a HUD-
+ * style position above-and-to-the-right of the sprite. The order of
+ * fallbacks (most-preferred → least-preferred) is:
  *
- * Tier glow + bold mono digits — small enough to never compete
- * with the mascot for attention, big enough to read at a glance.
+ *   1. Above-and-right — feels like an overhead HUD callout, keeps
+ *      the chip clear of both the mascot's wings and the recent
+ *      curve trail underneath it.
+ *   2. Vertically centred to the right — used when the mascot is
+ *      high enough that "above" would clip the top of the canvas
+ *      (the apex of the curve).
+ *   3. Vertically centred to the left — used when the mascot is
+ *      close to the right edge of the canvas and there's no room
+ *      on the right at all.
+ *   4. Below-and-right — last resort, when neither side has room
+ *      vertically (only kicks in for extremely tall/narrow stages).
+ *
+ * Tier glow + bold mono digits, with a top-status pill at top-centre
+ * the player never has to look away from the mascot to read it.
  */
 function drawMultiplierLabel(
   ctx: CanvasRenderingContext2D,
@@ -468,7 +479,7 @@ function drawMultiplierLabel(
   multiplier: number,
   tier: Tier,
   w: number,
-  _h: number,
+  h: number,
 ) {
   const label = formatMultiplier(multiplier);
   const fontPx = 30;
@@ -481,19 +492,38 @@ function drawMultiplierLabel(
   const boxW = textW + padX * 2;
   const boxH = fontPx + 12;
 
-  // Anchor preference — right of mascot, vertically centred on it.
-  let bx = mascotX + MASCOT_RADIUS + 6;
-  let by = mascotY - boxH / 2;
+  // Top-centre status pill (BettingPill/CrashedPill/RunningPill) is
+  // ~32 px tall + 12 px margin — keep at least 56 px clear at the
+  // very top of the canvas so the chip never overlaps it.
+  const TOP_SAFE = 56;
 
-  // Flip to left side if the right anchor would overflow.
-  if (bx + boxW > w - 8) {
-    bx = mascotX - MASCOT_RADIUS - 6 - boxW;
+  // Preferred: above-and-right of the mascot.
+  let bx = mascotX + MASCOT_RADIUS * 0.6;
+  let by = mascotY - MASCOT_RADIUS * 0.7 - boxH;
+
+  const rightOverflow = bx + boxW > w - 8;
+  const topOverflow = by < TOP_SAFE;
+
+  if (rightOverflow && topOverflow) {
+    // Both above and right are tight → centre-left of mascot.
+    bx = mascotX - MASCOT_RADIUS - 8 - boxW;
+    by = mascotY - boxH / 2;
+  } else if (topOverflow) {
+    // Apex of the curve — drop to centre-right.
+    bx = mascotX + MASCOT_RADIUS + 8;
+    by = mascotY - boxH / 2;
+  } else if (rightOverflow) {
+    // Hugging the right edge — flip the chip above-and-left instead.
+    bx = mascotX - MASCOT_RADIUS * 0.6 - boxW;
   }
-  // Nudge down if it would clip the top edge (mascot near the apex).
-  if (by < 8) by = 8;
+
+  // Final safety clamps — never let the chip leave the canvas, even
+  // on a 1-frame layout race during resize.
+  bx = Math.max(8, Math.min(bx, w - boxW - 8));
+  by = Math.max(8, Math.min(by, h - boxH - 8));
 
   // Chip background — same dark base everywhere, tier-tinted border.
-  ctx.fillStyle = 'rgba(8, 11, 26, 0.72)';
+  ctx.fillStyle = 'rgba(8, 11, 26, 0.78)';
   ctx.strokeStyle = hexToRgba(tier.color, 0.55);
   ctx.lineWidth = 1.2;
   roundedRect(ctx, bx, by, boxW, boxH, 10);

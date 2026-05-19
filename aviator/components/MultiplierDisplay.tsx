@@ -10,9 +10,9 @@ import { useGame } from '@/lib/store';
  * this overlay carries only the round-state metadata the player
  * needs to read at a glance:
  *
- *   BETTING   →  "Starts in 0.8s"  (violet, ember in the final 3s)
+ *   BETTING   →  "Starts in 8s"   (violet, ember in the final 3s)
  *   RUNNING   →  small "In flight" pill (tier-coloured dot pulse)
- *   CRASHED   →  brief "Flew away" pill that fades out automatically
+ *   CRASHED   →  brief "Crashed" pill that fades out automatically
  *
  * Designed to sit unobtrusively at top-centre so it never competes
  * for attention with the mascot + curve. Earlier versions had a
@@ -31,19 +31,28 @@ export default function MultiplierDisplay() {
 }
 
 function BettingPill({ bettingEndsAt }: { bettingEndsAt: number | null }) {
-  const [remaining, setRemaining] = useState<number>(0);
+  // Whole-second integer countdown. Previously this displayed one
+  // decimal (e.g. `8.3s`) which read as "milliseconds in the readout"
+  // and made the urgency feel jittery rather than crisp. A 1 Hz tick
+  // is enough — the BETTING window is 10 s, the player only needs
+  // second-level precision.
+  const [remainingSec, setRemainingSec] = useState<number>(0);
   useEffect(() => {
     if (!bettingEndsAt) return;
     const update = () =>
-      setRemaining(Math.max(0, (bettingEndsAt - Date.now()) / 1000));
+      setRemainingSec(Math.max(0, Math.ceil((bettingEndsAt - Date.now()) / 1000)));
     update();
-    const id = setInterval(update, 80);
+    // 200 ms poll keeps the displayed second in sync with the wall
+    // clock without a full second of drift before the next tick
+    // boundary — but the *displayed value* still snaps in 1-second
+    // increments thanks to `Math.ceil`.
+    const id = setInterval(update, 200);
     return () => clearInterval(id);
   }, [bettingEndsAt]);
 
   // Visual urgency — last 3 seconds shift the pill from cool violet
   // to ember orange so the eye is drawn to the countdown.
-  const urgent = remaining <= 3.0;
+  const urgent = remainingSec <= 3;
   const color = urgent ? '#FF8A3D' : '#8B5CFF';
   const label = urgent ? 'Almost!' : 'Starts in';
 
@@ -68,7 +77,7 @@ function BettingPill({ bettingEndsAt }: { bettingEndsAt: number | null }) {
         {label}
       </span>
       <span className="font-mono text-sm font-black tabular-nums leading-none">
-        {remaining.toFixed(1)}s
+        {remainingSec}s
       </span>
     </motion.div>
   );
@@ -105,7 +114,7 @@ function CrashedPill() {
     >
       <span className="inline-block h-1.5 w-1.5 rounded-full bg-danger" />
       <span className="text-[10px] font-bold uppercase tracking-[0.22em]">
-        Flew away
+        Crashed
       </span>
     </motion.div>
   );
