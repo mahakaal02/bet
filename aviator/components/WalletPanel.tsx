@@ -1,28 +1,31 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useGame } from '@/lib/store';
 import { getToken } from '@/lib/auth';
-import { formatRupees } from '@/lib/format';
+import { formatCoins } from '@/lib/format';
 
 /**
  * Wallet quick-actions panel — premium glass card with two CTAs.
  *
- *   Pay     →  hands off to the Exchange wallet (`:3100/wallet`)
+ *   Top up  →  hands off to the Exchange wallet (`:3100/wallet`)
  *              with the user's bearer token attached so the SSO
  *              middleware signs them in transparently.
  *
- *   Encash  →  routes to Aviator's `/withdraw` form, but only
- *              after the wallet balance crosses the `WITHDRAW_MIN`
- *              threshold. Below the threshold the button visibly
- *              disables and a hint surfaces the gap; the form itself
- *              still enforces the same threshold server-side.
+ *   Encash  →  routes to the Exchange wallet's withdrawal page
+ *              (`:3100/wallet/withdraw`), again token-passing.
+ *              The Aviator backend doesn't expose `/wallet/withdraw`
+ *              (it's on Bet, the canonical wallet) — the previous
+ *              standalone Aviator withdraw form 404'd because of
+ *              that mismatch. Routing to Bet's existing page is
+ *              both the correct surface and avoids duplicating
+ *              the form logic in two apps.
  *
- * Visual changes vs. the previous version: full-width buttons inside
- * a single card with a bold balance readout above. Withdrawal-locked
- * state shows a slim progress bar so the player feels the gap close.
+ * Withdrawal lock kicks in below the platform minimum (100 coins,
+ * matching `MIN_WITHDRAW_COINS` in `bet/lib/coins.ts`). Below the
+ * threshold the button is visibly disabled with a progress bar
+ * counting down the gap.
  */
-const WITHDRAW_MIN = 2_000;
+const WITHDRAW_MIN = 100;
 
 function exchangeOrigin(): string {
   const fromEnv = process.env.NEXT_PUBLIC_EXCHANGE_URL;
@@ -36,8 +39,13 @@ function exchangeOrigin(): string {
   return 'http://localhost:3100';
 }
 
+function exchangeUrl(path: string): string {
+  const token = getToken();
+  const base = `${exchangeOrigin()}${path}`;
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+}
+
 export default function WalletPanel() {
-  const router = useRouter();
   const walletBalance = useGame((s) => s.walletBalance);
   const canWithdraw = (walletBalance ?? 0) >= WITHDRAW_MIN;
   const remaining = Math.max(0, WITHDRAW_MIN - (walletBalance ?? 0));
@@ -46,16 +54,12 @@ export default function WalletPanel() {
     : Math.min(100, Math.round(((walletBalance ?? 0) / WITHDRAW_MIN) * 100));
 
   function clickPay() {
-    const token = getToken();
-    const base = `${exchangeOrigin()}/wallet`;
-    window.location.href = token
-      ? `${base}?token=${encodeURIComponent(token)}`
-      : base;
+    window.location.href = exchangeUrl('/wallet');
   }
 
   function clickWithdraw() {
     if (!canWithdraw) return;
-    router.push('/withdraw');
+    window.location.href = exchangeUrl('/wallet/withdraw');
   }
 
   return (
@@ -66,7 +70,7 @@ export default function WalletPanel() {
             Wallet balance
           </div>
           <div className="font-mono text-2xl lg:text-3xl font-black leading-tight text-text-primary tabular-nums">
-            {formatRupees(walletBalance)}
+            {formatCoins(walletBalance)}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -82,7 +86,7 @@ export default function WalletPanel() {
             title={
               canWithdraw
                 ? 'Withdraw to your bank / UPI'
-                : `Reach ${formatRupees(WITHDRAW_MIN)} to enable withdrawals`
+                : `Reach ${formatCoins(WITHDRAW_MIN)} to enable withdrawals`
             }
             className="px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-gradient-to-br from-success to-[#10A38A] hover:brightness-110 transition chip-press shadow-card disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:brightness-100"
           >
@@ -100,7 +104,7 @@ export default function WalletPanel() {
             />
           </div>
           <p className="text-[11px] text-text-secondary">
-            Encash unlocks at {formatRupees(WITHDRAW_MIN)} — {formatRupees(remaining)} to go.
+            Encash unlocks at {formatCoins(WITHDRAW_MIN)} — {formatCoins(remaining)} to go.
           </p>
         </div>
       )}

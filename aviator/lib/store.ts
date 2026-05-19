@@ -151,7 +151,10 @@ export const useGame = create<GameState>((set) => ({
 
   setBalance: (n) => set({ balance: n, walletBalance: n }),
   setWalletBalance: (n) => set({ walletBalance: n, balance: n }),
-  setNextStake: (n) => set({ nextStake: Math.max(0, Math.floor(n)) }),
+  // "Let it ride" stake rule — floor at the platform minimum (100 coins)
+  // so a loss resets back to the entry stake instead of zeroing out and
+  // forcing the user to retype before they can bet again.
+  setNextStake: (n) => set({ nextStake: Math.max(100, Math.floor(n)) }),
   setCurrentBet: (b) => set({ currentBet: b }),
 
   setHistory: (rows) =>

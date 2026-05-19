@@ -1,34 +1,40 @@
 'use client';
 
-import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { useGame } from '@/lib/store';
-import { useTopup } from '@/lib/useTopup';
+import { getToken } from '@/lib/auth';
 import { tierFor } from '@/lib/tiers';
-import { formatRupees } from '@/lib/format';
+import { formatCoins } from '@/lib/format';
 
 /**
- * Bet controls — the player's primary action surface. Three logical
- * states map to three big-button presentations:
+ * Bet controls — the player's primary action surface. Five logical
+ * button states:
  *
- *   BETTING + no bet            →  PLACE BET ₹{amount}  (violet)
- *   BETTING + insufficient      →  ADD ₹X & BET         (mint, "topup-then-bet")
- *   RUNNING + live bet          →  CASHOUT ₹{liveProfit} @ {m}× (mint pulse, tier-tinted)
- *   CRASHED + lost bet          →  BUSTED -₹{amount}     (red, locked)
- *   any +  cashed out           →  WAITING…              (locked)
+ *   BETTING + no bet + has coins        →  PLACE BET · X coins  (violet)
+ *   BETTING + no bet + insufficient     →  TOP UP TO BET         (mint, navigates)
+ *   RUNNING + live bet                  →  CASHOUT X coins @ M×  (tier-tinted, pulsing)
+ *   CRASHED + lost bet                  →  BUSTED − X coins       (red, locked)
+ *   any + cashed out / ride out          →  WAITING / NEXT ROUND  (muted)
  *
- * Around that hero button we surface:
- *   - Amount input with quick chips (+₹50, +₹100, ½, 2×) and stepper
- *   - Auto-cashout toggle + target picker (1.5×, 2×, 5×, custom)
- *   - Inline error / success banner under the button
- *
- * The bet + cashout REST calls and the "let it ride" stake rule are
- * unchanged from the previous version — the redesign is purely
- * presentation. Behaviour invariants preserved: only one bet per
- * round, auto-cashout target validated ≥1.01, insufficient-balance
- * topup flow, optimistic balance decrement on placeBet.
+ * Behaviour invariants:
+ *   - Min bet is 100 coins (matches the platform-wide minimum;
+ *     amounts below 100 are rejected client-side with a clear
+ *     message — no submit). After a loss, the input auto-resets
+ *     to 100, not 0, so a tap-only player can rebet immediately.
+ *   - When the wallet can't cover the requested stake, the hero
+ *     button no longer tries to open Razorpay inline; it routes
+ *     the user to the Exchange wallet top-up page (`:3100/wallet`)
+ *     with the bearer token attached for SSO. The page is now the
+ *     single canonical surface for adding coins.
+ *   - The button is always rendered (no AnimatePresence mode="wait"
+ *     gap where the variant key was changing). Disabled states are
+ *     visual only — the click handler still resolves cleanly.
  */
+
+const MIN_BET = 100;
+const QUICK_AMOUNTS = [50, 100, 250, 500] as const;
+const AUTO_PRESETS = [1.5, 2, 5, 10] as const;
 
 interface PlaceBidResp {
   betId: string;
@@ -41,8 +47,26 @@ interface CashoutResp {
   payout: number;
 }
 
-const QUICK_AMOUNTS = [50, 100, 250, 500] as const;
-const AUTO_PRESETS = [1.5, 2, 5, 10] as const;
+/** Browser/emulator-aware exchange origin. Mirrors `lib/api.ts` */
+function exchangeOrigin(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_EXCHANGE_URL;
+  if (fromEnv) return fromEnv.replace(/\/$/, '');
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host && host !== 'localhost' && host !== '127.0.0.1') {
+      return `http://${host}:3100`;
+    }
+  }
+  return 'http://localhost:3100';
+}
+
+function openTopupPage() {
+  const token = getToken();
+  const base = `${exchangeOrigin()}/wallet`;
+  window.location.href = token
+    ? `${base}?token=${encodeURIComponent(token)}`
+    : base;
+}
 
 export default function BetControls() {
   const phase = useGame((s) => s.phase);
@@ -52,47 +76,47 @@ export default function BetControls() {
   const setBalance = useGame((s) => s.setBalance);
   const liveMultiplier = useGame((s) => s.multiplier);
   const nextStake = useGame((s) => s.nextStake);
-  const { topup, busy: topupBusy } = useTopup();
 
-  const [amount, setAmount] = useState<number>(nextStake);
+  const [amount, setAmount] = useState<number>(Math.max(MIN_BET, nextStake));
   const [autoEnabled, setAutoEnabled] = useState(false);
   const [autoAt, setAutoAt] = useState<string>('2.00');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   // When a new BETTING phase begins, sync the input to the running
-  // stake (first round = ₹100; after win = payout; after loss = 0).
-  // We also clear the feedback line so a previous round's "BUSTED"
-  // error doesn't bleed into the next round.
+  // stake (clamped to MIN_BET). Also clear any leftover BUSTED error
+  // from the previous round so the panel reads "fresh" each cycle.
   const lastPhase = useRef(phase);
   useEffect(() => {
     if (lastPhase.current !== 'BETTING' && phase === 'BETTING') {
-      setAmount(nextStake);
+      setAmount(Math.max(MIN_BET, nextStake));
       setError(null);
-      setNotice(null);
     }
     lastPhase.current = phase;
   }, [phase, nextStake]);
 
   useEffect(() => {
     if (phase === 'BETTING' && !currentBet) {
-      setAmount(nextStake);
+      setAmount(Math.max(MIN_BET, nextStake));
     }
   }, [nextStake]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function placeBet() {
+    if (busy) return;
     setBusy(true);
     setError(null);
-    setNotice(null);
     try {
       const auto = autoEnabled && autoAt.trim() ? Number(autoAt) : null;
       if (auto !== null && (isNaN(auto) || auto < 1.01)) {
-        throw new Error('auto cashout must be ≥ 1.01');
+        throw new Error('Auto cashout must be at least 1.01×');
       }
-      if (amount <= 0) throw new Error('amount must be ≥ 1');
-      if (balance !== null && amount > balance) {
-        throw new Error(`insufficient wallet (${formatRupees(balance)})`);
+      if (amount < MIN_BET) {
+        throw new Error(`Minimum bet is ${MIN_BET} coins`);
+      }
+      if (balance != null && amount > balance) {
+        // Server-side guard duplicates the same rule — this is the
+        // friendlier client-side preflight.
+        throw new Error(`Wallet has only ${formatCoins(balance)}`);
       }
       const res = await api.post<PlaceBidResp>('/aviator/bet', {
         amount,
@@ -104,7 +128,7 @@ export default function BetControls() {
         autoCashoutAt: res.autoCashoutAt,
         cashedOutAt: null,
       });
-      if (balance !== null) setBalance(balance - res.amount);
+      if (balance != null) setBalance(balance - res.amount);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : (e as Error).message);
     } finally {
@@ -112,25 +136,8 @@ export default function BetControls() {
     }
   }
 
-  async function topupThenBet() {
-    if (balance === null) return;
-    const needed = Math.max(0, amount - balance);
-    const requested = Math.max(100, Math.ceil(needed / 100) * 100);
-    setError(null);
-    setNotice(null);
-    const result = await topup(requested, {
-      description: `Top up ${formatRupees(requested)} to play ${formatRupees(amount)}`,
-    });
-    if (result.dismissed) return;
-    if (!result.ok) {
-      setError(result.error ?? 'top-up failed');
-      return;
-    }
-    setNotice(`Added ${formatRupees(result.credited)}. Placing bet…`);
-    if (phase === 'BETTING' && !currentBet) await placeBet();
-  }
-
   async function cashout() {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -146,31 +153,43 @@ export default function BetControls() {
   }
 
   const cashedOut = currentBet?.cashedOutAt != null;
-  const insufficient = balance !== null && amount > balance;
-  const canBet =
-    phase === 'BETTING' &&
-    !currentBet &&
-    !busy &&
-    balance !== null &&
-    amount > 0 &&
-    amount <= balance;
-  const canCashOut = phase === 'RUNNING' && !!currentBet && !cashedOut && !busy;
-  const topupNeeded = balance === null
-    ? 0
-    : Math.max(100, Math.ceil(Math.max(0, amount - balance) / 100) * 100);
-  const canTopupToBet =
-    phase === 'BETTING' &&
-    !currentBet &&
-    !busy &&
-    !topupBusy &&
-    insufficient &&
-    amount > 0;
+  const insufficient = balance != null && amount > balance;
+  const belowMin = amount < MIN_BET;
 
-  // Live profit (used by the cashout button label).
+  // Hero button is *always* rendered, never gated behind AnimatePresence's
+  // mode="wait" (which used to leave a no-button gap during variant
+  // transitions and made clicks feel "swallowed"). Disabled / busy
+  // states are pure presentation; the click handler resolves cleanly.
+  const heroState: HeroState =
+    !currentBet || cashedOut
+      ? phase === 'BETTING'
+        ? insufficient || (balance != null && balance < MIN_BET)
+          ? 'topup'
+          : 'place'
+        : phase === 'RUNNING'
+        ? cashedOut
+          ? 'waiting'
+          : 'waiting'
+        : phase === 'CRASHED'
+        ? 'waiting'
+        : 'waiting'
+      : phase === 'RUNNING'
+      ? 'cashout'
+      : phase === 'CRASHED'
+      ? 'busted'
+      : 'waiting';
+
+  const inputLocked = !!currentBet && !cashedOut;
+  const tier = tierFor(liveMultiplier);
   const liveProfit = currentBet ? Math.floor(currentBet.amount * liveMultiplier) : 0;
 
-  const inputLocked = !!currentBet;
-  const tier = tierFor(liveMultiplier);
+  function onHeroClick() {
+    if (heroState === 'place') return void placeBet();
+    if (heroState === 'cashout') return void cashout();
+    if (heroState === 'topup') return openTopupPage();
+    // busted / waiting → noop. The button is still mounted (visible
+    // as locked) so the layout doesn't shift, but it doesn't react.
+  }
 
   return (
     <div className="glass rounded-3xl p-4 lg:p-5 space-y-4">
@@ -182,36 +201,48 @@ export default function BetControls() {
               Bet amount
             </label>
             <span className="text-[10px] font-mono text-text-muted">
-              {balance != null ? `wallet ${formatRupees(balance)}` : ''}
+              {balance != null ? `wallet ${formatCoins(balance)}` : ''}
             </span>
           </div>
           <div className="flex items-stretch gap-1.5">
             <StepperBtn
               label="−"
-              onClick={() => setAmount((a) => Math.max(0, a - 50))}
-              disabled={inputLocked}
+              onClick={() =>
+                setAmount((a) => Math.max(MIN_BET, a - 50))
+              }
+              disabled={inputLocked || amount <= MIN_BET}
             />
             <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-text-muted text-sm">
-                ₹
-              </span>
               <input
                 type="number"
                 min={0}
                 max={100000}
                 value={amount}
-                onChange={(e) => setAmount(Math.max(0, Number(e.target.value)))}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setAmount(Number.isFinite(v) ? Math.max(0, v) : 0);
+                }}
+                onBlur={() => {
+                  // Coerce below-min entries up to the floor on blur, so
+                  // the user doesn't get stuck submitting a too-small
+                  // value and seeing only the inline error.
+                  if (amount > 0 && amount < MIN_BET) setAmount(MIN_BET);
+                }}
                 disabled={inputLocked}
-                className={`w-full h-12 pl-7 pr-3 bg-elevated/80 border rounded-xl font-mono text-base font-bold outline-none transition tabular-nums ${
-                  insufficient
+                aria-label="Bet amount in coins"
+                className={`w-full h-12 pl-3 pr-16 bg-elevated/80 border rounded-xl font-mono text-base font-bold outline-none transition tabular-nums ${
+                  insufficient || belowMin
                     ? 'border-danger/60 focus:border-danger'
                     : 'border-border focus:border-aurora-violet/70'
                 } disabled:opacity-60`}
               />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-text-muted text-xs pointer-events-none">
+                coins
+              </span>
             </div>
             <StepperBtn
               label="+"
-              onClick={() => setAmount((a) => a + 50)}
+              onClick={() => setAmount((a) => Math.max(MIN_BET, a) + 50)}
               disabled={inputLocked}
             />
           </div>
@@ -219,26 +250,32 @@ export default function BetControls() {
             {QUICK_AMOUNTS.map((q) => (
               <QuickChip
                 key={q}
-                onClick={() => setAmount((a) => a + q)}
+                onClick={() =>
+                  setAmount((a) => Math.max(MIN_BET, a + q))
+                }
                 disabled={inputLocked}
               >
                 +{q}
               </QuickChip>
             ))}
             <QuickChip
-              onClick={() => setAmount((a) => Math.max(0, Math.floor(a / 2)))}
+              onClick={() =>
+                setAmount((a) => Math.max(MIN_BET, Math.floor(a / 2)))
+              }
               disabled={inputLocked}
             >
               ½
             </QuickChip>
             <QuickChip
-              onClick={() => setAmount((a) => a * 2)}
+              onClick={() => setAmount((a) => Math.max(MIN_BET, a) * 2)}
               disabled={inputLocked}
             >
               2×
             </QuickChip>
             <QuickChip
-              onClick={() => balance != null && setAmount(balance)}
+              onClick={() =>
+                balance != null && setAmount(Math.max(MIN_BET, balance))
+              }
               disabled={inputLocked || balance == null}
               accent
             >
@@ -267,6 +304,7 @@ export default function BetControls() {
               value={autoAt}
               onChange={(e) => setAutoAt(e.target.value)}
               disabled={inputLocked || !autoEnabled}
+              aria-label="Auto cashout multiplier"
               className={`w-full h-12 pl-3 pr-8 bg-elevated/80 border rounded-xl font-mono text-base font-bold outline-none transition tabular-nums ${
                 autoEnabled
                   ? 'border-border focus:border-success/70 text-text-primary'
@@ -296,69 +334,22 @@ export default function BetControls() {
 
         {/* Hero action column -------------------------------------- */}
         <div className="flex flex-col gap-2 min-w-0 lg:w-[260px]">
-          <AnimatePresence mode="wait" initial={false}>
-            {!currentBet || cashedOut ? (
-              insufficient && phase === 'BETTING' ? (
-                <ActionButton
-                  key="topup"
-                  onClick={topupThenBet}
-                  disabled={!canTopupToBet}
-                  variant="success"
-                >
-                  {topupBusy ? '…' : `ADD ${formatRupees(topupNeeded)} & BET`}
-                </ActionButton>
-              ) : (
-                <ActionButton
-                  key="place"
-                  onClick={placeBet}
-                  disabled={!canBet}
-                  variant="primary"
-                >
-                  {phase === 'BETTING'
-                    ? amount > 0
-                      ? `PLACE BET · ${formatRupees(amount)}`
-                      : 'PLACE BET'
-                    : phase === 'RUNNING'
-                    ? 'NEXT ROUND'
-                    : 'WAITING…'}
-                </ActionButton>
-              )
-            ) : phase === 'RUNNING' ? (
-              <ActionButton
-                key="cashout"
-                onClick={cashout}
-                disabled={!canCashOut}
-                variant="cashout"
-                tierColor={tier.color}
-              >
-                <div className="flex flex-col items-center leading-tight">
-                  <span className="text-[10px] font-bold tracking-[0.18em] opacity-90">
-                    CASHOUT
-                  </span>
-                  <span className="font-mono text-lg font-black">
-                    {formatRupees(liveProfit)}
-                  </span>
-                  <span className="text-[10px] font-mono opacity-80">
-                    @ {liveMultiplier.toFixed(2)}×
-                  </span>
-                </div>
-              </ActionButton>
-            ) : phase === 'CRASHED' && !cashedOut ? (
-              <ActionButton key="busted" disabled variant="danger">
-                BUSTED · −{formatRupees(currentBet.amount)}
-              </ActionButton>
-            ) : (
-              <ActionButton key="locked" disabled variant="muted">
-                BET LOCKED
-              </ActionButton>
-            )}
-          </AnimatePresence>
+          <HeroButton
+            state={heroState}
+            onClick={onHeroClick}
+            busy={busy}
+            amount={amount}
+            liveProfit={liveProfit}
+            liveMultiplier={liveMultiplier}
+            tierColor={tier.color}
+            currentBetAmount={currentBet?.amount ?? 0}
+            cashedOut={cashedOut}
+          />
 
           <FeedbackLine
             error={error}
-            notice={notice}
             insufficient={insufficient && phase === 'BETTING' && !currentBet}
-            topupNeeded={topupNeeded}
+            belowMin={belowMin && phase === 'BETTING' && !currentBet}
             cashedOut={cashedOut}
             currentBet={currentBet}
             balance={balance}
@@ -372,6 +363,8 @@ export default function BetControls() {
 /* ============================================================
    Sub-components
    ============================================================ */
+
+type HeroState = 'place' | 'topup' | 'cashout' | 'busted' | 'waiting';
 
 function StepperBtn({
   label,
@@ -458,90 +451,153 @@ function AutoToggle({
   );
 }
 
-function ActionButton({
-  children,
+/**
+ * Always-mounted hero button. The previous version was wrapped in
+ * an `AnimatePresence mode="wait"` that swapped child components
+ * keyed on state — during the wait between exit + entrance, the
+ * button briefly didn't exist in the DOM, which let some user
+ * clicks fall through and made the panel feel unresponsive.
+ *
+ * This version keeps the button mounted and just animates the
+ * label change with a fade. State is communicated via colour +
+ * label, with an explicit `aria-disabled` only when the action
+ * is genuinely a no-op (busted / waiting / mid-flight).
+ */
+function HeroButton({
+  state,
   onClick,
-  disabled,
-  variant,
+  busy,
+  amount,
+  liveProfit,
+  liveMultiplier,
   tierColor,
+  currentBetAmount,
+  cashedOut,
 }: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-  variant: 'primary' | 'success' | 'cashout' | 'danger' | 'muted';
-  tierColor?: string;
+  state: HeroState;
+  onClick: () => void;
+  busy: boolean;
+  amount: number;
+  liveProfit: number;
+  liveMultiplier: number;
+  tierColor: string;
+  currentBetAmount: number;
+  cashedOut: boolean;
 }) {
   const base =
-    'relative w-full h-[68px] rounded-2xl font-extrabold text-white shadow-card overflow-hidden flex items-center justify-center';
-  const variants: Record<string, string> = {
-    primary:
-      'bg-gradient-to-br from-aurora-violet to-[#5C2BFF] hover:brightness-110',
-    success:
-      'bg-gradient-to-br from-success to-[#10A38A] hover:brightness-110',
-    cashout: 'cashout-pulse',
-    danger: 'bg-gradient-to-br from-[#7A2233] to-[#3D1019] opacity-95',
-    muted: 'bg-elevated opacity-70',
-  };
+    'relative w-full h-[68px] rounded-2xl font-extrabold text-white shadow-card overflow-hidden flex items-center justify-center transition select-none';
+
+  let visualStyle = '';
+  let inlineStyle: React.CSSProperties | undefined;
+  let label: React.ReactNode;
+  let actionable = !busy;
+
+  switch (state) {
+    case 'place':
+      visualStyle = 'bg-gradient-to-br from-aurora-violet to-[#5C2BFF] hover:brightness-110 active:brightness-95';
+      label = busy ? (
+        '…'
+      ) : amount > 0 ? (
+        <span className="flex flex-col items-center leading-tight">
+          <span className="text-[10px] tracking-[0.18em] opacity-85">PLACE BET</span>
+          <span className="font-mono text-lg font-black">{formatCoins(amount)}</span>
+        </span>
+      ) : (
+        'PLACE BET'
+      );
+      break;
+    case 'topup':
+      visualStyle = 'bg-gradient-to-br from-success to-[#10A38A] hover:brightness-110 active:brightness-95';
+      label = (
+        <span className="flex flex-col items-center leading-tight">
+          <span className="text-[10px] tracking-[0.18em] opacity-90">TOP UP TO BET</span>
+          <span className="font-mono text-sm font-black">Add coins</span>
+        </span>
+      );
+      break;
+    case 'cashout':
+      visualStyle = 'cashout-pulse';
+      inlineStyle = {
+        backgroundImage: `linear-gradient(135deg, ${tierColor}, ${shade(tierColor, -25)})`,
+      };
+      label = (
+        <span className="flex flex-col items-center leading-tight">
+          <span className="text-[10px] font-bold tracking-[0.18em] opacity-90">CASHOUT</span>
+          <span className="font-mono text-lg font-black tabular-nums">
+            {formatCoins(liveProfit)}
+          </span>
+          <span className="text-[10px] font-mono opacity-80 tabular-nums">
+            @ {liveMultiplier.toFixed(2)}×
+          </span>
+        </span>
+      );
+      break;
+    case 'busted':
+      visualStyle = 'bg-gradient-to-br from-[#7A2233] to-[#3D1019] opacity-95';
+      label = `BUSTED · −${formatCoins(currentBetAmount)}`;
+      actionable = false;
+      break;
+    case 'waiting':
+    default:
+      visualStyle = 'bg-elevated/80 text-text-secondary';
+      label = cashedOut ? 'CASHED OUT — WAITING' : 'WAITING…';
+      actionable = false;
+      break;
+  }
+
   return (
-    <motion.button
-      key={variant}
-      initial={{ opacity: 0, scale: 0.97 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.97 }}
-      transition={{ type: 'spring', stiffness: 340, damping: 26 }}
+    <button
       type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`${base} ${variants[variant]} disabled:opacity-40 disabled:cursor-not-allowed`}
-      style={
-        variant === 'cashout' && tierColor
-          ? {
-              backgroundImage: `linear-gradient(135deg, ${tierColor}, ${shade(tierColor, -25)})`,
-            }
-          : undefined
-      }
+      onClick={actionable ? onClick : undefined}
+      aria-disabled={!actionable}
+      data-state={state}
+      className={`${base} ${visualStyle} ${actionable ? 'cursor-pointer' : 'cursor-not-allowed opacity-90'}`}
+      style={inlineStyle}
     >
-      {/* glass sheen on top */}
       <span
         aria-hidden
-        className="absolute inset-x-0 top-0 h-1/2 rounded-t-2xl bg-gradient-to-b from-white/15 to-transparent"
+        className="absolute inset-x-0 top-0 h-1/2 rounded-t-2xl bg-gradient-to-b from-white/15 to-transparent pointer-events-none"
       />
-      <span className="relative">{children}</span>
-    </motion.button>
+      <span className="relative">{label}</span>
+    </button>
   );
 }
 
 function FeedbackLine({
   error,
-  notice,
   insufficient,
-  topupNeeded,
+  belowMin,
   cashedOut,
   currentBet,
   balance,
 }: {
   error: string | null;
-  notice: string | null;
   insufficient: boolean;
-  topupNeeded: number;
+  belowMin: boolean;
   cashedOut: boolean;
   currentBet: { amount: number; cashedOutAt: number | null } | null;
   balance: number | null;
 }) {
   if (error) return <p className="text-xs text-danger leading-tight">{error}</p>;
-  if (notice) return <p className="text-xs text-success leading-tight">{notice}</p>;
   if (cashedOut && currentBet?.cashedOutAt != null) {
     const profit = Math.floor(currentBet.amount * currentBet.cashedOutAt);
     return (
       <p className="text-xs text-success leading-tight">
-        Cashed out @ {currentBet.cashedOutAt.toFixed(2)}× · +{formatRupees(profit)}
+        Cashed out @ {currentBet.cashedOutAt.toFixed(2)}× · +{formatCoins(profit)}
       </p>
     );
   }
   if (insufficient) {
     return (
       <p className="text-xs text-danger leading-tight">
-        Wallet {formatRupees(balance)}. Tap to add {formatRupees(topupNeeded)}.
+        Wallet has {formatCoins(balance)} — top up to place this bet.
+      </p>
+    );
+  }
+  if (belowMin) {
+    return (
+      <p className="text-xs text-warning leading-tight">
+        Minimum bet is {MIN_BET} coins.
       </p>
     );
   }

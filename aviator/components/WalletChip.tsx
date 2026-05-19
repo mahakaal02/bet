@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useGame } from '@/lib/store';
 import { getToken } from '@/lib/auth';
-import { formatRupees } from '@/lib/format';
+import { formatCoins } from '@/lib/format';
 
 /**
  * Compact wallet chip in the navbar. Tap → Exchange top-up at
@@ -58,7 +58,7 @@ export default function WalletChip() {
           boxShadow: `0 0 6px ${empty ? '#FF8A3D' : '#8B5CFF'}`,
         }}
       />
-      <span className="font-mono tabular-nums">{formatRupees(balance)}</span>
+      <span className="font-mono tabular-nums">{formatCoins(balance, { compact: true })}</span>
     </button>
   );
 }

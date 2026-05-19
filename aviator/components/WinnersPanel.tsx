@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from '@/lib/store';
 import { tierFor } from '@/lib/tiers';
-import { formatRupees } from '@/lib/format';
+import { formatCoins } from '@/lib/format';
 
 /**
  * Recent winners ticker. Cross-round persistent (unlike the roster
@@ -63,7 +63,7 @@ export default function WinnersPanel() {
                       {w.multiplier.toFixed(2)}×
                     </span>
                     <span className="text-text-secondary tabular-nums">
-                      +{formatRupees(w.payout)}
+                      +{formatCoins(w.payout)}
                     </span>
                   </div>
                 </motion.div>

@@ -26,7 +26,11 @@ export default function Stage() {
       style={{ aspectRatio: 'var(--stage-aspect, 16 / 9)' }}
     >
       <GameStage />
-      <div className="absolute inset-x-0 top-[18%] flex justify-center pointer-events-none z-10">
+
+      {/* Small top-centre status pill. The big multiplier number is
+          drawn inside the canvas next to the mascot — this overlay
+          only carries the round-phase metadata. */}
+      <div className="absolute inset-x-0 top-3 flex justify-center pointer-events-none z-10">
         <MultiplierDisplay />
       </div>
 

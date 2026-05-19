@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useMemo } from 'react';
 import { useGame } from '@/lib/store';
 import { tierFor } from '@/lib/tiers';
-import { formatRupees } from '@/lib/format';
+import { formatCoins } from '@/lib/format';
 import type { RosterEntry } from '@/lib/types';
 
 /**
@@ -19,7 +19,7 @@ import type { RosterEntry } from '@/lib/types';
  *              and the row briefly flashes (controlled by Framer's
  *              `layout` re-order plus the gradient backplate).
  *
- * Stats header surfaces total bet count + pooled rupee volume so the
+ * Stats header surfaces total bet count + pooled coin volume so the
  * player feels the size of the table at a glance.
  */
 
@@ -71,12 +71,12 @@ export default function RosterPanel() {
         <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
           <Stat
             label="Bet volume"
-            value={formatRupees(totalStake)}
+            value={formatCoins(totalStake)}
             tone="primary"
           />
           <Stat
             label="Paid out"
-            value={formatRupees(totalCashed)}
+            value={formatCoins(totalCashed)}
             tone="success"
           />
         </div>
@@ -185,7 +185,7 @@ function PlayerRow({
       </div>
       <div className="flex items-center gap-2 font-mono whitespace-nowrap text-xs">
         <span className="text-text-secondary tabular-nums">
-          {formatRupees(bet.amount)}
+          {formatCoins(bet.amount)}
         </span>
         {state === 'cashed' && tier ? (
           <span
