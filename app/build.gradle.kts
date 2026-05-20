@@ -87,6 +87,11 @@ dependencies {
 
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
+    // EncryptedSharedPreferences + Android Keystore master key
+    // (PR-ANDROID-SECURITY). Backs TokenStore so the bearer JWT is
+    // AES-256-GCM-encrypted at rest with a hardware-bound key, not
+    // plaintext under /data/data/.../shared_prefs/.
+    implementation(libs.androidx.security.crypto)
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

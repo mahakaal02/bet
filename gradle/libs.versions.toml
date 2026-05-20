@@ -14,6 +14,13 @@ okhttp = "4.12.0"
 moshi = "1.15.1"
 coil = "2.7.0"
 datastore = "1.1.1"
+# androidx.security.crypto — backs EncryptedSharedPreferences via the
+# Android Keystore. Pinned to 1.1.0-alpha06 (the latest at writing)
+# because the stable 1.0.0 line uses Tink internals that emit a
+# Kotlin warning under AGP 8.x and lacks the M-key-rotation fix that
+# alpha06 ships. Watch this when bumping — 1.1.0-beta could drop the
+# alpha tag.
+securityCrypto = "1.1.0-alpha06"
 razorpayCheckout = "1.6.40"
 playBilling = "7.1.1"
 kotlinxSerialization = "1.7.3"
@@ -34,6 +41,7 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
+androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }
