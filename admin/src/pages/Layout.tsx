@@ -44,6 +44,7 @@ export default function Layout() {
           </div>
           <SideLink to="/settings" label="Runtime settings" />
           <SideLink to="/feature-flags" label="Feature flags" />
+          <SideLink to="/analytics" label="Analytics" />
           <div className="pt-3 pb-1 px-3 text-[10px] uppercase tracking-widest opacity-50">
             Aviator
           </div>
