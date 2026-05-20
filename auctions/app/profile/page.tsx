@@ -209,6 +209,26 @@ export default async function ProfilePage() {
           </Link>
         </Card>
 
+        <Card className="mb-4">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Danger zone
+          </h2>
+          <Link
+            href="/me/delete"
+            className="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 hover:border-rose-500/40 hover:bg-slate-800/80"
+          >
+            <span>
+              <span className="block font-medium">Close account & data export</span>
+              <span className="text-[11px] text-slate-500">
+                30-day cool-off · download your data anytime
+              </span>
+            </span>
+            <span aria-hidden className="text-slate-500">
+              →
+            </span>
+          </Link>
+        </Card>
+
         <Card>
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
             Sign out

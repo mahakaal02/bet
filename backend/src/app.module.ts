@@ -22,6 +22,7 @@ import { ResponsibleGamblingModule } from './responsible-gambling/responsible-ga
 import { DailyLoginModule } from './daily-login/daily-login.module';
 import { AddressesModule } from './addresses/addresses.module';
 import { ProfileModule } from './profile/profile.module';
+import { AccountDeletionModule } from './account-deletion/account-deletion.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { ProfileModule } from './profile/profile.module';
     DailyLoginModule,
     AddressesModule,
     ProfileModule,
+    AccountDeletionModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
