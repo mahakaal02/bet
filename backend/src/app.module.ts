@@ -33,6 +33,7 @@ import { FraudModule } from './fraud/fraud.module';
 import { CsvModule } from './csv/csv.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { CampaignsModule } from './campaigns/campaigns.module';
     CsvModule,
     AnalyticsModule,
     CampaignsModule,
+    StorageModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
