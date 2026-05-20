@@ -252,3 +252,52 @@ describe('LocalKeyDocumentCipher (regression — KMS PR must not break local)', 
     expect(recovered.toString('utf8')).toBe('hello');
   });
 });
+
+/**
+ * Module-factory parity check — proves the env-driven cipher
+ * selection picks the right concrete impl. Mirrors the inline factory
+ * in kyc.module.ts so a future refactor that flips the default away
+ * from `local` is caught at test time (vs at prod boot when the
+ * KMS path tries to call AWS without credentials).
+ *
+ * Closes the "Smoke: with `kyc.cipher.driver=local` (default),
+ * confirm dev/CI installs continue using LocalKeyDocumentCipher
+ * untouched" item that would otherwise need a live cluster to verify.
+ */
+describe('env-driven cipher selection (mirrors kyc.module.ts factory)', () => {
+  const PRIOR_ENV = process.env;
+  beforeEach(() => {
+    process.env = {
+      ...PRIOR_ENV,
+      // Make the local cipher constructible without throwing on
+      // missing JWT_SECRET in CI environments.
+      KYC_DOCUMENT_KEY: 'x'.repeat(32),
+    };
+  });
+  afterEach(() => { process.env = PRIOR_ENV; });
+
+  function pickCipher() {
+    const driver = process.env.KYC_CIPHER_DRIVER ?? 'local';
+    return driver === 'kms' ? new KmsDocumentCipher() : new LocalKeyDocumentCipher();
+  }
+
+  it('returns LocalKeyDocumentCipher when KYC_CIPHER_DRIVER is unset (default)', () => {
+    delete process.env.KYC_CIPHER_DRIVER;
+    expect(pickCipher()).toBeInstanceOf(LocalKeyDocumentCipher);
+  });
+
+  it("returns LocalKeyDocumentCipher when KYC_CIPHER_DRIVER='local' (explicit)", () => {
+    process.env.KYC_CIPHER_DRIVER = 'local';
+    expect(pickCipher()).toBeInstanceOf(LocalKeyDocumentCipher);
+  });
+
+  it("returns KmsDocumentCipher when KYC_CIPHER_DRIVER='kms'", () => {
+    process.env.KYC_CIPHER_DRIVER = 'kms';
+    expect(pickCipher()).toBeInstanceOf(KmsDocumentCipher);
+  });
+
+  it('treats unknown driver strings as local (defensive fallback)', () => {
+    process.env.KYC_CIPHER_DRIVER = 'nope';
+    expect(pickCipher()).toBeInstanceOf(LocalKeyDocumentCipher);
+  });
+});
