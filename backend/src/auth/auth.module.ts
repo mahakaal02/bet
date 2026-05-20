@@ -12,6 +12,8 @@ import { TwoFactorController } from './two-factor.controller';
 import { TwoFactorService } from './two-factor.service';
 import { TrustedDeviceController } from './trusted-device.controller';
 import { TrustedDeviceService } from './trusted-device.service';
+import { EmailChangeController } from './email-change.controller';
+import { EmailChangeService } from './email-change.service';
 import { ResponsibleGamblingModule } from '../responsible-gambling/responsible-gambling.module';
 
 @Module({
@@ -33,6 +35,7 @@ import { ResponsibleGamblingModule } from '../responsible-gambling/responsible-g
     PasswordResetController,
     TwoFactorController,
     TrustedDeviceController,
+    EmailChangeController,
   ],
   providers: [
     AuthService,
@@ -40,6 +43,7 @@ import { ResponsibleGamblingModule } from '../responsible-gambling/responsible-g
     PasswordResetService,
     TwoFactorService,
     TrustedDeviceService,
+    EmailChangeService,
   ],
   exports: [AuthService, JwtModule, TwoFactorService, TrustedDeviceService],
 })
