@@ -36,7 +36,10 @@ export type Permission =
   | 'reconciliation.view'
   // Support tickets — consumed by PR-TICKETS-1
   | 'ticket.view'
-  | 'ticket.reply';
+  | 'ticket.reply'
+  // KYC review — consumed by PR-KYC-2
+  | 'kyc.view'
+  | 'kyc.review';
 
 /**
  * Role → permissions mapping. Matches Roadmap §F-ADMIN-6.
@@ -55,6 +58,9 @@ export type Permission =
  */
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ADMIN: ['*'],
+  // FINANCE owns withdrawal approvals + ledger + KYC review (no dedicated
+  // COMPLIANCE role yet — squatting on FINANCE keeps the Prisma Role enum
+  // stable until the next RBAC refactor adds COMPLIANCE explicitly).
   FINANCE: [
     'withdrawal.approve',
     'withdrawal.reject',
@@ -62,6 +68,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'ledger.view',
     'ledger.export',
     'reconciliation.view',
+    'kyc.view',
+    'kyc.review',
   ],
   MODERATOR: [
     'user.view',
@@ -72,7 +80,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'audit.view',
   ],
   SUPPORT: ['ticket.view', 'ticket.reply', 'user.view'],
-  AUDITOR: ['*.view', 'audit.view', 'reconciliation.view'],
+  AUDITOR: ['*.view', 'audit.view', 'reconciliation.view', 'kyc.view'],
 };
 
 /**

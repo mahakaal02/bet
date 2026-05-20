@@ -520,6 +520,35 @@ enum NotificationStatus {
   DEAD
 }
 
+// ───── Email suppression list (PR-NOTIFY-2) ─────────────────────────
+//
+// Populated by the SNS webhook on bounce / complaint. Every email send
+// checks this table first — a permanent bounce stays suppressed
+// forever; a complaint (spam button) also stays forever to avoid
+// repeat-offender domain reputation damage.
+//
+// Transient bounces (the SNS bounceType=Transient) don't land here —
+// we let SES handle the retry semantics inside its own queue. Only
+// the Permanent + Complaint signal types make the row.
+enum EmailSuppressionReason {
+  HARD_BOUNCE
+  COMPLAINT
+  MANUAL
+}
+
+model EmailSuppression {
+  email     String                  @id
+  reason    EmailSuppressionReason
+  // Snapshot of the bounce subtype ("General", "NoEmail", "Suppressed",
+  // "OnAccountSuppressionList") or complaint feedback type.
+  subtype   String?
+  // Raw provider payload kept for forensic / appeal handling.
+  metadata  Json?
+  createdAt DateTime                @default(now())
+
+  @@index([reason, createdAt])
+}
+
 model NotificationTemplate {
   id        String              @id @default(cuid())
   code      String                                     // e.g. "auction_outbid_v1"
@@ -783,6 +812,20 @@ model ResponsibleGamblingProfile {
   cooldownUntil            DateTime?
   selfExcludedUntil        DateTime?
   selfExcludedAt           DateTime?
+  // 24h cool-off for limit RAISES (PR-RG-2). When the user requests a
+  // looser limit we don't apply it immediately — we stash the new
+  // value in `pendingLimits` and schedule it to take effect at
+  // `pendingActivatesAt`. The user can cancel before that moment.
+  pendingLimits            Json?
+  pendingActivatesAt       DateTime?
+  // Session tracking for the periodic reminder feature (PR-RG-2).
+  // `sessionStartedAt` resets on first ping after > 30 min idle gap;
+  // `lastReminderAt` debounces the "you've been playing X minutes"
+  // toast so it doesn't fire on every heartbeat once the threshold
+  // has been crossed.
+  sessionStartedAt         DateTime?
+  lastSessionPingAt        DateTime?
+  lastReminderAt           DateTime?
   user                     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   updatedAt                DateTime  @updatedAt
   createdAt                DateTime  @default(now())
@@ -894,16 +937,39 @@ model SupportAttachment {
 
 // ───── Profile history (Roadmap F-USER-5 audit trail) ───────────────
 
+// PR-PROFILE-2 review states. NONE = automated change with no flag;
+// PENDING = profanity/reserved-name borderline match awaiting admin
+// eyes; KEPT_AS_IS = admin reviewed + said it's fine; FORCED_RENAME =
+// admin renamed the user (handled by an entry in this very table
+// where `field = "displayName"` and the admin is the author).
+enum ProfileReviewAction {
+  NONE
+  PENDING
+  KEPT_AS_IS
+  FORCED_RENAME
+}
+
 model UserProfileHistory {
-  id        String   @id @default(cuid())
-  userId    String
-  field     String                                                  // "displayName", "avatarKey"
-  before    String?
-  after     String?
-  changedAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String              @id @default(cuid())
+  userId       String
+  field        String                                                  // "displayName", "avatarKey"
+  before       String?
+  after        String?
+  changedAt    DateTime            @default(now())
+  // PR-PROFILE-2: moderation surface. flagReason is human-readable
+  // ("profanity:hindi-roman", "reserved:admin"); reviewAction is the
+  // disposition once an admin looks at it.
+  flagReason   String?
+  reviewAction ProfileReviewAction @default(NONE)
+  reviewedAt   DateTime?
+  reviewedBy   String?
+  reviewNotes  String?
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, changedAt])
+  // Cheap lookup for the queue page: "all unreviewed flagged rows,
+  // newest first."
+  @@index([reviewAction, changedAt])
 }
 
 // ───── Auth — password reset, 2FA, email change, account deletion ──
