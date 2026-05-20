@@ -19,6 +19,7 @@ import { WhatsappAuthModule } from './auth-whatsapp/auth-whatsapp.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { WatchlistModule } from './watchlist/watchlist.module';
 import { ResponsibleGamblingModule } from './responsible-gambling/responsible-gambling.module';
+import { ProfileModule } from './profile/profile.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { ResponsibleGamblingModule } from './responsible-gambling/responsible-ga
     UploadsModule,
     WatchlistModule,
     ResponsibleGamblingModule,
+    ProfileModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
