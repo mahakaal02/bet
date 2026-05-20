@@ -1,0 +1,74 @@
+{{- if .Values.backend.worker.enabled }}
+---
+# Dedicated worker pod (PR-WORKER-EXTRACT).
+#
+# Same image as the api Deployment, same DB credentials, but with
+# `KALKI_ROLE=worker` set so main.ts skips `app.listen()` and only
+# the @Cron schedulers + drainer services run. Notification +
+# outbox + reconciliation + fraud-sweep workloads no longer compete
+# with HTTP request latency.
+#
+# Default `replicas: 1`. The data layer already uses Postgres SKIP
+# LOCKED row locking, so multiple replicas would be safe — but
+# until we add leader election (PR-LEADER-ELECT), running > 1 means
+# every cron-tick fires twice. One replica is the correct default;
+# operators can scale up after wiring election.
+#
+# No Service / IngressRoute — the worker has no inbound traffic.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kalki-backend-worker
+  labels:
+    {{- include "kalki.labels" (dict "name" "backend-worker" "ctx" .) | nindent 4 }}
+spec:
+  replicas: {{ .Values.backend.worker.replicas }}
+  # Recreate strategy — worker has no health endpoint to drain via,
+  # so we don't gain anything from rolling update + we avoid a brief
+  # double-fire when both pods overlap during a deploy.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backend-worker
+      app.kubernetes.io/part-of: kalki
+  template:
+    metadata:
+      labels:
+        {{- include "kalki.labels" (dict "name" "backend-worker" "ctx" .) | nindent 8 }}
+    spec:
+      {{- include "kalki.nodeAffinity" . | nindent 6 }}
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      # No init containers — the api Deployment's prisma-migrate +
+      # prisma-seed init containers run on every api pod start, which
+      # is sufficient. Adding them here would race with the api init.
+      containers:
+        - name: backend-worker
+          image: {{ include "kalki.image" (dict "image" .Values.backend.image "tag" .Values.backend.imageTag "ctx" .) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          # No `ports` block — KALKI_ROLE=worker means no HTTP listener.
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: KALKI_ROLE
+              value: worker
+            - name: DATABASE_URL
+              value: {{ include "kalki.databaseUrl" (dict "dbname" "uniquebid" "override" .Values.backend.databaseUrl "ctx" .) | quote }}
+            {{- include "kalki.redisEnv" . | nindent 12 }}
+            {{- include "kalki.publicUrlEnv" . | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: kalki-shared
+          # No readiness/liveness probes by default — the worker has
+          # no listening socket. Kubernetes-native liveness would
+          # require an `exec` probe (`ps -p 1` style) which doesn't
+          # add real value: a stuck event loop would also fail to
+          # respond to SIGTERM, which Kubernetes will surface as a
+          # CrashLoopBackOff regardless. Re-enable with an exec probe
+          # if pod stuckness becomes a real operational concern.
+          resources:
+            {{- toYaml .Values.backend.worker.resources | nindent 12 }}
+{{- end }}
