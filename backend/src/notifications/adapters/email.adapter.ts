@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Notification, NotificationStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SesSender } from './ses-sender';
 
 /**
  * Email channel adapter. Multi-provider via the `EmailProvider`
@@ -33,9 +34,28 @@ export class EmailAdapter {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly ses: SesSender,
   ) {
     this.provider = this.config.get<string>('EMAIL_PROVIDER') ?? 'stub';
     this.fromAddress = this.config.get<string>('EMAIL_FROM') ?? 'noreply@kalki.local';
+  }
+
+  /**
+   * Suppression-list check (PR-NOTIFY-2). A hard-bounced or
+   * complained-about address never receives another email — keeping
+   * the sender reputation high is the entire reason we have a
+   * suppression list at all.
+   *
+   * Look-up is fast: `EmailSuppression.email` is the PK. We
+   * intentionally do NOT cache it in memory — suppression rows are
+   * write-rare but read-on-every-send. Postgres' row cache handles
+   * this without needing a TtlCache layer.
+   */
+  private async isSuppressed(email: string): Promise<boolean> {
+    const row = await this.prisma.emailSuppression.findUnique({
+      where: { email: email.toLowerCase() },
+    });
+    return row !== null;
   }
 
   async deliver(
@@ -50,6 +70,10 @@ export class EmailAdapter {
     if (!rendered.subject) {
       await this.markFailed(row, 'template missing subject');
       return { ok: false, permanent: true, error: 'no_subject' };
+    }
+    if (await this.isSuppressed(userEmail)) {
+      await this.markFailed(row, 'address on suppression list');
+      return { ok: false, permanent: true, error: 'suppressed' };
     }
 
     try {
@@ -98,6 +122,9 @@ export class EmailAdapter {
     if (!input.toEmail) {
       return { ok: false, error: 'no_email' };
     }
+    if (await this.isSuppressed(input.toEmail)) {
+      return { ok: false, error: 'suppressed' };
+    }
     try {
       switch (this.provider) {
         case 'ses':
@@ -121,15 +148,13 @@ export class EmailAdapter {
   }
 
   /**
-   * Real SES driver. Activated by `EMAIL_PROVIDER=ses` once
-   * `aws-sdk` is added and SES domain is verified. Until then we
-   * throw the not-implemented path to keep typecheck honest.
+   * Real SES driver. Activated by `EMAIL_PROVIDER=ses` with
+   * `AWS_REGION` + `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` +
+   * `EMAIL_FROM` set. Uses `SesSender` (dependency-free SigV4 + REST)
+   * so we don't need to pull `@aws-sdk/client-ses` into the bundle.
    */
-  private async sendViaSes(_to: string, _subject: string, _body: string): Promise<void> {
-    throw new Error(
-      'EMAIL_PROVIDER=ses requested but aws-sdk integration is not wired — ' +
-        'add the @aws-sdk/client-ses dependency and a SesClient init here.',
-    );
+  private async sendViaSes(to: string, subject: string, body: string): Promise<void> {
+    await this.ses.send({ to, subject, body });
   }
 
   /**

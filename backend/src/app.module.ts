@@ -24,6 +24,7 @@ import { AddressesModule } from './addresses/addresses.module';
 import { ProfileModule } from './profile/profile.module';
 import { AccountDeletionModule } from './account-deletion/account-deletion.module';
 import { ImpersonationModule } from './impersonation/impersonation.module';
+import { KycModule } from './kyc/kyc.module';
 import { ReferralsModule } from './referrals/referrals.module';
 
 @Module({
@@ -57,6 +58,7 @@ import { ReferralsModule } from './referrals/referrals.module';
     ProfileModule,
     AccountDeletionModule,
     ImpersonationModule,
+    KycModule,
     ReferralsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

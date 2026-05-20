@@ -12,6 +12,9 @@ import { EmailAdapter } from './adapters/email.adapter';
 import { NotificationBroadcastGateway } from './notification-broadcast.gateway';
 import { NotificationWorker } from './notification-worker';
 import { OutbidListenerService } from './outbid-listener.service';
+import { SesSender } from './adapters/ses-sender';
+import { EmailWebhookService } from './email-webhook.service';
+import { EmailWebhookController } from './email-webhook.controller';
 
 /**
  * Notifications module. Owns the full pipeline:
@@ -65,6 +68,7 @@ import { OutbidListenerService } from './outbid-listener.service';
     NotificationsController,
     NotificationsListController,
     NotificationsPreferencesController,
+    EmailWebhookController,
   ],
   providers: [
     NotificationsService, // legacy: FCM dispatcher + device-token registry
@@ -72,6 +76,8 @@ import { OutbidListenerService } from './outbid-listener.service';
     InappAdapter,
     PushAdapter,
     EmailAdapter,
+    SesSender,
+    EmailWebhookService,
     NotificationBroadcastGateway,
     NotificationWorker,
     OutbidListenerService,
