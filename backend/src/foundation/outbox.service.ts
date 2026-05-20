@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaClient, OutboxKind, OutboxStatus } from '@prisma/client';
+import { OutboxKind, OutboxStatus, Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * Outbox service — enqueue and (eventually) dispatch cross-service
@@ -39,7 +40,7 @@ export class OutboxService {
   ];
   private static readonly MAX_ATTEMPTS = 6;
 
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * MUST be called inside the same Prisma transaction as the
@@ -49,7 +50,7 @@ export class OutboxService {
    * unset the consistency guarantee.
    */
   async enqueue(
-    tx: Pick<PrismaClient, 'outbox'>,                // tx-bound client
+    tx: Prisma.TransactionClient | PrismaService,
     input: {
       kind: OutboxKind;
       sourceTable: string;                      // e.g. "Bid"

@@ -90,9 +90,43 @@ export const backend = {
           { method: "POST", body: JSON.stringify(body) },
           token,
         ),
+      patch: <T>(path: string, body: unknown) =>
+        request<T>(
+          path,
+          { method: "PATCH", body: JSON.stringify(body) },
+          token,
+        ),
     };
   },
 };
+
+// ─── Notification types (PR-NOTIFY-1) ───────────────────────────────
+
+export interface NotificationListItem {
+  id: string;
+  templateCode: string;
+  subject: string | null;
+  body: string;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface NotificationListResponse {
+  items: NotificationListItem[];
+  nextCursor: string | null;
+}
+
+export interface NotificationPreferences {
+  outbid: boolean;
+  auctionEnding: boolean;
+  orderUpdates: boolean;
+  dailyStreak: boolean;
+  marketingPush: boolean;
+  marketingEmail: boolean;
+  // Regulatory: server force-true on every write — the toggle is
+  // surfaced as read-only in the UI for transparency.
+  responsibleGambling: boolean;
+}
 
 export interface Auction {
   id: string;

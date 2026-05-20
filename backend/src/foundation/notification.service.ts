@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
-  PrismaClient,
   Notification,
   NotificationChannel,
   NotificationStatus,
 } from '@prisma/client';
 import * as crypto from 'crypto';
+import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * Public notification enqueue API. The single entry point that every
@@ -51,7 +51,7 @@ import * as crypto from 'crypto';
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
 
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async enqueue(input: {
     templateCode: string;
