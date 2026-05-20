@@ -79,7 +79,7 @@ redis:
 # ─── per-service ───────────────────────────────────────────────────────────
 backend:
   image: kalki-backend
-  imageTag: 20260520T125840Z-f5d1314 # {"$imagepolicy": "flux-system:kalki-backend:tag"}
+  imageTag: 20260520T134302Z-79cfcf5 # {"$imagepolicy": "flux-system:kalki-backend:tag"}
   port: 4000
   replicas: 1
   prismaMigrate: true # init-container runs `prisma migrate deploy`
@@ -117,7 +117,7 @@ bet:
     limits: {cpu: 1000m, memory: 1Gi}
 auctions:
   image: kalki-auctions
-  imageTag: 20260520T125838Z-f5d1314 # {"$imagepolicy": "flux-system:kalki-auctions:tag"}
+  imageTag: 20260520T134307Z-79cfcf5 # {"$imagepolicy": "flux-system:kalki-auctions:tag"}
   port: 3200
   replicas: 1
   resources:
