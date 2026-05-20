@@ -10,6 +10,8 @@ import { PasswordResetController } from './password-reset.controller';
 import { PasswordResetService } from './password-reset.service';
 import { TwoFactorController } from './two-factor.controller';
 import { TwoFactorService } from './two-factor.service';
+import { EmailChangeController } from './email-change.controller';
+import { EmailChangeService } from './email-change.service';
 import { ResponsibleGamblingModule } from '../responsible-gambling/responsible-gambling.module';
 
 @Module({
@@ -26,8 +28,19 @@ import { ResponsibleGamblingModule } from '../responsible-gambling/responsible-g
       }),
     }),
   ],
-  controllers: [AuthController, PasswordResetController, TwoFactorController],
-  providers: [AuthService, JwtStrategy, PasswordResetService, TwoFactorService],
+  controllers: [
+    AuthController,
+    PasswordResetController,
+    TwoFactorController,
+    EmailChangeController,
+  ],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    PasswordResetService,
+    TwoFactorService,
+    EmailChangeService,
+  ],
   exports: [AuthService, JwtModule, TwoFactorService],
 })
 export class AuthModule {}
