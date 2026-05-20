@@ -515,6 +515,35 @@ enum NotificationStatus {
   DEAD
 }
 
+// ───── Email suppression list (PR-NOTIFY-2) ─────────────────────────
+//
+// Populated by the SNS webhook on bounce / complaint. Every email send
+// checks this table first — a permanent bounce stays suppressed
+// forever; a complaint (spam button) also stays forever to avoid
+// repeat-offender domain reputation damage.
+//
+// Transient bounces (the SNS bounceType=Transient) don't land here —
+// we let SES handle the retry semantics inside its own queue. Only
+// the Permanent + Complaint signal types make the row.
+enum EmailSuppressionReason {
+  HARD_BOUNCE
+  COMPLAINT
+  MANUAL
+}
+
+model EmailSuppression {
+  email     String                  @id
+  reason    EmailSuppressionReason
+  // Snapshot of the bounce subtype ("General", "NoEmail", "Suppressed",
+  // "OnAccountSuppressionList") or complaint feedback type.
+  subtype   String?
+  // Raw provider payload kept for forensic / appeal handling.
+  metadata  Json?
+  createdAt DateTime                @default(now())
+
+  @@index([reason, createdAt])
+}
+
 model NotificationTemplate {
   id        String              @id @default(cuid())
   code      String                                     // e.g. "auction_outbid_v1"
