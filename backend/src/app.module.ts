@@ -27,6 +27,7 @@ import { ImpersonationModule } from './impersonation/impersonation.module';
 import { KycModule } from './kyc/kyc.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { OrdersModule } from './orders/orders.module';
+import { TicketsModule } from './tickets/tickets.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { OrdersModule } from './orders/orders.module';
     KycModule,
     ReferralsModule,
     OrdersModule,
+    TicketsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
