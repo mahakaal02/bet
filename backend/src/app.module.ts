@@ -21,6 +21,7 @@ import { WatchlistModule } from './watchlist/watchlist.module';
 import { ResponsibleGamblingModule } from './responsible-gambling/responsible-gambling.module';
 import { DailyLoginModule } from './daily-login/daily-login.module';
 import { AddressesModule } from './addresses/addresses.module';
+import { ProfileModule } from './profile/profile.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { AddressesModule } from './addresses/addresses.module';
     ResponsibleGamblingModule,
     DailyLoginModule,
     AddressesModule,
+    ProfileModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
