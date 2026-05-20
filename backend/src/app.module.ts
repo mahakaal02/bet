@@ -26,6 +26,7 @@ import { AccountDeletionModule } from './account-deletion/account-deletion.modul
 import { ImpersonationModule } from './impersonation/impersonation.module';
 import { KycModule } from './kyc/kyc.module';
 import { ReferralsModule } from './referrals/referrals.module';
+import { OrdersModule } from './orders/orders.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { ReferralsModule } from './referrals/referrals.module';
     ImpersonationModule,
     KycModule,
     ReferralsModule,
+    OrdersModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

@@ -122,6 +122,11 @@ model Auction {
   winner      User?          @relation("AuctionWinner", fields: [winnerId], references: [id])
   bids        Bid[]
   watchlist   Watchlist[]
+  // PR-ORDER-1: the auction → order back-relation. The Foundation PR
+  // left this commented because the Order model lived alone; ORDER-1
+  // wires it through. `?` keeps existing prod auctions (no order yet)
+  // valid until the lifecycle migration writes their rows.
+  order       Order?         @relation("AuctionOrder")
 
   @@index([status, endsAt])
   @@index([status, startsAt])
@@ -665,8 +670,9 @@ model Order {
   disputedAt              DateTime?
   disputeReason           String?
   shippingAddress         ShippingAddress? @relation(fields: [shippingAddressId], references: [id])
-  // Note: Auction relation back-ref to be added in feature PR
-  // (avoiding @@map churn on the Auction model in this Foundation PR).
+  // PR-ORDER-1: forward relation to Auction. The Auction model's
+  // back-ref is also wired now so prisma includes can join both ways.
+  auction                 Auction          @relation("AuctionOrder", fields: [auctionId], references: [id], onDelete: Cascade)
   createdAt               DateTime         @default(now())
   updatedAt               DateTime         @updatedAt
 
