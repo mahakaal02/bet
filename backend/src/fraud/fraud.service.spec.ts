@@ -30,15 +30,24 @@ interface ClaimRow {
   createdAt: Date;
 }
 
+interface UserRow {
+  id: string;
+  bannedAt: Date | null;
+  bannedReason: string | null;
+  bannedBy: string | null;
+}
+
 function makeMocks(opts: {
   bids?: BidRow[];
   claims?: ClaimRow[];
   signals?: SignalRow[];
   settings?: Record<string, number>;
+  users?: UserRow[];
 } = {}) {
   const bids = (opts.bids ?? []).slice();
   const claims = (opts.claims ?? []).slice();
   const signals = (opts.signals ?? []).map((s) => ({ ...s }));
+  const users = (opts.users ?? []).map((u) => ({ ...u }));
 
   const prisma: any = {
     bid: {
@@ -136,13 +145,28 @@ function makeMocks(opts: {
         return s;
       }),
     },
+    user: {
+      findUnique: jest.fn(async ({ where }: any) => users.find((u) => u.id === where.id) ?? null),
+      findMany: jest.fn(async ({ where, select }: any) => {
+        void select;
+        const idSet = new Set((where?.id?.in ?? []) as string[]);
+        return users.filter((u) => idSet.has(u.id));
+      }),
+      update: jest.fn(async ({ where, data }: any) => {
+        const u = users.find((x) => x.id === where.id);
+        if (!u) throw new Error(`no user ${where.id}`);
+        Object.assign(u, data);
+        return u;
+      }),
+    },
+    $transaction: jest.fn(async (fn: any) => fn(prisma)),
   };
   const audit = { record: jest.fn(async () => undefined) };
   const settings = {
     getInt: jest.fn(async (key: string, fallback: number) => opts.settings?.[key] ?? fallback),
   };
   const svc = new FraudService(prisma, audit as any, settings as any);
-  return { svc, prisma, audit, _signals: () => signals };
+  return { svc, prisma, audit, _signals: () => signals, _users: () => users };
 }
 
 describe('FraudService.severityFor', () => {
@@ -309,5 +333,203 @@ describe('FraudService.runClusterSweep', () => {
     expect(res.deviceClusters).toBe(1);
     expect(res.referralClusters).toBe(1);
     expect(_signals()).toHaveLength(3);
+  });
+});
+
+// ─── PR-FRAUD-2: bulk + ban actions ───────────────────────────────
+
+const baseSignal = (overrides: Partial<SignalRow> = {}): SignalRow => ({
+  id: 's-1', kind: FraudSignalKind.VELOCITY_BID, severity: FraudSeverity.MEDIUM,
+  userId: 'u-1', clusterKey: null, affectedUserIds: null,
+  metadata: { count: 60, threshold: 30 },
+  reviewed: false, reviewedBy: null, reviewedAt: null, notes: null,
+  createdAt: new Date(), ...overrides,
+});
+
+const baseUser = (overrides: Partial<UserRow> = {}): UserRow => ({
+  id: 'u-1', bannedAt: null, bannedReason: null, bannedBy: null, ...overrides,
+});
+
+describe('FraudService.bulkReview', () => {
+  it('400s on empty signalIds', async () => {
+    const { svc } = makeMocks();
+    await expect(
+      svc.bulkReview({ adminId: 'admin-1', adminEmail: 'a@b.c', signalIds: [] }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('400s on > 100 signalIds', async () => {
+    const { svc } = makeMocks();
+    const ids = Array.from({ length: 101 }, (_, i) => `s-${i}`);
+    await expect(
+      svc.bulkReview({ adminId: 'admin-1', adminEmail: 'a@b.c', signalIds: ids }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('404s on any missing signalId', async () => {
+    const { svc } = makeMocks({ signals: [baseSignal()] });
+    await expect(
+      svc.bulkReview({ adminId: 'admin-1', adminEmail: 'a@b.c', signalIds: ['s-1', 'nope'] }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('400s on too-short batchNote', async () => {
+    const { svc } = makeMocks({ signals: [baseSignal()] });
+    await expect(
+      svc.bulkReview({ adminId: 'admin-1', adminEmail: 'a@b.c', signalIds: ['s-1'], batchNote: 'no' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('flips unreviewed signals, skips already-reviewed, audits per row', async () => {
+    const { svc, audit, _signals } = makeMocks({
+      signals: [
+        baseSignal({ id: 's-1', reviewed: false }),
+        baseSignal({ id: 's-2', reviewed: true, reviewedBy: 'admin-prev', reviewedAt: new Date() }),
+        baseSignal({ id: 's-3', reviewed: false }),
+      ],
+    });
+    const r = await svc.bulkReview({
+      adminId: 'admin-1', adminEmail: 'a@b.c',
+      signalIds: ['s-1', 's-2', 's-3'], batchNote: 'end-of-day triage',
+    });
+    expect(r.reviewed).toBe(2);
+    expect(r.skipped).toBe(1);
+    expect(_signals().filter((s) => s.reviewed).length).toBe(3);
+    // Two audit rows — one per flip, not one for the batch.
+    expect(audit.record.mock.calls.filter((c: any) => c[0].action === 'fraud.signal_reviewed_bulk').length).toBe(2);
+  });
+});
+
+describe('FraudService.banAffectedUsers', () => {
+  const clusterSignal = (overrides: Partial<SignalRow> = {}): SignalRow => ({
+    ...baseSignal({
+      id: 's-cluster', kind: FraudSignalKind.CLUSTER_IP,
+      userId: null, clusterKey: '1.2.3.4',
+      affectedUserIds: ['u-1', 'u-2', 'u-3'],
+    }),
+    ...overrides,
+  });
+
+  it('400s on short reason', async () => {
+    const { svc } = makeMocks({ signals: [clusterSignal()] });
+    await expect(
+      svc.banAffectedUsers({ adminId: 'admin-1', adminEmail: 'a@b.c', signalId: 's-cluster', reason: 'no' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('404s on unknown signal', async () => {
+    const { svc } = makeMocks();
+    await expect(
+      svc.banAffectedUsers({ adminId: 'admin-1', adminEmail: 'a@b.c', signalId: 'nope', reason: 'cluster of fraud accounts' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('refuses velocity (single-user) signals', async () => {
+    const { svc } = makeMocks({
+      signals: [baseSignal({ id: 's-velocity', userId: 'u-1', clusterKey: null })],
+    });
+    await expect(
+      svc.banAffectedUsers({ adminId: 'admin-1', adminEmail: 'a@b.c', signalId: 's-velocity', reason: 'velocity spam bot' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('refuses cluster with empty affectedUserIds', async () => {
+    const { svc } = makeMocks({
+      signals: [clusterSignal({ affectedUserIds: [] })],
+    });
+    await expect(
+      svc.banAffectedUsers({ adminId: 'admin-1', adminEmail: 'a@b.c', signalId: 's-cluster', reason: 'expected affected list' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('bans all affected users, audits per user, marks signal reviewed', async () => {
+    const { svc, audit, _users, _signals } = makeMocks({
+      signals: [clusterSignal()],
+      users: [
+        baseUser({ id: 'u-1' }),
+        baseUser({ id: 'u-2' }),
+        baseUser({ id: 'u-3' }),
+      ],
+    });
+    const r = await svc.banAffectedUsers({
+      adminId: 'admin-1', adminEmail: 'admin@kalki.test',
+      signalId: 's-cluster', reason: 'coordinated IP cluster on suspicious infrastructure',
+    });
+    expect(r.bannedUserIds.sort()).toEqual(['u-1', 'u-2', 'u-3']);
+    expect(r.alreadyBanned).toEqual([]);
+    expect(_users().every((u) => u.bannedAt !== null)).toBe(true);
+    expect(_users()[0].bannedReason).toContain('fraud_cluster:s-cluster');
+    // Per-user audit rows.
+    const banAudits = audit.record.mock.calls.filter((c: any) => c[0].action === 'fraud.user_banned');
+    expect(banAudits.length).toBe(3);
+    // Signal flipped reviewed as a side effect.
+    expect(_signals()[0].reviewed).toBe(true);
+  });
+
+  it('refreshes ban reason on already-banned users, separate audit event', async () => {
+    const oldBan = new Date(Date.now() - 7 * 24 * 60 * 60_000);
+    const { svc, audit, _users } = makeMocks({
+      signals: [clusterSignal({ affectedUserIds: ['u-1', 'u-2'] })],
+      users: [
+        baseUser({ id: 'u-1', bannedAt: oldBan, bannedReason: 'old reason', bannedBy: 'admin-old' }),
+        baseUser({ id: 'u-2' }),
+      ],
+    });
+    const r = await svc.banAffectedUsers({
+      adminId: 'admin-1', adminEmail: 'a@b.c',
+      signalId: 's-cluster', reason: 'cluster signal re-fired against this set',
+    });
+    expect(r.bannedUserIds).toEqual(['u-2']);
+    expect(r.alreadyBanned).toEqual(['u-1']);
+    // u-1's original bannedAt is preserved (forensic timeline intact).
+    const u1 = _users().find((u) => u.id === 'u-1')!;
+    expect(u1.bannedAt!.getTime()).toBe(oldBan.getTime());
+    expect(u1.bannedReason).toContain('fraud_cluster:s-cluster');
+    // Refresh-audit row, not a fresh ban-audit row, for u-1.
+    expect(audit.record.mock.calls.some((c: any) => c[0].action === 'fraud.user_ban_refreshed' && c[0].targetId === 'u-1')).toBe(true);
+    expect(audit.record.mock.calls.some((c: any) => c[0].action === 'fraud.user_banned' && c[0].targetId === 'u-2')).toBe(true);
+  });
+});
+
+describe('FraudService.unbanUser', () => {
+  it('400s on too-short reason', async () => {
+    const { svc } = makeMocks({ users: [baseUser({ bannedAt: new Date() })] });
+    await expect(
+      svc.unbanUser({ adminId: 'admin-1', adminEmail: 'a@b.c', userId: 'u-1', reason: 'no' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('404s on unknown user', async () => {
+    const { svc } = makeMocks();
+    await expect(
+      svc.unbanUser({ adminId: 'admin-1', adminEmail: 'a@b.c', userId: 'nope', reason: 'false positive verified' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('returns wasBanned:false when user not banned (no-op)', async () => {
+    const { svc, _users, audit } = makeMocks({ users: [baseUser({ bannedAt: null })] });
+    const r = await svc.unbanUser({
+      adminId: 'admin-1', adminEmail: 'a@b.c', userId: 'u-1', reason: 'verified clean',
+    });
+    expect(r.wasBanned).toBe(false);
+    expect(_users()[0].bannedAt).toBeNull();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('clears the ban + audits', async () => {
+    const { svc, audit, _users } = makeMocks({
+      users: [baseUser({ bannedAt: new Date(), bannedReason: 'something', bannedBy: 'admin-old' })],
+    });
+    const r = await svc.unbanUser({
+      adminId: 'admin-1', adminEmail: 'admin@kalki.test',
+      userId: 'u-1', reason: 'office wifi false positive',
+    });
+    expect(r.wasBanned).toBe(true);
+    expect(_users()[0].bannedAt).toBeNull();
+    expect(_users()[0].bannedReason).toBeNull();
+    expect(_users()[0].bannedBy).toBeNull();
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'fraud.user_unbanned' }),
+    );
   });
 });
