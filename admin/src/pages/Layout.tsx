@@ -35,6 +35,7 @@ export default function Layout() {
           <SideLink to="/coin-packs" label="Coin packs" />
           <SideLink to="/withdrawals" label="Withdrawals" />
           <SideLink to="/audit-log" label="Audit log" />
+          <SideLink to="/profile-moderation" label="Profile moderation" />
           <SideLink to="/roles" label="Roles &amp; access" />
           <SideLink to="/impersonate" label="Impersonate" />
           <div className="pt-3 pb-1 px-3 text-[10px] uppercase tracking-widest opacity-50">
