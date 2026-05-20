@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { ResponsibleGamblingService } from '../responsible-gambling/responsible-gambling.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
 import { TwoFactorService } from './two-factor.service';
 
@@ -45,6 +46,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly rg: ResponsibleGamblingService,
     private readonly twoFactor: TwoFactorService,
   ) {}
 
@@ -77,6 +79,13 @@ export class AuthService {
 
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('invalid credentials');
+
+    // Responsible-gambling gate runs FIRST. Blocks sign-in when the
+    // account is in a cooldown or self-exclusion period — short-
+    // circuits before the 2FA challenge so a self-excluded user
+    // doesn't get a "scan your code" prompt for an account they
+    // already chose to lock down.
+    await this.rg.assertCanLogin(user.id);
 
     // Step-up: if 2FA is enabled, don't issue a normal session yet —
     // hand the client a short-lived "challenge" token that only the
@@ -126,6 +135,10 @@ export class AuthService {
       where: { id: payload.sub },
     });
     if (!user) throw new UnauthorizedException();
+    // RG check again on the 2FA-completion path — covers the edge
+    // case where the user starts self-exclusion between password
+    // step and 2FA step (e.g. opens RG page in another tab).
+    await this.rg.assertCanLogin(user.id);
     return this.issue(user, this.sanitize(user));
   }
 
@@ -154,6 +167,9 @@ export class AuthService {
         throw new UnauthorizedException('session invalidated — please sign in again');
       }
     }
+    // RG also runs on every authed request — a freshly self-excluded
+    // user shouldn't be able to ride out the day on a still-valid JWT.
+    await this.rg.assertCanLogin(user.id);
     return this.sanitize(user);
   }
 

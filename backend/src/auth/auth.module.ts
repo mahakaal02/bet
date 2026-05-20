@@ -10,11 +10,13 @@ import { PasswordResetController } from './password-reset.controller';
 import { PasswordResetService } from './password-reset.service';
 import { TwoFactorController } from './two-factor.controller';
 import { TwoFactorService } from './two-factor.service';
+import { ResponsibleGamblingModule } from '../responsible-gambling/responsible-gambling.module';
 
 @Module({
   imports: [
     PassportModule,
     BetWalletModule,
+    ResponsibleGamblingModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
