@@ -133,7 +133,7 @@ aviator:
     limits: {cpu: 500m, memory: 512Mi}
 admin:
   image: kalki-admin
-  imageTag: 20260520T062251Z-0fee90c # {"$imagepolicy": "flux-system:kalki-admin:tag"}
+  imageTag: 20260520T143438Z-9033b8d # {"$imagepolicy": "flux-system:kalki-admin:tag"}
   port: 80
   replicas: 1
   resources:
