@@ -79,7 +79,7 @@ redis:
 # ─── per-service ───────────────────────────────────────────────────────────
 backend:
   image: kalki-backend
-  imageTag: 20260520T171146Z-5841e3e # {"$imagepolicy": "flux-system:kalki-backend:tag"}
+  imageTag: 20260520T172237Z-2689bcd # {"$imagepolicy": "flux-system:kalki-backend:tag"}
   port: 4000
   replicas: 1
   prismaMigrate: true # init-container runs `prisma migrate deploy`
