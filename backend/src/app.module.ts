@@ -27,6 +27,9 @@ import { ImpersonationModule } from './impersonation/impersonation.module';
 import { KycModule } from './kyc/kyc.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { OrdersModule } from './orders/orders.module';
+import { TicketsModule } from './tickets/tickets.module';
+import { ReconciliationModule } from './reconciliation/reconciliation.module';
+import { FraudModule } from './fraud/fraud.module';
 import { CsvModule } from './csv/csv.module';
 
 @Module({
@@ -63,6 +66,9 @@ import { CsvModule } from './csv/csv.module';
     KycModule,
     ReferralsModule,
     OrdersModule,
+    TicketsModule,
+    ReconciliationModule,
+    FraudModule,
     CsvModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
