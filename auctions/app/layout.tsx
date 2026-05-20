@@ -1,5 +1,6 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
+import { SessionHeartbeat } from "@/components/SessionHeartbeat";
 
 export const metadata: Metadata = {
   title: "Kalki Auctions",
@@ -32,6 +33,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] antialiased">
+        {/* Mounted globally so the session-reminder heartbeat pings
+            irrespective of which page the user is on. The component
+            self-suppresses when the tab is hidden. */}
+        <SessionHeartbeat />
         {children}
       </body>
     </html>

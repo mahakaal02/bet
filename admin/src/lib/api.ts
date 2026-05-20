@@ -64,6 +64,26 @@ async function postFormData<T>(path: string, form: FormData): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/**
+ * Binary GET — used by the KYC review queue to fetch decrypted
+ * document bytes for inline preview. The endpoint sets its own
+ * Content-Type / Content-Disposition; we just return the Blob.
+ */
+async function getBlob(path: string): Promise<Blob> {
+  const token = getToken();
+  const res = await fetch(`${BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (res.status === 401) {
+    clearToken();
+    throw new ApiError(401, 'unauthorised');
+  }
+  if (!res.ok) {
+    throw new ApiError(res.status, `binary fetch failed: ${res.status}`);
+  }
+  return res.blob();
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body: unknown) =>
@@ -72,4 +92,5 @@ export const api = {
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
   postFormData,
+  getBlob,
 };
