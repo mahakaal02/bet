@@ -13,6 +13,7 @@ import { BetWalletService } from '../bet-wallet/bet-wallet.service';
 import { OutboxService } from '../foundation/outbox.service';
 import { FeatureFlagService } from '../foundation/feature-flags.service';
 import { OutbidListenerService } from '../notifications/outbid-listener.service';
+import { ResponsibleGamblingService } from '../responsible-gambling/responsible-gambling.service';
 import {
   type BidRow,
   type ClassifyOpts,
@@ -37,6 +38,7 @@ export class BidsService {
     private readonly outbox: OutboxService,
     private readonly flags: FeatureFlagService,
     private readonly outbidListener: OutbidListenerService,
+    private readonly rg: ResponsibleGamblingService,
   ) {}
 
   /**
@@ -73,6 +75,12 @@ export class BidsService {
     if (auction.endsAt.getTime() <= Date.now()) {
       throw new ForbiddenException('auction has ended');
     }
+
+    // Responsible-gambling pre-bet gate. Fires BEFORE we insert a
+    // bid row so a blocked bid doesn't materialise + need rollback.
+    // Throws ForbiddenException on cooldown / self-exclusion / daily-
+    // wager-limit reached. Audit row is written inside the service.
+    await this.rg.assertCanBet(userId, auction.coinsPerBid);
 
     const classifyOpts: ClassifyOpts = {
       fixedWinningAmount:

@@ -12,11 +12,13 @@ import { TwoFactorController } from './two-factor.controller';
 import { TwoFactorService } from './two-factor.service';
 import { EmailChangeController } from './email-change.controller';
 import { EmailChangeService } from './email-change.service';
+import { ResponsibleGamblingModule } from '../responsible-gambling/responsible-gambling.module';
 
 @Module({
   imports: [
     PassportModule,
     BetWalletModule,
+    ResponsibleGamblingModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
