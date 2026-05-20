@@ -57,7 +57,20 @@ export async function POST(req: Request) {
         { status: result.status === 401 ? 401 : result.status },
       );
     }
-    const data = (await result.json()) as LoginResponse;
+    const raw = (await result.json()) as Record<string, unknown>;
+
+    // 2FA challenge: don't set the session yet. Hand the challenge
+    // token back to the client; it'll collect the code and POST to
+    // /api/auth/login-2fa to complete the flow.
+    if (raw.needs2FA === true && typeof raw.challengeToken === "string") {
+      return NextResponse.json({
+        ok: true,
+        needs2FA: true,
+        challengeToken: raw.challengeToken,
+      });
+    }
+
+    const data = raw as unknown as LoginResponse;
     await setSessionToken(data.token);
     return NextResponse.json({
       ok: true,
