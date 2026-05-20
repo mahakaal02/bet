@@ -83,6 +83,13 @@ export default function BetControls() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Synchronous guard against double-tap. React state updates are
+  // async — two rapid taps can both pass the `if (busy) return`
+  // check in the same render frame because the closure still sees
+  // the old value. A ref flips synchronously, so the second tap is
+  // a no-op even if the React re-render hasn't happened yet.
+  const inFlightRef = useRef(false);
+
   // When a new BETTING phase begins, sync the input to the running
   // stake (clamped to MIN_BET). Also clear any leftover BUSTED error
   // from the previous round so the panel reads "fresh" each cycle.
@@ -102,7 +109,8 @@ export default function BetControls() {
   }, [nextStake]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function placeBet() {
-    if (busy) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -131,13 +139,23 @@ export default function BetControls() {
       if (balance != null) setBalance(balance - res.amount);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : (e as Error).message);
+      // The optimistic balance decrement only runs on success, so
+      // there's nothing to roll back here. But if a race ever puts
+      // the client + server out of sync, re-fetch the authoritative
+      // balance — cheap REST hit, kills any drift.
+      void api
+        .get<{ balance: number }>('/wallet/balance')
+        .then((b) => setBalance(b.balance))
+        .catch(() => {});
     } finally {
       setBusy(false);
+      inFlightRef.current = false;
     }
   }
 
   async function cashout() {
-    if (busy) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -149,6 +167,7 @@ export default function BetControls() {
       setError(e instanceof ApiError ? e.message : (e as Error).message);
     } finally {
       setBusy(false);
+      inFlightRef.current = false;
     }
   }
 
