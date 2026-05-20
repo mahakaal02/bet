@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { ResponsibleGamblingService } from '../responsible-gambling/responsible-gambling.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
 
 export interface JwtPayload {
@@ -35,6 +36,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly rg: ResponsibleGamblingService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -67,6 +69,10 @@ export class AuthService {
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('invalid credentials');
 
+    // Responsible-gambling gate. Blocks sign-in when the account is
+    // in a cooldown or self-exclusion period. Throws Forbidden.
+    await this.rg.assertCanLogin(user.id);
+
     return this.issue(user, this.sanitize(user));
   }
 
@@ -83,6 +89,9 @@ export class AuthService {
         throw new UnauthorizedException('session invalidated — please sign in again');
       }
     }
+    // RG also runs on every authed request — a freshly self-excluded
+    // user shouldn't be able to ride out the day on a still-valid JWT.
+    await this.rg.assertCanLogin(user.id);
     return this.sanitize(user);
   }
 

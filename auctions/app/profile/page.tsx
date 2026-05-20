@@ -87,6 +87,26 @@ export default async function ProfilePage() {
           </p>
         </Card>
 
+        <Card className="mb-4">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Responsible gambling
+          </h2>
+          <Link
+            href="/me/rg"
+            className="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 hover:border-cyan-500/40 hover:bg-slate-800/80"
+          >
+            <span>
+              <span className="block font-medium">Limits, cool-down, self-exclude</span>
+              <span className="text-[11px] text-slate-500">
+                Set wager limits or take a break — help available at 1800-599-0019
+              </span>
+            </span>
+            <span aria-hidden className="text-slate-500">
+              →
+            </span>
+          </Link>
+        </Card>
+
         <Card>
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
             Sign out

@@ -8,11 +8,13 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { PasswordResetController } from './password-reset.controller';
 import { PasswordResetService } from './password-reset.service';
+import { ResponsibleGamblingModule } from '../responsible-gambling/responsible-gambling.module';
 
 @Module({
   imports: [
     PassportModule,
     BetWalletModule,
+    ResponsibleGamblingModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
