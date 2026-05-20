@@ -56,7 +56,9 @@ function makeMocks(opts: { initialTier?: KycTier; initialDocs?: Partial<DocRow>[
 
   const prisma = {
     kycVerification: {
-      findUnique: jest.fn(async ({ where }: any) => kycRows.find((r) => r.userId === where.userId) ?? null),
+      findUnique: jest.fn(async ({ where }: any) =>
+        kycRows.find((r) => (where.userId ? r.userId === where.userId : r.id === where.id)) ?? null,
+      ),
       create: jest.fn(async ({ data }: any) => {
         const row: KycRow = {
           id: `kyc-${kycRows.length + 1}`,
@@ -111,6 +113,13 @@ function makeMocks(opts: { initialTier?: KycTier; initialDocs?: Partial<DocRow>[
             r.reviewState === where.reviewState,
         ) ?? null,
       ),
+      findUnique: jest.fn(async ({ where }: any) => docRows.find((r) => r.id === where.id) ?? null),
+      update: jest.fn(async ({ where, data }: any) => {
+        const d = docRows.find((x) => x.id === where.id);
+        if (!d) throw new Error(`no doc ${where.id}`);
+        Object.assign(d, data);
+        return d;
+      }),
     },
   };
 
@@ -396,6 +405,156 @@ describe('KycService.withdrawalEligibility', () => {
     const res = await svc.withdrawalEligibility('u-1');
     expect(res.maxCoins).toBeNull();
     expect(res.blocked).toBe(false);
+  });
+});
+
+// ─── Admin queue (PR-KYC-2) ───────────────────────────────────────
+
+describe('KycService admin queue', () => {
+  const REVIEWER = { id: 'admin-1', email: 'admin@kalki.test' };
+
+  it('listForReview filters by kind + state with cursor pagination', async () => {
+    const { svc, prisma, kycRows, docRows } = makeMocks();
+    await prisma.kycVerification.create({ data: { userId: 'u-1', tier: KycTier.TIER_1 } });
+    // Mock prisma findMany with include — bypass our basic mock to inject
+    // the joined shape the service expects.
+    docRows.push(
+      {
+        id: 'doc-a',
+        kycId: kycRows[0].id,
+        kind: DocumentKind.PAN,
+        fileKey: 'k1',
+        fileSizeBytes: 1,
+        mimeType: 'image/jpeg',
+        virusScanStatus: ScanStatus.CLEAN,
+        reviewState: ReviewState.PENDING,
+        encryptionKeyVersion: 1,
+        createdAt: new Date('2026-05-22T10:00:00Z'),
+      },
+      {
+        id: 'doc-b',
+        kycId: kycRows[0].id,
+        kind: DocumentKind.SELFIE,
+        fileKey: 'k2',
+        fileSizeBytes: 1,
+        mimeType: 'image/jpeg',
+        virusScanStatus: ScanStatus.CLEAN,
+        reviewState: ReviewState.PENDING,
+        encryptionKeyVersion: 1,
+        createdAt: new Date('2026-05-22T11:00:00Z'),
+      },
+    );
+    // Override findMany for the joined query.
+    prisma.kycDocument.findMany = jest.fn(async ({ where, take, cursor, skip, orderBy, include }: any) => {
+      void orderBy; void include;
+      let pool = docRows.slice();
+      if (where?.kind) pool = pool.filter((d) => d.kind === where.kind);
+      if (where?.reviewState) pool = pool.filter((d) => d.reviewState === where.reviewState);
+      pool.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      if (cursor) {
+        const idx = pool.findIndex((d) => d.id === cursor.id);
+        if (idx >= 0) pool = pool.slice(idx + (skip ?? 0));
+      }
+      return pool.slice(0, take).map((d) => ({
+        ...d,
+        kyc: { userId: 'u-1', tier: KycTier.TIER_1, user: { username: 'alice', email: 'a@b.c' } },
+      }));
+    });
+
+    const all = await svc.listForReview({});
+    expect(all.items).toHaveLength(2);
+    expect(all.items.map((i) => i.kind)).toEqual([DocumentKind.PAN, DocumentKind.SELFIE]);
+
+    const onlyPan = await svc.listForReview({ kind: DocumentKind.PAN });
+    expect(onlyPan.items.map((i) => i.kind)).toEqual([DocumentKind.PAN]);
+  });
+
+  it('approve flips state, bumps tier, writes audit', async () => {
+    const { svc, prisma, audit, kycRows, docRows } = makeMocks();
+    await prisma.kycVerification.create({ data: { userId: 'u-1', tier: KycTier.TIER_1 } });
+    kycRows[0].emailVerifiedAt = new Date();
+    kycRows[0].phoneVerifiedAt = new Date();
+    docRows.push({
+      id: 'doc-pan',
+      kycId: kycRows[0].id,
+      kind: DocumentKind.PAN,
+      fileKey: 'k',
+      fileSizeBytes: 1,
+      mimeType: 'image/jpeg',
+      virusScanStatus: ScanStatus.CLEAN,
+      reviewState: ReviewState.PENDING,
+      encryptionKeyVersion: 1,
+      createdAt: new Date(),
+    });
+    const res = await svc.approve({ reviewer: REVIEWER, documentId: 'doc-pan', notes: 'looks good' });
+    expect(res.reviewState).toBe(ReviewState.APPROVED);
+    expect(res.newTier).toBe(KycTier.TIER_2); // promoted from TIER_1 → TIER_2 by PAN approval.
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'kyc.document_approved', actorId: 'admin-1' }),
+    );
+  });
+
+  it('reject requires ≥ 4-char notes', async () => {
+    const { svc } = makeMocks();
+    await expect(
+      svc.reject({ reviewer: REVIEWER, documentId: 'doc-x', notes: '   ' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('reject + resubmit write audit with the notes', async () => {
+    const { svc, prisma, audit, kycRows, docRows } = makeMocks();
+    await prisma.kycVerification.create({ data: { userId: 'u-1', tier: KycTier.TIER_0 } });
+    docRows.push({
+      id: 'doc-pan',
+      kycId: kycRows[0].id,
+      kind: DocumentKind.PAN,
+      fileKey: 'k',
+      fileSizeBytes: 1,
+      mimeType: 'image/jpeg',
+      virusScanStatus: ScanStatus.CLEAN,
+      reviewState: ReviewState.PENDING,
+      encryptionKeyVersion: 1,
+      createdAt: new Date(),
+    });
+    await svc.reject({ reviewer: REVIEWER, documentId: 'doc-pan', notes: 'photo blurry' });
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'kyc.document_rejected' }),
+    );
+    expect(docRows[0].reviewState).toBe(ReviewState.REJECTED);
+
+    docRows[0].reviewState = ReviewState.PENDING; // reset for resubmit test.
+    await svc.requestResubmit({ reviewer: REVIEWER, documentId: 'doc-pan', notes: 'need clearer pic' });
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'kyc.document_resubmit_requested' }),
+    );
+    expect(docRows[0].reviewState).toBe(ReviewState.REQUIRES_RESUBMIT);
+  });
+
+  it('readDocument decrypts + audits the view event', async () => {
+    const { svc, prisma, storage, cipher, audit, kycRows, docRows } = makeMocks();
+    await prisma.kycVerification.create({ data: { userId: 'u-1', tier: KycTier.TIER_0 } });
+    const plaintext = Buffer.from('PAN scan plaintext');
+    const { ciphertext } = await cipher.encrypt(plaintext);
+    docRows.push({
+      id: 'doc-pan',
+      kycId: kycRows[0].id,
+      kind: DocumentKind.PAN,
+      fileKey: 'stored/key',
+      fileSizeBytes: plaintext.length,
+      mimeType: 'image/jpeg',
+      virusScanStatus: ScanStatus.CLEAN,
+      reviewState: ReviewState.PENDING,
+      encryptionKeyVersion: 1,
+      createdAt: new Date(),
+    });
+    storage.get = jest.fn(async () => ciphertext) as any;
+
+    const res = await svc.readDocument({ reviewer: REVIEWER, documentId: 'doc-pan' });
+    expect(res.bytes.equals(plaintext)).toBe(true);
+    expect(res.mimeType).toBe('image/jpeg');
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'kyc.document_viewed' }),
+    );
   });
 });
 

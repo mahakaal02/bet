@@ -386,6 +386,195 @@ export class KycService {
   static tierRank(tier: KycTier): number {
     return { TIER_0: 0, TIER_1: 1, TIER_2: 2, TIER_3: 3 }[tier];
   }
+
+  // ─── Admin queue (PR-KYC-2) ─────────────────────────────────────
+
+  /**
+   * Paginated list of documents pending admin review. Filterable by
+   * doc kind. Cursor-based — same pattern as `/admin/audit`.
+   */
+  async listForReview(input: {
+    kind?: DocumentKind;
+    cursor?: string;
+    limit?: number;
+    state?: ReviewState;
+  }): Promise<{ items: AdminQueueRow[]; nextCursor: string | null }> {
+    const take = Math.min(50, Math.max(1, input.limit ?? 25));
+    const docs = await this.prisma.kycDocument.findMany({
+      where: {
+        ...(input.kind ? { kind: input.kind } : {}),
+        reviewState: input.state ?? ReviewState.PENDING,
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: take + 1,
+      ...(input.cursor ? { skip: 1, cursor: { id: input.cursor } } : {}),
+      include: {
+        kyc: { select: { userId: true, tier: true, user: { select: { username: true, email: true } } } },
+      },
+    });
+    const items: AdminQueueRow[] = docs.slice(0, take).map((d) => ({
+      documentId: d.id,
+      userId: d.kyc.userId,
+      username: d.kyc.user.username,
+      email: d.kyc.user.email,
+      currentTier: d.kyc.tier,
+      kind: d.kind,
+      virusScanStatus: d.virusScanStatus,
+      reviewState: d.reviewState,
+      fileSizeBytes: d.fileSizeBytes,
+      mimeType: d.mimeType,
+      submittedAt: d.createdAt,
+    }));
+    const nextCursor = docs.length > take ? docs[take].id : null;
+    return { items, nextCursor };
+  }
+
+  /**
+   * Approve a document. Bumps the user's tier if this unlocks the
+   * next rung (recomputeTier). Idempotent on already-APPROVED docs.
+   */
+  async approve(input: {
+    reviewer: { id: string; email: string };
+    documentId: string;
+    notes?: string;
+  }): Promise<{ documentId: string; reviewState: ReviewState; newTier: KycTier }> {
+    const doc = await this.requireDoc(input.documentId);
+    if (doc.reviewState === ReviewState.APPROVED) {
+      const kyc = await this.prisma.kycVerification.findUnique({ where: { id: doc.kycId } });
+      return { documentId: doc.id, reviewState: ReviewState.APPROVED, newTier: kyc!.tier };
+    }
+    await this.prisma.kycDocument.update({
+      where: { id: input.documentId },
+      data: {
+        reviewState: ReviewState.APPROVED,
+        reviewerId: input.reviewer.id,
+        reviewNotes: input.notes ?? null,
+      },
+    });
+    await this.audit.record({
+      actorId: input.reviewer.id,
+      actorEmail: input.reviewer.email,
+      action: 'kyc.document_approved',
+      targetType: 'KycDocument',
+      targetId: input.documentId,
+      before: { reviewState: doc.reviewState },
+      after: { reviewState: ReviewState.APPROVED, notes: input.notes ?? null },
+    });
+    const kyc = await this.prisma.kycVerification.findUnique({ where: { id: doc.kycId } });
+    const updated = await this.recomputeTier(kyc!.userId);
+    return { documentId: doc.id, reviewState: ReviewState.APPROVED, newTier: updated.tier };
+  }
+
+  /**
+   * Reject a document. Sets the row to REJECTED. The user has to
+   * upload a fresh doc to retry — re-using a rejected key would
+   * defeat the audit trail.
+   */
+  async reject(input: {
+    reviewer: { id: string; email: string };
+    documentId: string;
+    notes: string;
+  }): Promise<{ documentId: string; reviewState: ReviewState }> {
+    if (input.notes.trim().length < 4) {
+      throw new BadRequestException({ code: 'KYC_REJECT_NOTES_REQUIRED' });
+    }
+    const doc = await this.requireDoc(input.documentId);
+    await this.prisma.kycDocument.update({
+      where: { id: input.documentId },
+      data: {
+        reviewState: ReviewState.REJECTED,
+        reviewerId: input.reviewer.id,
+        reviewNotes: input.notes,
+      },
+    });
+    await this.audit.record({
+      actorId: input.reviewer.id,
+      actorEmail: input.reviewer.email,
+      action: 'kyc.document_rejected',
+      targetType: 'KycDocument',
+      targetId: input.documentId,
+      before: { reviewState: doc.reviewState },
+      after: { reviewState: ReviewState.REJECTED, notes: input.notes },
+    });
+    return { documentId: doc.id, reviewState: ReviewState.REJECTED };
+  }
+
+  /**
+   * Soft-reject: ask for a clearer/different submission without
+   * burning the user's slot. Distinct from REJECTED so analytics can
+   * tell genuine fraud rejections from "photo was blurry" prompts.
+   */
+  async requestResubmit(input: {
+    reviewer: { id: string; email: string };
+    documentId: string;
+    notes: string;
+  }): Promise<{ documentId: string; reviewState: ReviewState }> {
+    if (input.notes.trim().length < 4) {
+      throw new BadRequestException({ code: 'KYC_RESUBMIT_NOTES_REQUIRED' });
+    }
+    const doc = await this.requireDoc(input.documentId);
+    await this.prisma.kycDocument.update({
+      where: { id: input.documentId },
+      data: {
+        reviewState: ReviewState.REQUIRES_RESUBMIT,
+        reviewerId: input.reviewer.id,
+        reviewNotes: input.notes,
+      },
+    });
+    await this.audit.record({
+      actorId: input.reviewer.id,
+      actorEmail: input.reviewer.email,
+      action: 'kyc.document_resubmit_requested',
+      targetType: 'KycDocument',
+      targetId: input.documentId,
+      before: { reviewState: doc.reviewState },
+      after: { reviewState: ReviewState.REQUIRES_RESUBMIT, notes: input.notes },
+    });
+    return { documentId: doc.id, reviewState: ReviewState.REQUIRES_RESUBMIT };
+  }
+
+  /**
+   * Stream the decrypted document bytes for an admin reviewer.
+   * **Audited on every read** — we treat each look at sensitive PII
+   * as a deliberate access event for the compliance audit trail.
+   */
+  async readDocument(input: {
+    reviewer: { id: string; email: string };
+    documentId: string;
+  }): Promise<{ mimeType: string; bytes: Buffer; kind: DocumentKind }> {
+    const doc = await this.requireDoc(input.documentId);
+    const ciphertext = await this.storage.get(doc.fileKey);
+    const bytes = await this.cipher.decrypt(ciphertext, doc.encryptionKeyVersion);
+    await this.audit.record({
+      actorId: input.reviewer.id,
+      actorEmail: input.reviewer.email,
+      action: 'kyc.document_viewed',
+      targetType: 'KycDocument',
+      targetId: input.documentId,
+      after: { kind: doc.kind, sizeBytes: doc.fileSizeBytes },
+    });
+    return { mimeType: doc.mimeType, bytes, kind: doc.kind };
+  }
+
+  private async requireDoc(id: string) {
+    const doc = await this.prisma.kycDocument.findUnique({ where: { id } });
+    if (!doc) throw new NotFoundException({ code: 'KYC_DOCUMENT_NOT_FOUND' });
+    return doc;
+  }
+}
+
+export interface AdminQueueRow {
+  documentId: string;
+  userId: string;
+  username: string;
+  email: string | null;
+  currentTier: KycTier;
+  kind: DocumentKind;
+  virusScanStatus: ScanStatus;
+  reviewState: ReviewState;
+  fileSizeBytes: number;
+  mimeType: string;
+  submittedAt: Date;
 }
 
 /** Pure tier transition function — extracted so tests can hit it

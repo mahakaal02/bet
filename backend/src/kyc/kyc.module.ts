@@ -3,6 +3,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { FoundationModule } from '../foundation/foundation.module';
 import { KycService } from './kyc.service';
 import { KycController } from './kyc.controller';
+import { KycAdminController } from './kyc-admin.controller';
 import { DOCUMENT_CIPHER, KYC_STORAGE, VIRUS_SCANNER } from './kyc.tokens';
 import { DiskKycStorage, S3KycStorage } from './kyc-storage';
 import { ClamAvVirusScanner, StubVirusScanner } from './virus-scanner';
@@ -51,7 +52,7 @@ const cipherProvider: Provider = {
 
 @Module({
   imports: [PrismaModule, FoundationModule],
-  controllers: [KycController],
+  controllers: [KycController, KycAdminController],
   providers: [KycService, storageProvider, scannerProvider, cipherProvider],
   exports: [KycService],
 })
