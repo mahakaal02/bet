@@ -1,8 +1,7 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AdminGuard } from './admin.guard';
 import { PrismaService } from '../prisma/prisma.service';
+import { Perm } from './perms.guard';
 
 /**
  * Read-only admin audit log API. Backs the `/admin/audit-log`
@@ -27,15 +26,17 @@ import { PrismaService } from '../prisma/prisma.service';
  * Endpoint is append-only — no PATCH / DELETE exposed. Retention
  * is managed by a separate background job (PR-AUDIT-RETENTION-1).
  *
- * Authorization: admin-only via the existing `AdminGuard`. Once
- * `RolesGuard` is wired up app-wide (PR-RBAC-1) this should
- * widen to also allow `Role.AUDITOR`.
+ * Authorization: `audit.view` permission. Granted to ADMIN
+ * (via the `'*'` wildcard), MODERATOR (so they can investigate
+ * the trail behind a ban), and AUDITOR (their core surface).
+ * Legacy `User.isAdmin = true` still passes via the PermsGuard
+ * backstop until the backfill drops that column.
  */
-@UseGuards(JwtAuthGuard, AdminGuard)
 @Controller('admin/audit')
 export class AuditController {
   constructor(private readonly prisma: PrismaService) {}
 
+  @Perm('audit.view')
   @Get()
   async list(
     @Query('actor') actorId?: string,
@@ -101,6 +102,7 @@ export class AuditController {
    * the action-filter dropdown in the admin UI so admins don't
    * have to remember the dotted-string slugs.
    */
+  @Perm('audit.view')
   @Get('actions')
   async actions() {
     const rows = await this.prisma.adminAuditLog.findMany({
@@ -116,6 +118,7 @@ export class AuditController {
    * Distinct `targetType` values — same idea as `actions()` but
    * for the target-type filter.
    */
+  @Perm('audit.view')
   @Get('target-types')
   async targetTypes() {
     const rows = await this.prisma.adminAuditLog.findMany({

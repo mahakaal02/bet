@@ -7,6 +7,7 @@ import { AuditController } from './audit.controller';
 import { AdminRolesController } from './roles.controller';
 import { SettingsController } from './settings.controller';
 import { FeatureFlagsController } from './feature-flags.controller';
+import { PermsGuard } from './perms.guard';
 
 @Module({
   imports: [AuctionsModule, CoinPacksModule, AviatorModule],
@@ -17,5 +18,6 @@ import { FeatureFlagsController } from './feature-flags.controller';
     SettingsController,
     FeatureFlagsController,
   ],
+  providers: [PermsGuard],
 })
 export class AdminModule {}
