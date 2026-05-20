@@ -37,6 +37,11 @@ export default function Layout() {
           <SideLink to="/audit-log" label="Audit log" />
           <SideLink to="/roles" label="Roles &amp; access" />
           <div className="pt-3 pb-1 px-3 text-[10px] uppercase tracking-widest opacity-50">
+            Platform
+          </div>
+          <SideLink to="/settings" label="Runtime settings" />
+          <SideLink to="/feature-flags" label="Feature flags" />
+          <div className="pt-3 pb-1 px-3 text-[10px] uppercase tracking-widest opacity-50">
             Aviator
           </div>
           <SideLink to="/aviator/analytics" label="Analytics" />

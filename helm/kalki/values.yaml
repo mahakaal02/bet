@@ -79,7 +79,7 @@ redis:
 # ─── per-service ───────────────────────────────────────────────────────────
 backend:
   image: kalki-backend
-  imageTag: 20260520T043437Z-e5de142 # {"$imagepolicy": "flux-system:kalki-backend:tag"}
+  imageTag: 20260520T043646Z-e6ae93e # {"$imagepolicy": "flux-system:kalki-backend:tag"}
   port: 4000
   replicas: 1
   prismaMigrate: true # init-container runs `prisma migrate deploy`
@@ -133,7 +133,7 @@ aviator:
     limits: {cpu: 500m, memory: 512Mi}
 admin:
   image: kalki-admin
-  imageTag: 20260520T042552Z-a53d3d4 # {"$imagepolicy": "flux-system:kalki-admin:tag"}
+  imageTag: 20260520T043640Z-e6ae93e # {"$imagepolicy": "flux-system:kalki-admin:tag"}
   port: 80
   replicas: 1
   resources:

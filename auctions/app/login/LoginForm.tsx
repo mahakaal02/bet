@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -99,6 +100,14 @@ export function LoginForm({
       <Button type="submit" disabled={busy || !email || !password} className="w-full">
         {busy ? "Signing in…" : "Sign in"}
       </Button>
+      <p className="text-center text-[11px] text-slate-500">
+        <Link
+          href="/auth/forgot"
+          className="text-slate-400 hover:text-slate-200"
+        >
+          Forgot password?
+        </Link>
+      </p>
 
       {demoVisible && (
         <div className="space-y-2 pt-2">

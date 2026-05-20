@@ -17,6 +17,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { AviatorModule } from './aviator/aviator.module';
 import { WhatsappAuthModule } from './auth-whatsapp/auth-whatsapp.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { WatchlistModule } from './watchlist/watchlist.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { UploadsModule } from './uploads/uploads.module';
     AviatorModule,
     WhatsappAuthModule,
     UploadsModule,
+    WatchlistModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
