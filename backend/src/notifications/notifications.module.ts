@@ -15,6 +15,7 @@ import { OutbidListenerService } from './outbid-listener.service';
 import { SesSender } from './adapters/ses-sender';
 import { EmailWebhookService } from './email-webhook.service';
 import { EmailWebhookController } from './email-webhook.controller';
+import { SnsSignatureVerifier } from './sns-signature-verifier';
 
 /**
  * Notifications module. Owns the full pipeline:
@@ -78,6 +79,7 @@ import { EmailWebhookController } from './email-webhook.controller';
     EmailAdapter,
     SesSender,
     EmailWebhookService,
+    SnsSignatureVerifier,
     NotificationBroadcastGateway,
     NotificationWorker,
     OutbidListenerService,
