@@ -5,6 +5,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
+import { FoundationModule } from './foundation/foundation.module';
 import { AuthModule } from './auth/auth.module';
 import { AuctionsModule } from './auctions/auctions.module';
 import { BidsModule } from './bids/bids.module';
@@ -29,6 +30,7 @@ import { UploadsModule } from './uploads/uploads.module';
     ScheduleModule.forRoot(),
     PrismaModule,
     RedisModule,
+    FoundationModule,
     AuthModule,
     AuctionsModule,
     BidsModule,

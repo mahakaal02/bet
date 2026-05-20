@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * Append-only admin audit log writer. Every state-mutating admin
@@ -36,7 +37,7 @@ export class AuditLogService {
     'codeHash',
   ]);
 
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async record(entry: {
     actorId: string;
