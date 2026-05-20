@@ -935,6 +935,60 @@ model SupportAttachment {
   message         SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 }
 
+// ───── Reconciliation (Roadmap F-ADMIN-5, PR-RECON-1) ─────────────
+//
+// Nightly job compares per-user CoinTransaction sums against Bet's
+// current wallet balance. Discrepancies surface in the admin queue
+// for human follow-up.
+
+enum ReconciliationStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model ReconciliationReport {
+  id              String                       @id @default(cuid())
+  // The UTC day this report covers — unique so we never run twice
+  // for the same day. Stored as a midnight timestamp.
+  forDate         DateTime                     @unique
+  status          ReconciliationStatus         @default(RUNNING)
+  startedAt       DateTime                     @default(now())
+  completedAt     DateTime?
+  failureReason   String?
+  // Aggregate metrics for the dashboard summary.
+  usersChecked    Int                          @default(0)
+  usersOk         Int                          @default(0)
+  usersDiscrepant Int                          @default(0)
+  totalAbsDrift   Int                          @default(0)
+  discrepancies   ReconciliationDiscrepancy[]
+  createdAt       DateTime                     @default(now())
+
+  @@index([status, forDate])
+}
+
+model ReconciliationDiscrepancy {
+  id           String                @id @default(cuid())
+  reportId     String
+  userId       String
+  // Sum of CoinTransaction.delta for this user up to the snapshot
+  // moment (signed integer).
+  localSum     Int
+  // Current balance from Bet's wallet.
+  remoteSum    Int
+  // localSum - remoteSum. Non-zero means drift.
+  drift        Int
+  notes        String?
+  acknowledged Boolean               @default(false)
+  ackedBy      String?
+  ackedAt      DateTime?
+  report       ReconciliationReport  @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  createdAt    DateTime              @default(now())
+
+  @@index([reportId, drift])
+  @@index([userId, createdAt])
+}
+
 // ───── Fraud signals (Roadmap F-ADMIN-7, PR-FRAUD-1) ──────────────
 //
 // Append-only signal log produced by the velocity + cluster
