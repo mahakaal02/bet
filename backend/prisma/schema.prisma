@@ -989,6 +989,51 @@ model ReconciliationDiscrepancy {
   @@index([userId, createdAt])
 }
 
+// ───── Fraud signals (Roadmap F-ADMIN-7, PR-FRAUD-1) ──────────────
+//
+// Append-only signal log produced by the velocity + cluster
+// heuristics. Each row represents a single fired rule — admins
+// review them and either ack-without-action or escalate via the
+// review queue.
+
+enum FraudSignalKind {
+  VELOCITY_BID
+  VELOCITY_LOGIN
+  VELOCITY_WITHDRAWAL
+  CLUSTER_IP
+  CLUSTER_DEVICE
+  CLUSTER_REFERRAL
+}
+
+enum FraudSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model FraudSignal {
+  id              String          @id @default(cuid())
+  kind            FraudSignalKind
+  severity        FraudSeverity
+  // Single-user signal (velocity) → userId set.
+  // Cluster signal (IP/device/referral) → userId null, clusterKey set.
+  userId          String?
+  clusterKey      String?
+  // For cluster signals, a list of affected user IDs as JSON array.
+  affectedUserIds Json?
+  // Free-form metadata for the rule that fired (count, threshold, etc.).
+  metadata        Json
+  reviewed        Boolean         @default(false)
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  notes           String?
+  createdAt       DateTime        @default(now())
+
+  @@index([reviewed, severity, createdAt])
+  @@index([userId, createdAt])
+  @@index([clusterKey, kind])
+}
+
 // ───── Profile history (Roadmap F-USER-5 audit trail) ───────────────
 
 // PR-PROFILE-2 review states. NONE = automated change with no flag;

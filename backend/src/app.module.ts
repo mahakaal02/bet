@@ -29,6 +29,7 @@ import { ReferralsModule } from './referrals/referrals.module';
 import { OrdersModule } from './orders/orders.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { ReconciliationModule } from './reconciliation/reconciliation.module';
+import { FraudModule } from './fraud/fraud.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { ReconciliationModule } from './reconciliation/reconciliation.module';
     OrdersModule,
     TicketsModule,
     ReconciliationModule,
+    FraudModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
