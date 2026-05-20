@@ -7,8 +7,12 @@ Snapshot of where the Kalki Bet monorepo stands after the multi-PR production-re
 **TL;DR for someone walking in cold:** 36/36 PR-classes shipped (31 merged, 5 in review). All 27 product features built. All Q2 hardening (workers, infra, security) shipped. Backend test count: **640 passing**.
 
 > **Sibling docs** (all in `docs/`):
-> - [`AUDIT_2026-05-20.md`](AUDIT_2026-05-20.md) — backend/bet/auctions/aviator security + correctness audit findings.
+> - [`summary.md`](summary.md) — **start here for architecture.** Backend module map, the 3 recurring data-flow patterns (outbox, adapter interfaces, snapshot-before-update), DB schema groupings, external integrations, key abstractions.
+> - [`Documentation.md`](Documentation.md) — **start here as a developer.** Local setup, common workflows ("add a feature flag", "add a migration", "add an outbox kind"), naming conventions, env-var index, pitfalls.
+> - [`Final.md`](Final.md) — **read before every merge.** The engineering invariants. What must not break and how to detect a violation. Pre-merge checklist.
 > - [`PRODUCTION_ROADMAP.md`](PRODUCTION_ROADMAP.md) — the 27-feature program with PR-sized execution roadmap, infrastructure recommendations, compliance checkpoints. **The single source of truth for what's planned.**
+> - [`AUDIT_2026-05-20.md`](AUDIT_2026-05-20.md) — backend/bet/auctions/aviator security + correctness audit findings.
+> - [`WORKER_TOPOLOGY.md`](WORKER_TOPOLOGY.md) — cron inventory + which jobs are safe under `replicas: 2+`.
 > - This file — running snapshot of what's been built, what's pending, what to do next.
 
 ---
