@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Production network-security policy (PR-ANDROID-SECURITY).
+
+  Defaults to cleartext-OFF for every domain. Any HTTP (non-TLS)
+  request from a release build fails fast with `Cleartext HTTP traffic
+  not permitted` instead of leaking the bearer token / Razorpay
+  details over the wire.
+
+  System CA store is still trusted — we don't pin certs here. The
+  reasoning:
+   1. The backend is fronted by Let's Encrypt via Traefik; pinning
+      a single intermediate would break on every renewal.
+   2. Pinning the leaf would force an app release on every cert
+      rotation (Let's Encrypt rotates every 60 days).
+   3. CA pinning (e.g. ISRG Root X1) is a possibility once we have
+      a release cadence that can handle a CA-rotation emergency
+      drop. Tracked as PR-ANDROID-CERT-PIN.
+
+  Debug builds get a separate file at `app/src/debug/res/xml/
+  network_security_config.xml` that enables cleartext for the
+  emulator-only 10.0.2.2 host (so `./gradlew installDebug` keeps
+  working against a local backend without TLS).
+-->
+<network-security-config>
+    <!-- Default: TLS required for every request. -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

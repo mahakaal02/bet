@@ -5,15 +5,35 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!--
+      Network security policy (PR-ANDROID-SECURITY).
+
+      `usesCleartextTraffic` was previously `true`, opting the whole
+      app into plain-HTTP. That's a hard fail in a production app
+      holding bearer tokens and Razorpay credentials — a coffee-shop
+      MITM could see and replay every request.
+
+      Now we delegate the policy to `network_security_config.xml`:
+        - main:  cleartext OFF for every domain.
+        - debug: cleartext ON only for the emulator alias 10.0.2.2 +
+                 localhost (so `./gradlew installDebug` keeps working
+                 against a local backend).
+
+      `android:allowBackup="false"` was already set; we keep it.
+      Disabling backup keeps EncryptedSharedPreferences out of
+      adb-backup tarballs (the master key lives in the Android
+      Keystore but the encrypted prefs file would otherwise be
+      backed up + restorable on a rooted attacker's device).
+    -->
     <application
         android:name=".UniqueBidApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.UniqueBid"
-        android:usesCleartextTraffic="true">
+        android:theme="@style/Theme.UniqueBid">
 
         <activity
             android:name=".MainActivity"
