@@ -18,6 +18,7 @@ import { AviatorModule } from './aviator/aviator.module';
 import { WhatsappAuthModule } from './auth-whatsapp/auth-whatsapp.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { WatchlistModule } from './watchlist/watchlist.module';
+import { ResponsibleGamblingModule } from './responsible-gambling/responsible-gambling.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { WatchlistModule } from './watchlist/watchlist.module';
     WhatsappAuthModule,
     UploadsModule,
     WatchlistModule,
+    ResponsibleGamblingModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
