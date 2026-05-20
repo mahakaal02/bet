@@ -99,6 +99,25 @@ backend:
       enabled: true
       size: 5Gi
       storageClassName: longhorn
+  # PR-WORKER-EXTRACT — dedicated worker pod (KALKI_ROLE=worker). Same
+  # image, no HTTP listener; runs @Cron jobs (outbox drain,
+  # notification dispatch, recon, fraud sweep, auction settle).
+  #
+  # Default `replicas: 1` because we haven't shipped leader election
+  # yet — running >1 would fire every cron twice. Postgres row locks
+  # (SKIP LOCKED on outbox + notification) prevent data corruption
+  # but not double-side-effects (an outbox row marked DEAD twice is
+  # harmless; an email queued twice is not). PR-LEADER-ELECT lifts
+  # this restriction.
+  #
+  # Until enabled, the api pod's @Cron jobs continue to run inline
+  # — fully backwards-compatible with the legacy single-pod topology.
+  worker:
+    enabled: false
+    replicas: 1
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {cpu: 500m, memory: 512Mi}
 bet:
   image: kalki-bet
   imageTag: 20260519T182910Z-795374c # {"$imagepolicy": "flux-system:kalki-bet:tag"}
