@@ -8,7 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { IsBoolean, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { FraudSeverity, FraudSignalKind } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -27,6 +27,25 @@ class ListDto {
 
 class ReviewDto {
   @IsOptional() @IsString() @MinLength(4) @MaxLength(500) notes?: string;
+}
+
+class BulkReviewDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100)
+  @IsString({ each: true })
+  signalIds!: string[];
+
+  @IsOptional() @IsString() @MinLength(4) @MaxLength(500)
+  batchNote?: string;
+}
+
+class BanDto {
+  @IsString() @MinLength(10) @MaxLength(500)
+  reason!: string;
+}
+
+class UnbanDto {
+  @IsString() @MinLength(4) @MaxLength(500)
+  reason!: string;
 }
 
 @UseGuards(JwtAuthGuard, PermsGuard)
@@ -55,6 +74,62 @@ export class FraudController {
       adminEmail: user.email ?? '',
       signalId: id,
       notes: body.notes,
+    });
+  }
+
+  /**
+   * Bulk review — end-of-day triage path. Per-row audit row written
+   * even though the action came from one batch call.
+   */
+  @HttpCode(200)
+  @Post('signals/bulk-review')
+  @Perm('user.ban')
+  bulkReview(@CurrentUser() user: AuthedUser, @Body() body: BulkReviewDto) {
+    return this.svc.bulkReview({
+      adminId: user.id,
+      adminEmail: user.email ?? '',
+      signalIds: body.signalIds,
+      batchNote: body.batchNote,
+    });
+  }
+
+  /**
+   * Ban every user affected by a CLUSTER signal. Per-user audit
+   * row + the signal is auto-flipped to reviewed.
+   */
+  @HttpCode(200)
+  @Post('signals/:id/ban-cluster')
+  @Perm('user.ban')
+  banCluster(
+    @CurrentUser() user: AuthedUser,
+    @Param('id') id: string,
+    @Body() body: BanDto,
+  ) {
+    return this.svc.banAffectedUsers({
+      adminId: user.id,
+      adminEmail: user.email ?? '',
+      signalId: id,
+      reason: body.reason,
+    });
+  }
+
+  /**
+   * Reverse a fraud-ban. Used on false positives (office Wi-Fi
+   * cluster, etc).
+   */
+  @HttpCode(200)
+  @Post('users/:userId/unban')
+  @Perm('user.unban')
+  unbanUser(
+    @CurrentUser() user: AuthedUser,
+    @Param('userId') userId: string,
+    @Body() body: UnbanDto,
+  ) {
+    return this.svc.unbanUser({
+      adminId: user.id,
+      adminEmail: user.email ?? '',
+      userId,
+      reason: body.reason,
     });
   }
 
