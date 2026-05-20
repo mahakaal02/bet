@@ -24,12 +24,57 @@ model User {
   betUserId     String?  @unique
   createdAt     DateTime @default(now())
 
+  // Display profile (F-USER-5).
+  displayName   String?
+  avatarKey     String?           // S3 key in the public avatars bucket
+  // Legal name for KYC name-match (F-USER-13). Encrypted at rest at the
+  // application layer; column type is bytea via the encryption wrapper.
+  legalName     String?
+  // Referral identity (F-USER-4). One per user, immutable once set.
+  referralCode  String?  @unique
+  // Ban support (F-ADMIN-2).
+  bannedAt      DateTime?
+  bannedReason  String?
+  bannedBy      String?
+  // Session-invalidation anchor: any JWT with iat < passwordChangedAt
+  // is rejected. Used by password-reset (F-USER-10) and email-change
+  // (F-USER-11) to force re-login on every device.
+  passwordChangedAt DateTime?
+
   bids          Bid[]
   wins          Auction[] @relation("AuctionWinner")
   devices       DeviceToken[]
   coinTxns      CoinTransaction[]
   aviatorBets   AviatorBet[]
   aviatorMsgs   AviatorChatMessage[]
+
+  // ─── Foundation relations ─────────────────────────────────────────
+  roles                UserRole[]
+  adminAuditLogs       AdminAuditLog[]               @relation("AuditActor")
+  notifications        Notification[]
+  notificationPreference NotificationPreference?
+  watchlist            Watchlist[]
+  shippingAddresses    ShippingAddress[]
+  referralsGiven       ReferralClaim[]               @relation("ReferralReferrer")
+  referralReceived     ReferralClaim?                @relation("ReferralReferee")
+  kyc                  KycVerification?
+  rgProfile            ResponsibleGamblingProfile?
+  rgEvents             ResponsibleGamblingEvent[]
+  tickets              SupportTicket[]
+  assignedTickets      SupportTicket[]               @relation("AssignedTickets")
+  ticketMessages       SupportMessage[]
+  profileHistory       UserProfileHistory[]
+  dailyLogin           DailyLogin?
+  dailyLoginClaims     DailyLoginClaim[]
+  passwordResets       PasswordReset[]
+  twoFactor            TwoFactorAuth?
+  trustedDevices       TrustedDevice[]
+  emailChanges         EmailChangeRequest[]
+  accountDeletion      AccountDeletion?
+  dataExports          DataExportRequest[]
+  userExports          UserExport[]
+  impersonationsAsAdmin ImpersonationLog[]           @relation("ImpersonatorAdmin")
+  impersonationsOfMe    ImpersonationLog[]           @relation("ImpersonatedUser")
 }
 
 model DeviceToken {
@@ -76,6 +121,7 @@ model Auction {
 
   winner      User?          @relation("AuctionWinner", fields: [winnerId], references: [id])
   bids        Bid[]
+  watchlist   Watchlist[]
 
   @@index([status, endsAt])
   @@index([status, startsAt])
@@ -305,4 +351,711 @@ model AviatorSettings {
   maxPayout        Decimal? @db.Decimal(10, 2)
   forcedNextPayout Decimal? @db.Decimal(10, 2)
   updatedAt        DateTime @updatedAt
+}
+
+// ════════════════════════════════════════════════════════════════════
+//
+//   FOUNDATION — Cross-cutting tables introduced by the production
+//   readiness program. See `docs/PRODUCTION_ROADMAP.md` for the design
+//   rationale per group. All tables here are additive — no existing
+//   model is mutated beyond adding optional fields + back-relations.
+//
+//   This block is schema-only; the bulk of business logic lands in
+//   subsequent feature PRs, each gated behind a FeatureFlag row.
+//
+// ════════════════════════════════════════════════════════════════════
+
+// ───── RBAC + Admin (Roadmap §1D) ───────────────────────────────────
+
+enum Role {
+  ADMIN
+  MODERATOR
+  FINANCE
+  SUPPORT
+  AUDITOR
+}
+
+model UserRole {
+  userId    String
+  role      Role
+  grantedBy String?
+  grantedAt DateTime  @default(now())
+  // Soft revoke — kept for audit; missing row vs revokedAt set both deny.
+  revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+  @@index([role, revokedAt])
+}
+
+// ───── Admin audit log (Roadmap §1C) ────────────────────────────────
+
+model AdminAuditLog {
+  id            String   @id @default(cuid())
+  actorId       String
+  actorEmail    String                                 // snapshot
+  action        String                                 // "auction.update", "withdrawal.approve", etc.
+  targetType    String                                 // "Auction", "User", "WithdrawalRequest"
+  targetId      String
+  before        Json?                                  // sparse — only changed fields
+  after         Json?
+  ipAddress     String?
+  userAgent     String?
+  correlationId String?                                // joins request log entries
+  createdAt     DateTime @default(now())
+  actor         User     @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([action, createdAt])
+  @@index([correlationId])
+}
+
+// ───── Feature flags + Settings (Roadmap §1E, §1F) ──────────────────
+
+enum FlagMode {
+  BOOLEAN
+  ROLE
+  PERCENT
+}
+
+model FeatureFlag {
+  id             String   @id                          // dotted key: "watchlist.enabled"
+  description    String
+  mode           FlagMode @default(BOOLEAN)
+  enabled        Boolean  @default(false)
+  roles          Role[]   @default([])
+  rolloutPercent Int      @default(0)
+  updatedBy      String?
+  updatedAt      DateTime @updatedAt
+  createdAt      DateTime @default(now())
+}
+
+enum SettingType {
+  INT
+  FLOAT
+  STRING
+  BOOL
+  JSON
+}
+
+model SystemSetting {
+  key         String      @id                          // dotted key: "wallet.withdraw_min_coins"
+  value       Json
+  valueType   SettingType
+  description String?
+  updatedBy   String?
+  updatedAt   DateTime    @updatedAt
+  createdAt   DateTime    @default(now())
+}
+
+model SystemSettingHistory {
+  id        String   @id @default(cuid())
+  key       String
+  before    Json?
+  after     Json?
+  changedBy String
+  changedAt DateTime @default(now())
+
+  @@index([key, changedAt])
+}
+
+// ───── Outbox (Roadmap §1B) ─────────────────────────────────────────
+
+enum OutboxKind {
+  BET_WALLET_DEBIT
+  BET_WALLET_CREDIT
+  FCM_PUSH
+  SES_EMAIL
+  RAZORPAY_REFUND
+  ADMIN_AUDIT_REPLAY
+}
+
+enum OutboxStatus {
+  PENDING
+  IN_FLIGHT
+  COMPLETED
+  FAILED
+  DEAD
+}
+
+model Outbox {
+  id             String       @id @default(cuid())
+  kind           OutboxKind
+  sourceTable    String
+  sourceId       String
+  payload        Json
+  idempotencyKey String       @unique
+  status         OutboxStatus @default(PENDING)
+  attempts       Int          @default(0)
+  nextAttemptAt  DateTime     @default(now())
+  lastError      String?
+  completedAt    DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([status, nextAttemptAt])
+  @@index([sourceTable, sourceId])
+}
+
+// ───── Notifications (Roadmap §1A) ──────────────────────────────────
+
+enum NotificationChannel {
+  PUSH
+  EMAIL
+  INAPP
+}
+
+enum NotificationStatus {
+  PENDING
+  RENDERED
+  SENT
+  DELIVERED
+  FAILED
+  RETRY
+  DEAD
+}
+
+model NotificationTemplate {
+  id        String              @id @default(cuid())
+  code      String                                     // e.g. "auction_outbid_v1"
+  channel   NotificationChannel
+  locale    String              @default("en")
+  subject   String?
+  body      String                                     // Handlebars-style; variables key-restricted
+  variables Json                @default("{}")         // { auctionTitle: "string", ... }
+  active    Boolean             @default(true)
+  version   Int                 @default(1)
+  updatedAt DateTime            @updatedAt
+  createdAt DateTime            @default(now())
+
+  @@unique([code, channel, locale])
+}
+
+model Notification {
+  id               String              @id @default(cuid())
+  userId           String
+  templateCode     String
+  channel          NotificationChannel
+  status           NotificationStatus  @default(PENDING)
+  payload          Json
+  rendered         Json?
+  deliveryAttempts Int                 @default(0)
+  lastAttemptAt    DateTime?
+  deliveredAt      DateTime?
+  readAt           DateTime?
+  failureReason    String?
+  idempotencyKey   String              @unique
+  // Audit + analytics link.
+  campaignId       String?
+  createdAt        DateTime            @default(now())
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
+  @@index([userId, readAt])
+  @@index([campaignId])
+}
+
+model NotificationPreference {
+  userId              String  @id
+  outbid              Boolean @default(true)
+  auctionEnding       Boolean @default(true)
+  orderUpdates        Boolean @default(true)
+  dailyStreak         Boolean @default(true)
+  marketingPush       Boolean @default(false)
+  marketingEmail      Boolean @default(true)
+  responsibleGambling Boolean @default(true)           // regulatory — cannot be opted out of
+  user                User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ───── Watchlist (Roadmap F-USER-1) ─────────────────────────────────
+
+model Watchlist {
+  id             String    @id @default(cuid())
+  userId         String
+  auctionId      String
+  lastNotifiedAt DateTime?
+  createdAt      DateTime  @default(now())
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  auction        Auction   @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, auctionId])
+  @@index([auctionId])
+}
+
+// ───── Shipping addresses (Roadmap F-USER-6) ────────────────────────
+
+model ShippingAddress {
+  id          String    @id @default(cuid())
+  userId      String
+  // PII fields — encrypted at rest at the application layer.
+  fullName    String
+  phoneE164   String
+  line1       String
+  line2       String?
+  city        String
+  state       String                                   // ISO 3166-2 region code
+  postalCode  String
+  countryIso2 String                                   // ISO 3166-1 alpha-2
+  isDefault   Boolean   @default(false)
+  // Soft delete preserves the snapshot for past Order references.
+  deletedAt   DateTime?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders      Order[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId, deletedAt])
+}
+
+// ───── Orders (Roadmap F-USER-7) ────────────────────────────────────
+
+enum OrderStatus {
+  PENDING_ADDRESS
+  AWAITING_FULFILLMENT
+  IN_TRANSIT
+  DELIVERED
+  DISPUTED
+  CANCELLED
+}
+
+model Order {
+  id                      String           @id @default(cuid())
+  auctionId               String           @unique
+  winnerId                String
+  shippingAddressId       String?
+  // Immutable snapshot captured at checkout; survives address deletion.
+  shippingAddressSnapshot Json?
+  status                  OrderStatus      @default(PENDING_ADDRESS)
+  fulfillmentNotes        String?
+  carrierName             String?
+  trackingNumber          String?
+  trackingUrl             String?
+  shippedAt               DateTime?
+  deliveredAt             DateTime?
+  deliveredBy             String?
+  disputedAt              DateTime?
+  disputeReason           String?
+  shippingAddress         ShippingAddress? @relation(fields: [shippingAddressId], references: [id])
+  // Note: Auction relation back-ref to be added in feature PR
+  // (avoiding @@map churn on the Auction model in this Foundation PR).
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  @@index([winnerId, status])
+  @@index([status, updatedAt])
+}
+
+// ───── Referrals (Roadmap F-USER-4) ─────────────────────────────────
+
+enum ReferralStatus {
+  PENDING
+  QUALIFIED
+  PAID
+  VOIDED
+}
+
+model ReferralClaim {
+  id                      String         @id @default(cuid())
+  referrerId              String
+  refereeId               String         @unique                    // one-shot
+  code                    String                                     // snapshot
+  status                  ReferralStatus @default(PENDING)
+  qualifiedAt             DateTime?
+  paidAt                  DateTime?
+  referrerRewardCoins     Int
+  refereeRewardCoins      Int
+  // Anti-fraud fingerprints (snapshot at signup).
+  refereeSignupIp         String?
+  refereeSignupDeviceHash String?
+  voidReason              String?
+  referrer                User           @relation("ReferralReferrer", fields: [referrerId], references: [id])
+  referee                 User           @relation("ReferralReferee", fields: [refereeId], references: [id])
+  createdAt               DateTime       @default(now())
+
+  @@index([referrerId, status])
+  @@index([code])
+}
+
+// ───── KYC (Roadmap F-USER-13) ──────────────────────────────────────
+
+enum KycTier {
+  TIER_0
+  TIER_1
+  TIER_2
+  TIER_3
+}
+
+enum ReviewState {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
+  REQUIRES_RESUBMIT
+}
+
+enum DocumentKind {
+  PAN
+  AADHAAR_LAST4
+  PASSPORT
+  VOTER_ID
+  ADDRESS_PROOF
+  SELFIE
+  LIVENESS_VIDEO
+}
+
+enum ScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  ERROR
+}
+
+model KycVerification {
+  id                 String        @id @default(cuid())
+  userId             String        @unique
+  tier               KycTier       @default(TIER_0)
+  emailVerifiedAt    DateTime?
+  phoneVerifiedAt    DateTime?
+  identityVerifiedAt DateTime?
+  addressVerifiedAt  DateTime?
+  reviewState        ReviewState   @default(NONE)
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  reviewNotes        String?
+  documents          KycDocument[]
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt          DateTime      @updatedAt
+  createdAt          DateTime      @default(now())
+
+  @@index([tier])
+  @@index([reviewState, updatedAt])
+}
+
+model KycDocument {
+  id                   String        @id @default(cuid())
+  kycId                String
+  kind                 DocumentKind
+  fileKey              String                                       // S3 key in encrypted-sensitive bucket
+  fileSizeBytes        Int
+  mimeType             String
+  virusScanStatus      ScanStatus    @default(PENDING)
+  ocrText              String?
+  reviewState          ReviewState   @default(PENDING)
+  reviewerId           String?
+  reviewNotes          String?
+  encryptionKeyVersion Int           @default(1)
+  kyc                  KycVerification @relation(fields: [kycId], references: [id], onDelete: Cascade)
+  createdAt            DateTime      @default(now())
+
+  @@index([kycId, kind])
+  @@index([reviewState, createdAt])
+}
+
+// ───── Responsible Gambling (Roadmap F-USER-14) ─────────────────────
+
+enum RgEventKind {
+  DEPOSIT_BLOCKED_BY_LIMIT
+  BET_BLOCKED_BY_LIMIT
+  LOSS_LIMIT_REACHED
+  SESSION_REMINDER_SHOWN
+  COOLDOWN_STARTED
+  COOLDOWN_ENDED
+  SELF_EXCLUSION_STARTED
+  SELF_EXCLUSION_ENDED
+}
+
+model ResponsibleGamblingProfile {
+  userId                   String    @id
+  dailyDepositLimitCoins   Int?
+  weeklyDepositLimitCoins  Int?
+  monthlyDepositLimitCoins Int?
+  dailyLossLimitCoins      Int?
+  weeklyLossLimitCoins     Int?
+  monthlyLossLimitCoins    Int?
+  dailyWagerLimitCoins     Int?
+  sessionReminderMinutes   Int       @default(30)
+  cooldownUntil            DateTime?
+  selfExcludedUntil        DateTime?
+  selfExcludedAt           DateTime?
+  user                     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt                DateTime  @updatedAt
+  createdAt                DateTime  @default(now())
+}
+
+model ResponsibleGamblingEvent {
+  id                String     @id @default(cuid())
+  userId            String
+  kind              RgEventKind
+  amount            Int?
+  limitKind         String?                                          // "daily_deposit", "weekly_loss"
+  limitValue        Int?
+  sessionDurationMs Int?
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime   @default(now())
+
+  @@index([userId, createdAt])
+  @@index([kind, createdAt])
+}
+
+// ───── Support tickets (Roadmap F-USER-15) ──────────────────────────
+
+enum TicketStatus {
+  OPEN
+  AWAITING_USER
+  AWAITING_ADMIN
+  ESCALATED
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum TicketCategory {
+  ACCOUNT
+  WITHDRAWAL
+  DEPOSIT
+  BIDDING
+  AVIATOR
+  ORDER_FULFILLMENT
+  TECHNICAL
+  OTHER
+}
+
+enum TicketCloseReason {
+  RESOLVED
+  DUPLICATE
+  INVALID
+  NO_RESPONSE
+}
+
+model SupportTicket {
+  id               String           @id @default(cuid())
+  userId           String
+  subject          String
+  status           TicketStatus     @default(OPEN)
+  priority         TicketPriority   @default(NORMAL)
+  category         TicketCategory
+  slaDueAt         DateTime
+  firstResponseAt  DateTime?
+  // Free-form back-link to whatever subject the ticket is about
+  // (Auction, WithdrawalRequest, AviatorBet, etc.).
+  linkedEntityType String?
+  linkedEntityId   String?
+  assignedToId     String?
+  closedAt         DateTime?
+  closedReason     TicketCloseReason?
+  user             User             @relation(fields: [userId], references: [id])
+  assignedTo       User?            @relation("AssignedTickets", fields: [assignedToId], references: [id])
+  messages         SupportMessage[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([status, slaDueAt])
+  @@index([assignedToId, status])
+  @@index([userId, createdAt])
+}
+
+model SupportMessage {
+  id          String              @id @default(cuid())
+  ticketId    String
+  senderId    String
+  isFromAdmin Boolean
+  body        String
+  isInternal  Boolean             @default(false)                   // visible to admins only
+  attachments SupportAttachment[]
+  ticket      SupportTicket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender      User                @relation(fields: [senderId], references: [id])
+  createdAt   DateTime            @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+model SupportAttachment {
+  id              String         @id @default(cuid())
+  messageId       String
+  fileKey         String                                            // S3 key
+  fileName        String
+  fileSizeBytes   Int
+  mimeType        String
+  virusScanStatus ScanStatus     @default(PENDING)
+  message         SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+// ───── Profile history (Roadmap F-USER-5 audit trail) ───────────────
+
+model UserProfileHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  field     String                                                  // "displayName", "avatarKey"
+  before    String?
+  after     String?
+  changedAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, changedAt])
+}
+
+// ───── Auth — password reset, 2FA, email change, account deletion ──
+
+model PasswordReset {
+  id          String    @id @default(cuid())
+  userId      String
+  // Hash of the reset token sent in the email — never store plaintext.
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  requestedIp String?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, usedAt])
+}
+
+model TwoFactorAuth {
+  userId          String    @id
+  // Encrypted TOTP secret (pgp_sym_encrypt w/ KMS key).
+  encryptedSecret String
+  // Becomes true after the first successful TOTP submission.
+  verified        Boolean   @default(false)
+  // Each entry is a bcrypt-hashed one-time backup code.
+  backupCodes     String[]  @default([])
+  enabledAt       DateTime?
+  disabledAt      DateTime?
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime  @default(now())
+}
+
+model TrustedDevice {
+  id         String   @id @default(cuid())
+  userId     String
+  // Opaque hash of (UA + accept-language + server-issued nonce).
+  deviceHash String
+  label      String?
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime                                               // 90d default
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceHash])
+  @@index([userId, expiresAt])
+}
+
+model EmailChangeRequest {
+  id             String    @id @default(cuid())
+  userId         String
+  oldEmail       String
+  newEmail       String
+  // Two tokens — one mailed to each address. Both must be clicked.
+  oldTokenHash   String    @unique
+  newTokenHash   String    @unique
+  oldConfirmedAt DateTime?
+  newConfirmedAt DateTime?
+  expiresAt      DateTime                                            // 24h
+  appliedAt      DateTime?
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model AccountDeletion {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  reason       String?
+  requestedAt  DateTime  @default(now())
+  effectiveAt  DateTime                                             // request + 30d
+  cancelledAt  DateTime?
+  purgedAt     DateTime?
+  user         User      @relation(fields: [userId], references: [id])
+}
+
+// ───── Exports (Roadmap F-USER-2, F-USER-12) ────────────────────────
+
+enum ExportKind {
+  TRADE_HISTORY
+  WALLET_LEDGER
+  BID_HISTORY
+}
+
+enum ExportStatus {
+  QUEUED
+  RUNNING
+  READY
+  FAILED
+  EXPIRED
+}
+
+model UserExport {
+  id             String       @id @default(cuid())
+  userId         String
+  kind           ExportKind
+  filters        Json
+  status         ExportStatus @default(QUEUED)
+  rowCount       Int?
+  fileKey        String?
+  fileSizeBytes  Int?
+  expiresAt      DateTime
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model DataExportRequest {
+  id         String       @id @default(cuid())
+  userId     String
+  fileKey    String?
+  expiresAt  DateTime
+  status     ExportStatus @default(QUEUED)
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime     @default(now())
+
+  @@index([userId, status])
+}
+
+// ───── Daily login / streak (Roadmap F-USER-8) ──────────────────────
+
+model DailyLogin {
+  userId         String    @id
+  streak         Int       @default(0)
+  lastClaimAt    DateTime?
+  streakFreezes  Int       @default(0)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DailyLoginClaim {
+  id           String   @id @default(cuid())
+  userId       String
+  dayNumber    Int
+  rewardCoins  Int
+  // Truncated to UTC midnight — uniq per (user, date) prevents double-claim.
+  claimDateUtc DateTime @db.Date
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, claimDateUtc])
+  @@index([userId, claimDateUtc])
+}
+
+// ───── Admin impersonation log (Roadmap F-ADMIN-2) ──────────────────
+
+model ImpersonationLog {
+  id        String    @id @default(cuid())
+  adminId   String
+  userId    String
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  reason    String                                                  // required, free-text
+  // Each entry: { action, target, at } — actions taken during impersonation.
+  actions   Json      @default("[]")
+  admin     User      @relation("ImpersonatorAdmin", fields: [adminId], references: [id])
+  user      User      @relation("ImpersonatedUser", fields: [userId], references: [id])
+
+  @@index([adminId, startedAt])
+  @@index([userId, startedAt])
 }
