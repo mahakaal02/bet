@@ -24,6 +24,7 @@ import Roles from './pages/Roles';
 import Settings from './pages/Settings';
 import FeatureFlags from './pages/FeatureFlags';
 import Impersonate from './pages/Impersonate';
+import KycReview from './pages/KycReview';
 
 function Protected({ children }: { children: JSX.Element }) {
   return isAuthed() ? children : <Navigate to="/login" replace />;
@@ -95,6 +96,7 @@ export default function App() {
         <Route path="settings" element={<Settings />} />
         <Route path="feature-flags" element={<FeatureFlags />} />
         <Route path="impersonate" element={<Impersonate />} />
+        <Route path="kyc" element={<KycReview />} />
       </Route>
     </Routes>
   );

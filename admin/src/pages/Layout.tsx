@@ -34,6 +34,7 @@ export default function Layout() {
           <SideLink to="/coin-settings" label="Coin economy" />
           <SideLink to="/coin-packs" label="Coin packs" />
           <SideLink to="/withdrawals" label="Withdrawals" />
+          <SideLink to="/kyc" label="KYC review" />
           <SideLink to="/audit-log" label="Audit log" />
           <SideLink to="/roles" label="Roles &amp; access" />
           <SideLink to="/impersonate" label="Impersonate" />
