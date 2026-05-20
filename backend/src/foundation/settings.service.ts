@@ -1,5 +1,6 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { PrismaClient, SettingType } from '@prisma/client';
+import { Injectable, Logger } from '@nestjs/common';
+import { SettingType } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * Runtime-settings service. Replaces scattered `process.env.*` reads
@@ -30,7 +31,7 @@ import { PrismaClient, SettingType } from '@prisma/client';
 export class SettingsService {
   private readonly logger = new Logger(SettingsService.name);
 
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async getInt(key: string, fallback: number): Promise<number> {
     const row = await this.findRow(key, SettingType.INT);
