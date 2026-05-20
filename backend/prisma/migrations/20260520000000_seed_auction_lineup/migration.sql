@@ -1,28 +1,32 @@
--- Seed the auctions catalog with a mix of LIVE / UPCOMING / ENDED rows so
--- the three tabs on /auctions have content out of the box. Idempotent —
--- every INSERT uses `ON CONFLICT (id) DO NOTHING` keyed on a stable
--- `seed-*` id, so re-running this migration (or re-rolling pods) is a
--- no-op once the rows exist.
+-- Seed the auctions catalog with a mix of LIVE / UPCOMING / ENDED rows
+-- so the three tabs on /auctions have content out of the box.
 --
--- Why this lives in a migration (rather than the seed script in
--- prisma/seed.ts): the `prisma-migrate` init container in helm/kalki is
--- the proven, always-runs path on every backend deploy. The
--- `prisma-seed` init container we added in PR #24 hasn't reliably
--- produced the rows on the live cluster — so we land this data via
--- the migration channel that's already known-good.
+-- Also fixes a schema-drift bug discovered while debugging this
+-- migration: `schema.prisma` declares `startsAt DateTime?` and
+-- `@@index([status, startsAt])` on the Auction model, but no prior
+-- migration ever materialised them. That drift silently breaks
+-- `auctions.service.ts::promoteUpcomingToLive` (which filters on
+-- `startsAt: { not: null, lte: now }`) the moment any UPCOMING
+-- auction exists. The `ALTER TABLE … ADD COLUMN IF NOT EXISTS` +
+-- `CREATE INDEX IF NOT EXISTS` are idempotent no-ops on
+-- environments where db push already filled the gap, and patch the
+-- column in cleanly on any environment that didn't.
 --
--- ENDED rows reference the seeded demo users (user1/2/3@kalki.local).
--- If those rows haven't been ensured yet (first-deploy edge case), the
--- subquery returns no row and the INSERT is skipped — re-running once
--- the users exist will fill them in. The seed script + the `User` row
--- creation path on first sign-in both create those accounts.
---
--- `imageUrls` is `'{}'` (empty PG array) on every row. Operators upload
--- product photos through the admin surface; the gallery renderer falls
--- back to a 🛒 placeholder until then. The `Auction` model defines
--- `imageUrls String[] @default([])` (see schema.prisma), so any
--- subsequent operator upload writes into the same column we leave
--- empty here.
+-- The first version of this migration omitted the column DDL and
+-- went straight to the INSERTs, which failed with
+-- `column "startsAt" of relation "Auction" does not exist` and got
+-- stuck in `_prisma_migrations` as in-flight (finished_at null).
+-- A pre-cleanup step in `helm/kalki/templates/backend.yaml`'s
+-- prisma-migrate init container clears any such failed entry
+-- before `migrate deploy` runs, so this corrected file gets a
+-- clean retry.
+
+-- ─── Schema drift fix ──────────────────────────────────────────────
+ALTER TABLE "Auction"
+  ADD COLUMN IF NOT EXISTS "startsAt" TIMESTAMP(3);
+
+CREATE INDEX IF NOT EXISTS "Auction_status_startsAt_idx"
+  ON "Auction" ("status", "startsAt");
 
 -- ─── Demo users (anchors for the ENDED winnerId references) ────────
 -- bcrypt(10) hash for "password12345" — matches what `prisma/seed.ts`
@@ -46,7 +50,7 @@ VALUES
   ('seed-sony-headphones',
    'Sony WH-1000XM5',
    'Industry-leading noise-cancelling wireless headphones. Premium ANC, 30-hour battery, and adaptive sound across calls and music.',
-   '{}',
+   '{}'::text[],
    29990.00, 1,
    NOW() - INTERVAL '1 hour',  NOW() + INTERVAL '6 hours',
    'LIVE', 'NORMAL'),
@@ -54,7 +58,7 @@ VALUES
   ('seed-macbook-air-m4',
    'MacBook Air M4 (13-inch, 256 GB)',
    'Apple silicon M4 chip, 13-inch Liquid Retina display, 18-hour battery, fanless design. Mid-spec configuration in Sky Blue.',
-   '{}',
+   '{}'::text[],
    114900.00, 4,
    NOW() - INTERVAL '2 hours', NOW() + INTERVAL '10 hours',
    'LIVE', 'NORMAL'),
@@ -62,7 +66,7 @@ VALUES
   ('seed-dji-mavic-4',
    'DJI Mavic 4 Pro',
    'Flagship triple-camera drone, Hasselblad main sensor, 50-min flight time, 4K/120p slow motion. Standard Fly More combo.',
-   '{}',
+   '{}'::text[],
    199900.00, 5,
    NOW() - INTERVAL '30 minutes', NOW() + INTERVAL '14 hours',
    'LIVE', 'NORMAL'),
@@ -70,7 +74,7 @@ VALUES
   ('seed-bose-qcue',
    'Bose QuietComfort Ultra Earbuds',
    'Immersive Audio spatial mix, world-class noise cancellation, 6-hour battery in-ear + 24 hours with case.',
-   '{}',
+   '{}'::text[],
    26990.00, 2,
    NOW() - INTERVAL '15 minutes', NOW() + INTERVAL '2 hours',
    'LIVE', 'NORMAL')
@@ -86,7 +90,7 @@ VALUES
   ('seed-iphone-16-pro-max',
    'iPhone 16 Pro Max (256 GB)',
    'A18 Pro chip, 6.9-inch Super Retina XDR, titanium frame, 5x telephoto camera. Desert Titanium finish.',
-   '{}',
+   '{}'::text[],
    144900.00, 5,
    NOW() + INTERVAL '2 days', NOW() + INTERVAL '4 days',
    'UPCOMING', 'NORMAL'),
@@ -94,7 +98,7 @@ VALUES
   ('seed-ps5-pro',
    'PlayStation 5 Pro (2 TB)',
    'Sony PS5 Pro with custom AMD GPU, 2 TB SSD, ray-tracing acceleration. Includes one DualSense Edge controller.',
-   '{}',
+   '{}'::text[],
    79990.00, 3,
    NOW() + INTERVAL '1 day', NOW() + INTERVAL '3 days',
    'UPCOMING', 'NORMAL'),
@@ -102,7 +106,7 @@ VALUES
   ('seed-canon-r5-mk2',
    'Canon EOS R5 Mark II',
    '45 MP full-frame mirrorless, 8K30 raw video, in-body image stabilisation. Body only — bring your own RF glass.',
-   '{}',
+   '{}'::text[],
    349990.00, 6,
    NOW() + INTERVAL '3 days', NOW() + INTERVAL '6 days',
    'UPCOMING', 'NORMAL')
