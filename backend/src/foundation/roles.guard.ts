@@ -5,7 +5,8 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { PrismaClient, Role } from '@prisma/client';
+import { Role } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 import { ROLES_METADATA_KEY } from './rbac.decorator';
 
 /**
@@ -21,7 +22,7 @@ import { ROLES_METADATA_KEY } from './rbac.decorator';
 export class RolesGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly prisma: PrismaClient,
+    private readonly prisma: PrismaService,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {

@@ -1,5 +1,4 @@
 import { Module, Global } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
 import { Reflector } from '@nestjs/core';
 import { FeatureFlagService } from './feature-flags.service';
 import { SettingsService } from './settings.service';
@@ -28,7 +27,6 @@ import { RolesGuard } from './roles.guard';
 @Global()
 @Module({
   providers: [
-    PrismaClient,
     Reflector,
     FeatureFlagService,
     SettingsService,

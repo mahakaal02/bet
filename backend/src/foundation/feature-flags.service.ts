@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaClient, FlagMode, Role } from '@prisma/client';
+import { FlagMode, Role } from '@prisma/client';
 import * as crypto from 'crypto';
+import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * Feature-flag evaluator. Three modes:
@@ -31,7 +32,7 @@ import * as crypto from 'crypto';
 export class FeatureFlagService {
   private readonly logger = new Logger(FeatureFlagService.name);
 
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Resolve a flag for a specific user. `user` may be undefined for

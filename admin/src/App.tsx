@@ -19,6 +19,7 @@ import AviatorFinance from './pages/AviatorFinance';
 import AviatorSeeds from './pages/AviatorSeeds';
 import AviatorChat from './pages/AviatorChat';
 import AviatorRounds from './pages/AviatorRounds';
+import Roles from './pages/Roles';
 
 function Protected({ children }: { children: JSX.Element }) {
   return isAuthed() ? children : <Navigate to="/login" replace />;
@@ -85,6 +86,7 @@ export default function App() {
         <Route path="aviator/rounds" element={<AviatorRounds />} />
         <Route path="aviator/seeds" element={<AviatorSeeds />} />
         <Route path="aviator/chat" element={<AviatorChat />} />
+        <Route path="roles" element={<Roles />} />
       </Route>
     </Routes>
   );
