@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BetWalletService } from '../bet-wallet/bet-wallet.service';
 import { OutboxService } from '../foundation/outbox.service';
 import { FeatureFlagService } from '../foundation/feature-flags.service';
+import { OutbidListenerService } from '../notifications/outbid-listener.service';
 import {
   type BidRow,
   type ClassifyOpts,
@@ -35,6 +36,7 @@ export class BidsService {
     private readonly betWallet: BetWalletService,
     private readonly outbox: OutboxService,
     private readonly flags: FeatureFlagService,
+    private readonly outbidListener: OutbidListenerService,
   ) {}
 
   /**
@@ -203,6 +205,23 @@ export class BidsService {
         );
       }
     }
+
+    // Outbid notifications — fire-and-forget. The listener owns its
+    // own feature-flag gate (watchlist.outbid_notifications), its
+    // own debounce, and its own error swallow, so a notification
+    // failure can never fail the bid placement.
+    void this.outbidListener
+      .onBidPlaced({
+        auctionId,
+        newBidderId: userId,
+        newBidId: bid.id,
+        newBidAmount: candidate,
+      })
+      .catch((err) => {
+        this.logger.error(
+          `outbid listener failed for bid=${bid.id}: ${(err as Error).message}`,
+        );
+      });
 
     return bid;
   }
