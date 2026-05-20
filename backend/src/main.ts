@@ -42,7 +42,31 @@ async function bootstrapApi(): Promise<void> {
     new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }),
   );
   app.useWebSocketAdapter(new WsAdapter(app));
-  app.enableCors();
+
+  // CORS — admin SPA uses httpOnly cookies (PR-ADMIN-COOKIE-AUTH),
+  // so we must (a) allow credentials and (b) pin the allowed origins
+  // rather than reflecting `*` (browsers reject `*` + credentials).
+  //
+  // Reads `CORS_ALLOWED_ORIGINS` (comma-separated). Empty / unset
+  // falls back to wildcard + no credentials, which keeps existing
+  // mobile + bearer-only clients working unchanged.
+  const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (allowedOrigins.length > 0) {
+    app.enableCors({
+      origin: allowedOrigins,
+      credentials: true,
+      // `*` for allowedHeaders is reflection-style; the cors
+      // middleware echoes whatever the preflight requested,
+      // which is what we want as new headers get added.
+      allowedHeaders: '*',
+      exposedHeaders: ['Set-Cookie'],
+    });
+  } else {
+    app.enableCors();
+  }
 
   // Serve uploaded auction images at /uploads/<filename>.
   const uploadsDir = join(process.cwd(), 'uploads');

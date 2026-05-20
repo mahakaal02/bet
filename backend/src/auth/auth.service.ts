@@ -243,6 +243,54 @@ export class AuthService {
     return { token, user };
   }
 
+  /**
+   * Mint a 60-second JWT for cross-app SSO handoff
+   * (PR-ADMIN-COOKIE-AUTH). The admin SPA, which holds the session
+   * only as an httpOnly cookie, can't pass its long-lived JWT to
+   * Bet's `?token=` URL handoff anymore — so it fetches this short
+   * token via `credentials: 'include'` (proving cookie possession)
+   * and tucks it into the URL.
+   *
+   * The downstream app validates the token against the shared
+   * `JWT_SECRET`. 60s is enough for the click-to-navigate window;
+   * a shorter TTL hardens against URL leaking via browser history /
+   * referrer headers / server access logs.
+   */
+  issueShortLivedSsoToken(user: {
+    id: string;
+    username: string;
+    email: string | null;
+  }): string {
+    return this.jwt.sign(
+      {
+        sub: user.id,
+        username: user.username,
+        email: user.email ?? undefined,
+      } satisfies JwtPayload,
+      { expiresIn: '60s' },
+    );
+  }
+
+  /**
+   * Mint a fresh full-length session JWT for an already-validated
+   * user. Used by `/auth/admin/sso-accept` to upgrade a 60s SSO
+   * handoff token into a proper 7-day admin session cookie.
+   *
+   * Mirrors `issue()` but takes the sanitized AuthedUser shape that
+   * the controller already has from `@CurrentUser()`.
+   */
+  reissueSessionToken(user: {
+    id: string;
+    username: string;
+    email: string | null;
+  }): string {
+    return this.jwt.sign({
+      sub: user.id,
+      username: user.username,
+      email: user.email ?? undefined,
+    } satisfies JwtPayload);
+  }
+
   private sanitize(u: { id: string; email: string | null; username: string; emailVerified: boolean; isAdmin: boolean }) {
     // `coinBalance` returned as 0 here is a placeholder for the API
     // contract — the actual balance comes from Bet (the unified wallet)

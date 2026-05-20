@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
-import { getToken, getUser } from '../lib/auth';
+import { useState } from 'react';
+import { api } from '../lib/api';
+import { getUser } from '../lib/auth';
 
 const BET_BASE = (
   import.meta.env.VITE_BET_BASE_URL ?? 'http://localhost:3100'
@@ -12,20 +14,47 @@ const BET_BASE = (
  *
  *   - Auctions    → /auctions (this app, sidebar route)
  *   - Aviator     → /aviator/analytics (this app, sidebar route)
- *   - Exchange    → ${BET_BASE}/admin with `?token=…` for SSO
+ *   - Exchange    → ${BET_BASE}/admin with a 60s SSO token for handoff
  *
  * The Auctions and Aviator tiles are internal SPA links — no token
- * hand-off needed because the admin's JWT is already in localStorage
- * for this origin. The Exchange tile leaves to the Bet app, so we
- * attach the token and Bet's middleware (`/api/auth/sso`) mints the
- * matching Bet session before landing on /admin.
+ * hand-off needed because the admin's session cookie is already
+ * scoped to this origin. The Exchange tile leaves to the Bet app,
+ * which lives on a different origin, so we fetch a short-lived JWT
+ * via `/auth/admin/sso-token` (PR-ADMIN-COOKIE-AUTH) and attach it
+ * to the URL. The long-lived session JWT lives in an httpOnly
+ * cookie that JS can't read — minting a 60s token on demand keeps
+ * the handoff working without ever exposing the durable credential.
  */
 export default function Hub() {
-  const token = getToken();
   const user = getUser();
-  const exchangeHref = token
-    ? `${BET_BASE}/admin?token=${encodeURIComponent(token)}`
-    : `${BET_BASE}/admin`;
+  const [opening, setOpening] = useState(false);
+
+  async function openExchange(e: React.MouseEvent<HTMLAnchorElement>) {
+    e.preventDefault();
+    if (opening) return;
+    setOpening(true);
+    try {
+      const res = await api.post<{ token: string; expiresIn: number }>(
+        '/auth/admin/sso-token',
+        {},
+      );
+      // Open in a new tab — same as the previous `<a target="_blank">`
+      // behaviour. Using `window.open` (vs setting href + .click())
+      // sidesteps the browser quirk where some popup blockers count
+      // a non-user-initiated `.click()` as suspect.
+      window.open(
+        `${BET_BASE}/admin?token=${encodeURIComponent(res.token)}`,
+        '_blank',
+        'noopener,noreferrer',
+      );
+    } catch {
+      // Fall back to opening without the token; the user will see
+      // Bet's own sign-in screen if their session there has expired.
+      window.open(`${BET_BASE}/admin`, '_blank', 'noopener,noreferrer');
+    } finally {
+      setOpening(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-indigo to-brand-indigo-dark text-white">
@@ -60,9 +89,12 @@ export default function Hub() {
             icon="✈️"
           />
           <ExternalTile
-            href={exchangeHref}
+            // href is set to a fallback target; the click handler
+            // intercepts to fetch a fresh SSO token first.
+            href={`${BET_BASE}/admin`}
+            onClick={openExchange}
             title="Kalki Exchange"
-            tagline="Markets, users, withdrawals, comment moderation."
+            tagline={opening ? 'Opening…' : 'Markets, users, withdrawals, comment moderation.'}
             tone="emerald"
             icon="📈"
           />
@@ -105,12 +137,14 @@ function Tile({
 
 function ExternalTile({
   href,
+  onClick,
   title,
   tagline,
   tone,
   icon,
 }: {
   href: string;
+  onClick?: (e: React.MouseEvent<HTMLAnchorElement>) => void;
   title: string;
   tagline: string;
   tone: Tone;
@@ -119,6 +153,7 @@ function ExternalTile({
   return (
     <a
       href={href}
+      onClick={onClick}
       target="_blank"
       rel="noopener noreferrer"
       className={`group block h-full rounded-xl border border-white/10 bg-white/5 p-5 transition ${TONE_RING[tone]}`}
