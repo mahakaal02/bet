@@ -935,6 +935,58 @@ model SupportAttachment {
   message         SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 }
 
+// ───── Promo codes (Roadmap F-USER-12, PR-CAMPAIGN-1) ─────────────
+//
+// Discount codes redeemable against coin-pack purchases. Two
+// discount kinds (PERCENT 1-100, FLAT in paise). Lifetime + per-user
+// caps. Optional CoinPack id allowlist for "first-coin-pack-only"
+// or "premium-tier-only" campaigns.
+
+enum PromoCodeDiscountType {
+  PERCENT
+  FLAT
+}
+
+model PromoCode {
+  id              String                @id @default(cuid())
+  code            String                @unique
+  discountType    PromoCodeDiscountType
+  // For PERCENT: integer 1-100. For FLAT: paise.
+  discountValue   Int
+  // Lifetime total uses cap. NULL = unlimited.
+  maxUses         Int?
+  // Per-user uses cap. Most campaigns set this to 1.
+  maxUsesPerUser  Int                   @default(1)
+  expiresAt       DateTime?
+  // If non-empty, the code is only valid against the listed CoinPack
+  // ids. Empty array = applies to any coin pack.
+  coinPackIds     String[]              @default([])
+  enabled         Boolean               @default(true)
+  createdBy       String                                           // admin user id
+  notes           String?                                          // admin-only
+  redemptions     PromoCodeRedemption[]
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([enabled, expiresAt])
+}
+
+model PromoCodeRedemption {
+  id             String     @id @default(cuid())
+  promoCodeId    String
+  userId         String
+  // PaymentOrder snapshot — kept as a free-form id so we don't need a
+  // FK to a table that lives in this same backend (or, future, Bet).
+  paymentOrderId String?
+  // Discount applied in paise. Mirrors what the payment gateway saw.
+  discountInr    Int
+  promoCode      PromoCode  @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  createdAt      DateTime   @default(now())
+
+  @@index([userId, promoCodeId])
+  @@index([promoCodeId, createdAt])
+}
+
 // ───── Profile history (Roadmap F-USER-5 audit trail) ───────────────
 
 // PR-PROFILE-2 review states. NONE = automated change with no flag;
