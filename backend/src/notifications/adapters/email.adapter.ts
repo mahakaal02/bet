@@ -81,6 +81,46 @@ export class EmailAdapter {
   }
 
   /**
+   * Provider-routed send for flows that don't have a `Notification`
+   * row — e.g. the email-change confirmation tokens, which target an
+   * address the user hasn't yet associated with their account.
+   *
+   * Returns success / failure rather than mutating any DB row. The
+   * caller decides what to do on failure (the email-change service
+   * keeps the request alive on transient failures, lets the user
+   * re-request).
+   */
+  async sendDirect(input: {
+    toEmail: string;
+    subject: string;
+    body: string;
+  }): Promise<{ ok: boolean; error?: string }> {
+    if (!input.toEmail) {
+      return { ok: false, error: 'no_email' };
+    }
+    try {
+      switch (this.provider) {
+        case 'ses':
+          await this.sendViaSes(input.toEmail, input.subject, input.body);
+          break;
+        case 'sendgrid':
+          await this.sendViaSendgrid(input.toEmail, input.subject, input.body);
+          break;
+        case 'stub':
+        default:
+          this.logger.log(
+            `[stub] direct email to=${input.toEmail} subject=${JSON.stringify(input.subject)}`,
+          );
+      }
+      return { ok: true };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.warn(`sendDirect failed to=${input.toEmail}: ${msg}`);
+      return { ok: false, error: msg };
+    }
+  }
+
+  /**
    * Real SES driver. Activated by `EMAIL_PROVIDER=ses` once
    * `aws-sdk` is added and SES domain is verified. Until then we
    * throw the not-implemented path to keep typecheck honest.

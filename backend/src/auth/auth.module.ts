@@ -8,6 +8,8 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { PasswordResetController } from './password-reset.controller';
 import { PasswordResetService } from './password-reset.service';
+import { EmailChangeController } from './email-change.controller';
+import { EmailChangeService } from './email-change.service';
 
 @Module({
   imports: [
@@ -22,8 +24,17 @@ import { PasswordResetService } from './password-reset.service';
       }),
     }),
   ],
-  controllers: [AuthController, PasswordResetController],
-  providers: [AuthService, JwtStrategy, PasswordResetService],
+  controllers: [
+    AuthController,
+    PasswordResetController,
+    EmailChangeController,
+  ],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    PasswordResetService,
+    EmailChangeService,
+  ],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}
