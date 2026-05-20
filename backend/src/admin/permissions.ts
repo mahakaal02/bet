@@ -34,6 +34,7 @@ export type Permission =
   | 'ledger.view'
   | 'ledger.export'
   | 'reconciliation.view'
+  | 'reconciliation.run'
   // Support tickets — consumed by PR-TICKETS-1
   | 'ticket.view'
   | 'ticket.reply'
@@ -68,6 +69,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'ledger.view',
     'ledger.export',
     'reconciliation.view',
+    'reconciliation.run',
     'kyc.view',
     'kyc.review',
   ],

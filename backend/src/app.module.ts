@@ -28,6 +28,7 @@ import { KycModule } from './kyc/kyc.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { OrdersModule } from './orders/orders.module';
 import { TicketsModule } from './tickets/tickets.module';
+import { ReconciliationModule } from './reconciliation/reconciliation.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { TicketsModule } from './tickets/tickets.module';
     ReferralsModule,
     OrdersModule,
     TicketsModule,
+    ReconciliationModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
