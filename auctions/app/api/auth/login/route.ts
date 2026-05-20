@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { BackendApiError, type LoginResponse } from "@/lib/backend";
-import { setSessionToken } from "@/lib/session";
+import {
+  getTrustedDeviceToken,
+  setSessionToken,
+} from "@/lib/session";
 
 /**
  * POST /api/auth/login
@@ -29,6 +32,12 @@ export async function POST(req: Request) {
     );
   }
 
+  // Pass the long-lived trusted-device cookie (if present) as a
+  // header so the backend can decide to skip the 2FA prompt for
+  // this browser. Reading the cookie HERE means the JS bundle
+  // never sees it — it stays httpOnly end-to-end.
+  const trustedDeviceToken = await getTrustedDeviceToken();
+
   try {
     // The backend's controller exposes `/auth/login` with `{email,
     // password}` and returns `{token, user}` — see auth.controller.ts.
@@ -36,7 +45,12 @@ export async function POST(req: Request) {
       `${process.env.AUCTIONS_BACKEND_URL ?? "http://localhost:4000"}/auth/login`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(trustedDeviceToken
+            ? { "X-Kalki-Trusted-Device": trustedDeviceToken }
+            : {}),
+        },
         body: JSON.stringify(parsed.data),
         cache: "no-store",
       },

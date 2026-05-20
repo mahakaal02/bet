@@ -52,6 +52,7 @@ export function LoginForm({
   const [password, setPassword] = useState("");
   const [challengeToken, setChallengeToken] = useState<string | null>(null);
   const [code, setCode] = useState("");
+  const [trustDevice, setTrustDevice] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -99,7 +100,11 @@ export function LoginForm({
       const res = await fetch("/api/auth/login-2fa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ challengeToken, code: code.trim() }),
+        body: JSON.stringify({
+          challengeToken,
+          code: code.trim(),
+          trustDevice,
+        }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -145,6 +150,23 @@ export function LoginForm({
             onChange={(e) => setCode(e.target.value)}
             className="tracking-widest text-center"
           />
+        </label>
+        <label className="flex items-start gap-2 rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
+          <input
+            type="checkbox"
+            checked={trustDevice}
+            onChange={(e) => setTrustDevice(e.target.checked)}
+            className="mt-0.5 accent-cyan-400"
+          />
+          <span>
+            <span className="block font-medium text-slate-200">
+              Trust this device for 90 days
+            </span>
+            <span className="block text-slate-500">
+              Skip the code on this browser until {trustedUntilLabel()}. Don&apos;t
+              tick on a shared computer.
+            </span>
+          </span>
         </label>
         {error && <p className="text-xs text-rose-300">{error}</p>}
         <Button type="submit" disabled={busy || !code} className="w-full">
@@ -243,4 +265,14 @@ export function LoginForm({
       )}
     </form>
   );
+}
+
+/** Display the "trust until" date so the user knows what 90 days means. */
+function trustedUntilLabel(): string {
+  const d = new Date(Date.now() + 90 * 24 * 60 * 60_000);
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
