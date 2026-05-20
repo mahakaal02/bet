@@ -17,6 +17,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../foundation/notification.service';
 import * as totp from './totp';
 import { SecretCipher, resolveCipherKey } from './secret-cipher';
+import { TrustedDeviceService } from './trusted-device.service';
 
 /**
  * Two-factor (TOTP) authentication service per Roadmap §F-USER-9.
@@ -72,6 +73,7 @@ export class TwoFactorService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationService,
     config: ConfigService,
+    private readonly trustedDevice: TrustedDeviceService,
   ) {
     this.cipher = new SecretCipher(resolveCipherKey(process.env));
     // Reference `config` to avoid "unused" warnings while leaving the
@@ -278,6 +280,18 @@ export class TwoFactorService {
         disabledAt: new Date(),
       },
     });
+
+    // Revoke every trusted-device cookie — turning off 2FA invalidates
+    // the "this browser already passed 2FA" claim those cookies make,
+    // and we don't want stale trust hanging around when the user
+    // re-enables 2FA later.
+    try {
+      await this.trustedDevice.revokeAll(userId);
+    } catch (err) {
+      this.logger.warn(
+        `failed to revoke trusted devices on 2FA disable for ${userId}: ${(err as Error).message}`,
+      );
+    }
 
     await this.notifications.enqueue({
       templateCode: '2fa_disabled_v1',

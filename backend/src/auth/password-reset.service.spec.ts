@@ -110,8 +110,18 @@ function makeService(opts: Parameters<typeof makePrismaMock>[0] = {}) {
   const prisma = makePrismaMock(opts);
   const notifications = makeNotificationsMock();
   const config = makeConfigMock();
-  const svc = new PasswordResetService(prisma as any, notifications as any, config as any);
-  return { svc, prisma, notifications, config };
+  // PR-2FA-2 added a cross-revoke call on successful password reset.
+  // A no-op stub keeps the tests focused on the password-reset path.
+  const trustedDevice = {
+    revokeAll: jest.fn(async (_userId: string) => ({ revoked: 0 })),
+  };
+  const svc = new PasswordResetService(
+    prisma as any,
+    notifications as any,
+    config as any,
+    trustedDevice as any,
+  );
+  return { svc, prisma, notifications, config, trustedDevice };
 }
 
 describe('PasswordResetService.request', () => {

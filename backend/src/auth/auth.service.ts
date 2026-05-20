@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ResponsibleGamblingService } from '../responsible-gambling/responsible-gambling.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
 import { TwoFactorService } from './two-factor.service';
+import { TrustedDeviceService } from './trusted-device.service';
 
 export interface JwtPayload {
   sub: string;
@@ -48,6 +49,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly rg: ResponsibleGamblingService,
     private readonly twoFactor: TwoFactorService,
+    private readonly trustedDevice: TrustedDeviceService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -71,7 +73,7 @@ export class AuthService {
     }
   }
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto, trustedDeviceToken?: string | null) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
     });
@@ -95,6 +97,20 @@ export class AuthService {
       select: { verified: true, disabledAt: true },
     });
     if (twoFactor?.verified && !twoFactor.disabledAt) {
+      // Trusted-device bypass: if the browser carries an opaque
+      // trusted-device cookie that matches an active row for this
+      // user, skip the 2FA prompt entirely. The cookie is bound to
+      // the user via the `(userId, deviceHash)` unique constraint,
+      // so it can't be reused across accounts.
+      if (trustedDeviceToken) {
+        const trusted = await this.trustedDevice.verify(
+          user.id,
+          trustedDeviceToken,
+        );
+        if (trusted) {
+          return this.issue(user, this.sanitize(user));
+        }
+      }
       const challengeToken = this.jwt.sign(
         {
           sub: user.id,
@@ -114,10 +130,17 @@ export class AuthService {
    * is a short-lived JWT carrying `purpose: '2fa_challenge'`; we
    * verify it, then route the code through `TwoFactorService.verifyLogin`
    * (TOTP or backup code), then issue the real session.
+   *
+   * When the client passes `trustDevice: true`, we ALSO mint a
+   * TrustedDevice row + return its opaque cookie value so the
+   * proxy can set the long-lived "skip-2FA-on-this-browser" cookie.
    */
   async completeLoginWith2FA(input: {
     challengeToken: string;
     code: string;
+    trustDevice?: boolean;
+    userAgent?: string | null;
+    acceptLanguage?: string | null;
   }) {
     let payload: JwtPayload;
     try {
@@ -139,7 +162,25 @@ export class AuthService {
     // case where the user starts self-exclusion between password
     // step and 2FA step (e.g. opens RG page in another tab).
     await this.rg.assertCanLogin(user.id);
-    return this.issue(user, this.sanitize(user));
+
+    const session = this.issue(user, this.sanitize(user));
+
+    if (input.trustDevice) {
+      const minted = await this.trustedDevice.mint({
+        userId: user.id,
+        userAgent: input.userAgent ?? null,
+        acceptLanguage: input.acceptLanguage ?? null,
+      });
+      return {
+        ...session,
+        trustedDevice: {
+          cookieValue: minted.cookieValue,
+          expiresAt: minted.expiresAt.toISOString(),
+        },
+      };
+    }
+
+    return session;
   }
 
   async validateJwt(payload: JwtPayload) {

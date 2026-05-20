@@ -1,6 +1,15 @@
-import { Body, Controller, Get, HttpCode, Logger, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  Logger,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -13,7 +22,17 @@ class Login2FADto {
 
   @IsString() @MinLength(1) @MaxLength(32)
   code!: string;
+
+  @IsOptional() @IsBoolean()
+  trustDevice?: boolean;
 }
+
+/** Header carrying the trusted-device cookie token — the auctions
+ *  Next.js proxy reads the httpOnly cookie from the browser and forwards
+ *  it as this header. Keeps cookie-handling responsibility on the proxy
+ *  (where the Next.js cookies() helper lives) while letting the Nest
+ *  backend stay cookie-agnostic. */
+const TRUSTED_DEVICE_HEADER = 'x-kalki-trusted-device';
 
 @Controller('auth')
 export class AuthController {
@@ -41,8 +60,11 @@ export class AuthController {
   // ~10^15 IP-minutes. Layer with the existing global throttler.
   @Throttle({ login: { limit: 8, ttl: 60_000 } })
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.auth.login(dto);
+  login(
+    @Body() dto: LoginDto,
+    @Headers(TRUSTED_DEVICE_HEADER) trustedDeviceToken?: string,
+  ) {
+    return this.auth.login(dto, trustedDeviceToken ?? null);
   }
 
   /**
@@ -60,10 +82,17 @@ export class AuthController {
   @Throttle({ login_2fa: { limit: 8, ttl: 60_000 } })
   @HttpCode(200)
   @Post('login/2fa')
-  loginTwoFactor(@Body() dto: Login2FADto) {
+  loginTwoFactor(
+    @Body() dto: Login2FADto,
+    @Headers('user-agent') userAgent?: string,
+    @Headers('accept-language') acceptLanguage?: string,
+  ) {
     return this.auth.completeLoginWith2FA({
       challengeToken: dto.challengeToken,
       code: dto.code,
+      trustDevice: dto.trustDevice,
+      userAgent: userAgent ?? null,
+      acceptLanguage: acceptLanguage ?? null,
     });
   }
 
