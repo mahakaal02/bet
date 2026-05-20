@@ -20,6 +20,9 @@ import { UploadsModule } from './uploads/uploads.module';
 import { WatchlistModule } from './watchlist/watchlist.module';
 import { ResponsibleGamblingModule } from './responsible-gambling/responsible-gambling.module';
 import { DailyLoginModule } from './daily-login/daily-login.module';
+import { AddressesModule } from './addresses/addresses.module';
+import { ProfileModule } from './profile/profile.module';
+import { AccountDeletionModule } from './account-deletion/account-deletion.module';
 import { ImpersonationModule } from './impersonation/impersonation.module';
 
 @Module({
@@ -49,6 +52,9 @@ import { ImpersonationModule } from './impersonation/impersonation.module';
     WatchlistModule,
     ResponsibleGamblingModule,
     DailyLoginModule,
+    AddressesModule,
+    ProfileModule,
+    AccountDeletionModule,
     ImpersonationModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
