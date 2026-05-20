@@ -20,6 +20,7 @@ import { UploadsModule } from './uploads/uploads.module';
 import { WatchlistModule } from './watchlist/watchlist.module';
 import { ResponsibleGamblingModule } from './responsible-gambling/responsible-gambling.module';
 import { DailyLoginModule } from './daily-login/daily-login.module';
+import { AddressesModule } from './addresses/addresses.module';
 import { ProfileModule } from './profile/profile.module';
 
 @Module({
@@ -49,6 +50,7 @@ import { ProfileModule } from './profile/profile.module';
     WatchlistModule,
     ResponsibleGamblingModule,
     DailyLoginModule,
+    AddressesModule,
     ProfileModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
