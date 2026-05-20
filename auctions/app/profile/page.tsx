@@ -271,6 +271,26 @@ export default async function ProfilePage() {
 
         <Card className="mb-4">
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Help
+          </h2>
+          <Link
+            href="/me/support"
+            className="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 hover:border-cyan-500/40 hover:bg-slate-800/80"
+          >
+            <span>
+              <span className="block font-medium">Support tickets</span>
+              <span className="text-[11px] text-slate-500">
+                Stuck on something? Tell us — we reply within hours
+              </span>
+            </span>
+            <span aria-hidden className="text-slate-500">
+              →
+            </span>
+          </Link>
+        </Card>
+
+        <Card className="mb-4">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
             Danger zone
           </h2>
           <Link

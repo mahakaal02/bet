@@ -38,6 +38,7 @@ export default function Layout() {
           <SideLink to="/kyc" label="KYC review" />
           <SideLink to="/audit-log" label="Audit log" />
           <SideLink to="/profile-moderation" label="Profile moderation" />
+          <SideLink to="/tickets" label="Support tickets" />
           <SideLink to="/roles" label="Roles &amp; access" />
           <SideLink to="/impersonate" label="Impersonate" />
           <div className="pt-3 pb-1 px-3 text-[10px] uppercase tracking-widest opacity-50">
