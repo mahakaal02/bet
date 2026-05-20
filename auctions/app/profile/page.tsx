@@ -169,6 +169,26 @@ export default async function ProfilePage() {
           </Link>
         </Card>
 
+        <Card className="mb-4">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Shipping
+          </h2>
+          <Link
+            href="/me/addresses"
+            className="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 hover:border-cyan-500/40 hover:bg-slate-800/80"
+          >
+            <span>
+              <span className="block font-medium">Shipping addresses</span>
+              <span className="text-[11px] text-slate-500">
+                Where wins ship to — up to 10, one default
+              </span>
+            </span>
+            <span aria-hidden className="text-slate-500">
+              →
+            </span>
+          </Link>
+        </Card>
+
         <Card>
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
             Sign out
