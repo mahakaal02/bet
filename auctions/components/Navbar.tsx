@@ -26,6 +26,27 @@ function BellIcon() {
   );
 }
 
+/** Inline star glyph for the watchlist link. Same hollow-stroke style
+ *  as the other Navbar icons; fills to amber when the user is on the
+ *  watchlist page (handled by the parent's active styling). */
+function StarIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  );
+}
+
 /** User-silhouette glyph (same shape as lucide-react's `User`) — the
  *  Kalki Exchange navbar uses this icon for its profile button, and
  *  this matches it pixel-for-pixel so all three games look identical. */
@@ -136,6 +157,13 @@ export async function Navbar() {
             // profile). Lets users build muscle memory across surfaces.
             <>
               <TopupChip balance={me.coinBalance} />
+              <Link
+                href="/me/watchlist"
+                aria-label="My watchlist"
+                className="grid h-9 w-9 place-items-center rounded-lg border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/80 hover:border-amber-400/40 hover:text-amber-200 transition"
+              >
+                <StarIcon />
+              </Link>
               <Link
                 href="/notifications"
                 aria-label={
