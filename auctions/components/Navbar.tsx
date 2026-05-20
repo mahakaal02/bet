@@ -69,13 +69,30 @@ export async function Navbar() {
     email: string | null;
     coinBalance: number;
   } | null = null;
+  let unreadCount = 0;
   if (token) {
     try {
-      me = await backend.authed(token).get<{
-        username: string;
-        email: string | null;
-        coinBalance: number;
-      }>("/auth/me");
+      const authed = backend.authed(token);
+      // Race both calls — /auth/me is the gate; the unread badge is
+      // best-effort and rendered as 0 if it fails. Both calls are
+      // server-rendered so the badge is correct on first paint
+      // without any client-side hydration round-trip.
+      const [meResp, badgeResp] = await Promise.allSettled([
+        authed.get<{
+          username: string;
+          email: string | null;
+          coinBalance: number;
+        }>("/auth/me"),
+        authed.get<{ count: number }>("/notifications/unread-count"),
+      ]);
+      if (meResp.status === "fulfilled") {
+        me = meResp.value;
+      } else if (meResp.reason instanceof BackendUnauthorized) {
+        redirect("/login");
+      }
+      if (badgeResp.status === "fulfilled") {
+        unreadCount = badgeResp.value.count;
+      }
     } catch (err) {
       // Transient errors land users on a stale balance for a beat — only
       // redirect when the upstream actively rejects the JWT.
@@ -121,10 +138,22 @@ export async function Navbar() {
               <TopupChip balance={me.coinBalance} />
               <Link
                 href="/notifications"
-                aria-label="Notifications"
-                className="grid h-9 w-9 place-items-center rounded-lg border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/80 hover:border-cyan-500/40 transition"
+                aria-label={
+                  unreadCount > 0
+                    ? `Notifications (${unreadCount} unread)`
+                    : "Notifications"
+                }
+                className="relative grid h-9 w-9 place-items-center rounded-lg border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/80 hover:border-cyan-500/40 transition"
               >
                 <BellIcon />
+                {unreadCount > 0 && (
+                  <span
+                    aria-hidden
+                    className="absolute -top-1 -right-1 grid min-w-[18px] place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold tabular-nums text-white shadow-md"
+                  >
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
               </Link>
               <Link
                 href="/profile"

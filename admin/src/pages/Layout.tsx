@@ -35,6 +35,7 @@ export default function Layout() {
           <SideLink to="/coin-packs" label="Coin packs" />
           <SideLink to="/withdrawals" label="Withdrawals" />
           <SideLink to="/audit-log" label="Audit log" />
+          <SideLink to="/roles" label="Roles &amp; access" />
           <div className="pt-3 pb-1 px-3 text-[10px] uppercase tracking-widest opacity-50">
             Aviator
           </div>

@@ -4,9 +4,10 @@ import { CoinPacksModule } from '../coin-packs/coin-packs.module';
 import { AviatorModule } from '../aviator/aviator.module';
 import { AdminController } from './admin.controller';
 import { AuditController } from './audit.controller';
+import { AdminRolesController } from './roles.controller';
 
 @Module({
   imports: [AuctionsModule, CoinPacksModule, AviatorModule],
-  controllers: [AdminController, AuditController],
+  controllers: [AdminController, AuditController, AdminRolesController],
 })
 export class AdminModule {}
