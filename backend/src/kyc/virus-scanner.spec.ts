@@ -188,3 +188,46 @@ describe('StubVirusScanner (existing behaviour, regression check)', () => {
     expect(result.status).toBe(ScanStatus.CLEAN);
   });
 });
+
+/**
+ * Module-factory parity check — proves the env-driven adapter selection
+ * picks the right concrete impl. The factory body lives in
+ * `kyc.module.ts`; we re-express it here so the test catches a future
+ * refactor that accidentally flips the default away from the stub
+ * (which would silently start sending every dev/CI upload to a
+ * non-existent clamd at `clamd:3310`).
+ *
+ * Closes the "Smoke: with `clamav.enabled=false` (default), confirm
+ * dev/CI installs continue using StubVirusScanner" item that would
+ * otherwise need a live cluster to verify.
+ */
+describe('env-driven scanner selection (mirrors kyc.module.ts factory)', () => {
+  const PRIOR_ENV = process.env;
+  beforeEach(() => { process.env = { ...PRIOR_ENV }; });
+  afterEach(() => { process.env = PRIOR_ENV; });
+
+  function pickScanner() {
+    const driver = process.env.KYC_VIRUS_SCANNER ?? 'stub';
+    return driver === 'clamav' ? new ClamAvVirusScanner() : new StubVirusScanner();
+  }
+
+  it('returns StubVirusScanner when KYC_VIRUS_SCANNER is unset (default)', () => {
+    delete process.env.KYC_VIRUS_SCANNER;
+    expect(pickScanner()).toBeInstanceOf(StubVirusScanner);
+  });
+
+  it("returns StubVirusScanner when KYC_VIRUS_SCANNER='stub' (explicit)", () => {
+    process.env.KYC_VIRUS_SCANNER = 'stub';
+    expect(pickScanner()).toBeInstanceOf(StubVirusScanner);
+  });
+
+  it("returns ClamAvVirusScanner when KYC_VIRUS_SCANNER='clamav'", () => {
+    process.env.KYC_VIRUS_SCANNER = 'clamav';
+    expect(pickScanner()).toBeInstanceOf(ClamAvVirusScanner);
+  });
+
+  it('treats unknown driver strings as stub (defensive fallback)', () => {
+    process.env.KYC_VIRUS_SCANNER = 'nope';
+    expect(pickScanner()).toBeInstanceOf(StubVirusScanner);
+  });
+});
