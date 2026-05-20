@@ -1,0 +1,133 @@
+{{- if .Values.clamav.enabled }}
+# ─── ClamAV daemon (PR-INFRA-CLAMAV-1) ─────────────────────────────────
+#
+# Self-hosted virus scanner used by the KYC pipeline (`KYC_VIRUS_SCANNER=
+# clamav` on the backend deployment). Internal only — no IngressRoute.
+#
+# Why an in-cluster daemon vs an AWS-hosted scanner: KYC documents
+# contain PAN / passport / Aadhaar PII. Sending un-encrypted PII bytes
+# to a third-party SaaS scanner means a separate DPA and a wider trust
+# perimeter. ClamAV runs alongside the backend in the same VPC, never
+# leaves Kubernetes, and is a Docker Hub image away from being deployed.
+#
+# Storage: the `clamav-db` PVC holds the freshclam-downloaded signature
+# DB (~300MB unpacked). Without persistence the pod re-downloads every
+# restart — bandwidth-cheap but noisy in audit logs and slows pod boot
+# by ~30s. With persistence freshclam (which the upstream image runs as
+# a sidecar process) keeps the DB current via a 2-hourly check.
+#
+# Resources: clamd loads the full signature DB into RAM at boot. With
+# the default DB that's ~1 GB resident; we set 1Gi requests / 2Gi limits
+# to leave headroom for scanning peaks. CPU is bursty (signature
+# matching on incoming streams) — 250m sustained, 1 core burst is
+# adequate for KYC volume (~10s of uploads/min at peak).
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clamd
+  labels:
+    {{- include "kalki.labels" (dict "name" "clamav" "ctx" .) | nindent 4 }}
+spec:
+  # ClusterIP — the backend pods reach this via the DNS name `clamd`
+  # (same namespace) which matches the CLAMD_HOST default in
+  # backend/src/kyc/virus-scanner.ts.
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.clamav.port }}
+      targetPort: {{ .Values.clamav.port }}
+      name: clamd
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: clamav
+    app.kubernetes.io/part-of: kalki
+{{- if .Values.clamav.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: clamav-db
+  labels:
+    {{- include "kalki.labels" (dict "name" "clamav" "ctx" .) | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: {{ .Values.clamav.persistence.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.clamav.persistence.size }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clamav
+  labels:
+    {{- include "kalki.labels" (dict "name" "clamav" "ctx" .) | nindent 4 }}
+spec:
+  # Single replica — the signature DB on the PVC is ReadWriteOnce and
+  # the daemon is stateful (in-RAM scanner state). Horizontal scale
+  # would need a ReadWriteMany volume + careful freshclam coordination;
+  # not worth it until KYC volume warrants. Recreate strategy avoids
+  # two pods fighting over the same PVC during rollouts.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: clamav
+      app.kubernetes.io/part-of: kalki
+  template:
+    metadata:
+      labels:
+        {{- include "kalki.labels" (dict "name" "clamav" "ctx" .) | nindent 8 }}
+    spec:
+      {{- include "kalki.nodeAffinity" . | nindent 6 }}
+      containers:
+        - name: clamav
+          image: {{ .Values.clamav.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.clamav.port }}
+              name: clamd
+              protocol: TCP
+          env:
+            # Run freshclam in the background alongside clamd. Without
+            # this the bundled signature DB ages out and zero-days
+            # land before we catch them.
+            - name: CLAMAV_NO_FRESHCLAMD
+              value: "false"
+            - name: CLAMAV_NO_CLAMD
+              value: "false"
+            # Listen on all interfaces inside the pod — the Service
+            # in front filters traffic to the cluster.
+            - name: CLAMD_STARTUP_TIMEOUT
+              value: "1800"
+          volumeMounts:
+            {{- if .Values.clamav.persistence.enabled }}
+            - name: db
+              mountPath: /var/lib/clamav
+            {{- end }}
+          # clamd takes ~60–90s to load the signature DB at boot — the
+          # initialDelaySeconds is generous because a probe failure
+          # during signature load would CrashLoopBackoff a healthy pod.
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.clamav.port }}
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.clamav.port }}
+            initialDelaySeconds: 180
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.clamav.resources | nindent 12 }}
+      volumes:
+        {{- if .Values.clamav.persistence.enabled }}
+        - name: db
+          persistentVolumeClaim:
+            claimName: clamav-db
+        {{- end }}
+{{- end }}
