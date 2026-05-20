@@ -20,6 +20,13 @@ export interface JwtPayload {
    */
   email?: string | null;
   phone?: string | null;
+  /**
+   * Issued-at timestamp (seconds since epoch). Set automatically by
+   * `@nestjs/jwt`. Used by `validateJwt()` together with
+   * `User.passwordChangedAt` to invalidate every existing token after
+   * a password reset — see `password-reset.service.ts`.
+   */
+  iat?: number;
 }
 
 @Injectable()
@@ -66,6 +73,16 @@ export class AuthService {
   async validateJwt(payload: JwtPayload) {
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user) throw new UnauthorizedException();
+    // Session-invalidation anchor: if the user has rotated their
+    // password (via password-reset) since this token was issued, the
+    // JWT is stale and must be rejected. `iat` is seconds; the column
+    // is milliseconds — compare in seconds for parity.
+    if (user.passwordChangedAt && typeof payload.iat === 'number') {
+      const changedAtSec = Math.floor(user.passwordChangedAt.getTime() / 1000);
+      if (payload.iat < changedAtSec) {
+        throw new UnauthorizedException('session invalidated — please sign in again');
+      }
+    }
     return this.sanitize(user);
   }
 
