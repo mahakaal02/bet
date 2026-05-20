@@ -21,6 +21,8 @@ import AviatorChat from './pages/AviatorChat';
 import AviatorRounds from './pages/AviatorRounds';
 import AuditLog from './pages/AuditLog';
 import Roles from './pages/Roles';
+import Settings from './pages/Settings';
+import FeatureFlags from './pages/FeatureFlags';
 
 function Protected({ children }: { children: JSX.Element }) {
   return isAuthed() ? children : <Navigate to="/login" replace />;
@@ -89,6 +91,8 @@ export default function App() {
         <Route path="aviator/chat" element={<AviatorChat />} />
         <Route path="audit-log" element={<AuditLog />} />
         <Route path="roles" element={<Roles />} />
+        <Route path="settings" element={<Settings />} />
+        <Route path="feature-flags" element={<FeatureFlags />} />
       </Route>
     </Routes>
   );
