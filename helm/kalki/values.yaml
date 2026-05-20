@@ -183,3 +183,21 @@ clamav:
     limits:
       cpu: 1000m
       memory: 2Gi
+# ─── KYC infra drivers (PR-INFRA-S3-1 / PR-INFRA-KMS-1 / PR-INFRA-CLAMAV-1)
+# All three off by default so dev installs + CI keep using the disk +
+# stub + local-key trio. Flip individually in your prod overlay. The
+# clamav daemon itself is configured under the `clamav` block above —
+# this section is for the KYC cipher only (S3 storage env-vars live
+# in the kalki-shared Secret).
+#
+# AWS credentials (region + access key + secret) come from the
+# kalki-shared Secret — set them once and they're picked up by S3,
+# KMS, and SES alike. See aws/sigv4.ts for the shared signer.
+kyc:
+  cipher:
+    # 'local' → AES-256-GCM with KYC_DOCUMENT_KEY (or JWT_SECRET in dev)
+    # 'kms'   → KMS-wrapped DEK + AES-256-GCM envelope (recommended in prod)
+    driver: local
+    # KMS alias or ARN. Only consulted when driver=kms. The backend's
+    # IAM principal needs `kms:GenerateDataKey` + `kms:Decrypt` on this key.
+    kmsKeyId: alias/kalki/kyc
