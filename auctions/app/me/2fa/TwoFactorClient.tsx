@@ -313,6 +313,8 @@ export function TwoFactorClient() {
           </Card>
         )}
 
+        <TrustedDevicesPanel />
+
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
@@ -414,5 +416,154 @@ export function TwoFactorClient() {
         {busy ? "Starting…" : "Enable 2FA"}
       </Button>
     </div>
+  );
+}
+
+interface TrustedDevice {
+  id: string;
+  label: string | null;
+  lastSeenAt: string;
+  expiresAt: string;
+}
+
+/**
+ * Lists active trusted-device cookies the user has minted, lets them
+ * revoke one or all. Only shown when 2FA is ON (otherwise the rows
+ * can't exist — minting requires a 2FA completion).
+ */
+function TrustedDevicesPanel() {
+  const [items, setItems] = useState<TrustedDevice[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setError(null);
+    try {
+      const res = await fetch("/api/me/2fa/trusted-devices", {
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        setError("Couldn't load trusted devices.");
+        return;
+      }
+      const data = (await res.json()) as { items: TrustedDevice[] };
+      setItems(data.items);
+    } catch {
+      setError("Network error loading trusted devices.");
+    } finally {
+      setLoaded(true);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function revoke(id: string) {
+    if (!confirm("Stop trusting this device? The next sign-in there will need a 2FA code.")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/me/2fa/trusted-devices/${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body?.message ?? "Couldn't revoke.");
+        return;
+      }
+      await load();
+    } catch {
+      setError("Network error.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revokeAll() {
+    if (
+      !confirm(
+        "Revoke every trusted device? You'll need a 2FA code on the next sign-in everywhere — including this browser.",
+      )
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/me/2fa/trusted-devices/revoke-all", {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body?.message ?? "Couldn't revoke devices.");
+        return;
+      }
+      await load();
+    } catch {
+      setError("Network error.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="space-y-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Trusted devices
+        </h3>
+        {items.length > 0 && (
+          <button
+            type="button"
+            onClick={revokeAll}
+            disabled={busy}
+            className="text-[11px] text-rose-300 hover:text-rose-200"
+          >
+            Revoke all
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-slate-500">
+        Browsers where you ticked &ldquo;Trust this device&rdquo; — they skip the
+        2FA code prompt for 90 days. Revoke any you don&apos;t recognise.
+      </p>
+      {error && <p className="text-xs text-rose-300">{error}</p>}
+      {loaded && items.length === 0 && (
+        <p className="text-xs text-slate-500">
+          No trusted devices yet. Tick &ldquo;Trust this device&rdquo; the next
+          time you complete a 2FA sign-in to add this browser to the list.
+        </p>
+      )}
+      {items.length > 0 && (
+        <ul className="space-y-2">
+          {items.map((d) => (
+            <li
+              key={d.id}
+              className="flex items-center justify-between gap-3 rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm"
+            >
+              <span>
+                <span className="block font-medium text-slate-100">
+                  {d.label ?? "Unknown device"}
+                </span>
+                <span className="block text-[11px] text-slate-500">
+                  Last seen {new Date(d.lastSeenAt).toLocaleString()} · Expires{" "}
+                  {new Date(d.expiresAt).toLocaleDateString()}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => revoke(d.id)}
+                disabled={busy}
+                className="text-[11px] text-rose-300 hover:text-rose-200"
+              >
+                Revoke
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }

@@ -102,8 +102,18 @@ function makeService(opts: Parameters<typeof makePrismaMock>[0] = {}) {
   const prisma = makePrismaMock(opts);
   const notifications = makeNotificationsMock();
   const config = { get: jest.fn(() => undefined) };
-  const svc = new TwoFactorService(prisma as any, notifications as any, config as any);
-  return { svc, prisma, notifications };
+  // PR-2FA-2 added a cross-revoke call on disable(). A no-op stub
+  // keeps these tests focused on the 2FA enrollment / verify path.
+  const trustedDevice = {
+    revokeAll: jest.fn(async (_userId: string) => ({ revoked: 0 })),
+  };
+  const svc = new TwoFactorService(
+    prisma as any,
+    notifications as any,
+    config as any,
+    trustedDevice as any,
+  );
+  return { svc, prisma, notifications, trustedDevice };
 }
 
 describe('TwoFactorService.status', () => {

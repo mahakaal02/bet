@@ -11,6 +11,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../foundation/notification.service';
 import { NotificationChannel } from '@prisma/client';
+import { TrustedDeviceService } from './trusted-device.service';
 
 /**
  * Password-reset flow per Roadmap §F-USER-10.
@@ -53,6 +54,7 @@ export class PasswordResetService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationService,
     private readonly config: ConfigService,
+    private readonly trustedDevice: TrustedDeviceService,
   ) {}
 
   /**
@@ -160,6 +162,19 @@ export class PasswordResetService {
         data: { usedAt: now },
       }),
     ]);
+
+    // Revoke every trusted-device cookie too — a stolen password that
+    // led to the reset shouldn't let the attacker keep skipping 2FA
+    // from previously-trusted browsers. Best-effort: a failure here
+    // doesn't roll back the password rotation (which is the primary
+    // remediation), but we'd log it for follow-up.
+    try {
+      await this.trustedDevice.revokeAll(row.userId);
+    } catch (err) {
+      this.logger.warn(
+        `failed to revoke trusted devices after password reset ${row.id}: ${(err as Error).message}`,
+      );
+    }
 
     // Inform the user the password just changed. If the attacker
     // did consume the token, the legitimate user sees this and can

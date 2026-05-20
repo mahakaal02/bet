@@ -1,21 +1,34 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { type LoginResponse } from "@/lib/backend";
-import { setSessionToken } from "@/lib/session";
+import {
+  setSessionToken,
+  setTrustedDeviceToken,
+} from "@/lib/session";
 
 /**
  * POST /api/auth/login-2fa
  *
- * Step 2 of the 2FA login. Forwards `{ challengeToken, code }` to
- * the backend's `/auth/login/2fa` endpoint. On success the response
- * mirrors the normal login: `{ token, user }`. We stash the token
- * in the session cookie exactly the same way.
+ * Step 2 of the 2FA login. Forwards `{ challengeToken, code, trustDevice }`
+ * to the backend's `/auth/login/2fa` endpoint. On success the response
+ * mirrors the normal login (`{ token, user }`). If `trustDevice` was
+ * true AND the backend issued a trusted-device cookie value, we set
+ * the long-lived `kalki_trusted_device` cookie so this browser skips
+ * the 2FA prompt for the next 90 days.
  */
 
 const Body = z.object({
   challengeToken: z.string().min(1),
   code: z.string().min(1).max(32),
+  trustDevice: z.boolean().optional(),
 });
+
+interface BackendResponse extends LoginResponse {
+  trustedDevice?: {
+    cookieValue: string;
+    expiresAt: string;
+  };
+}
 
 export async function POST(req: Request) {
   const json = await req.json().catch(() => null);
@@ -32,7 +45,14 @@ export async function POST(req: Request) {
       `${process.env.AUCTIONS_BACKEND_URL ?? "http://localhost:4000"}/auth/login/2fa`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          // Forward UA + accept-language so the backend can label the
+          // trusted-device row ("Chrome on macOS"). These are read by
+          // the user-facing /me/2fa/trusted-devices list.
+          "User-Agent": req.headers.get("user-agent") ?? "Unknown",
+          "Accept-Language": req.headers.get("accept-language") ?? "en",
+        },
         body: JSON.stringify(parsed.data),
         cache: "no-store",
       },
@@ -53,8 +73,23 @@ export async function POST(req: Request) {
         { status: result.status },
       );
     }
-    const data = (await result.json()) as LoginResponse;
+    const data = (await result.json()) as BackendResponse;
     await setSessionToken(data.token);
+
+    // Trust-this-device follow-through: mint the long-lived cookie.
+    // We compute the maxAge from the backend's expiresAt so client
+    // and server agree on lifetime even if the constant drifts.
+    if (data.trustedDevice?.cookieValue) {
+      const ttlSec = Math.max(
+        60,
+        Math.floor(
+          (new Date(data.trustedDevice.expiresAt).getTime() - Date.now()) /
+            1000,
+        ),
+      );
+      await setTrustedDeviceToken(data.trustedDevice.cookieValue, ttlSec);
+    }
+
     return NextResponse.json({
       ok: true,
       username: data.user.username,

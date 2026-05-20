@@ -89,6 +89,26 @@ export default async function ProfilePage() {
 
         <Card className="mb-4">
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Profile
+          </h2>
+          <Link
+            href="/me/profile"
+            className="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 hover:border-cyan-500/40 hover:bg-slate-800/80"
+          >
+            <span>
+              <span className="block font-medium">Display name & avatar</span>
+              <span className="text-[11px] text-slate-500">
+                Your public face on Kalki — renamable once every 30 days
+              </span>
+            </span>
+            <span aria-hidden className="text-slate-500">
+              →
+            </span>
+          </Link>
+        </Card>
+
+        <Card className="mb-4">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
             Security
           </h2>
           <Link
@@ -141,6 +161,46 @@ export default async function ProfilePage() {
               <span className="block font-medium">Daily login streak</span>
               <span className="text-[11px] text-slate-500">
                 Bigger reward each day — bonuses on day 7, 14, and 30
+              </span>
+            </span>
+            <span aria-hidden className="text-slate-500">
+              →
+            </span>
+          </Link>
+        </Card>
+
+        <Card className="mb-4">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Account
+          </h2>
+          <Link
+            href="/me/email"
+            className="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 hover:border-cyan-500/40 hover:bg-slate-800/80"
+          >
+            <span>
+              <span className="block font-medium">Change email</span>
+              <span className="text-[11px] text-slate-500">
+                Both current and new email must confirm before it applies
+              </span>
+            </span>
+            <span aria-hidden className="text-slate-500">
+              →
+            </span>
+          </Link>
+        </Card>
+
+        <Card className="mb-4">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Shipping
+          </h2>
+          <Link
+            href="/me/addresses"
+            className="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 hover:border-cyan-500/40 hover:bg-slate-800/80"
+          >
+            <span>
+              <span className="block font-medium">Shipping addresses</span>
+              <span className="text-[11px] text-slate-500">
+                Where wins ship to — up to 10, one default
               </span>
             </span>
             <span aria-hidden className="text-slate-500">
