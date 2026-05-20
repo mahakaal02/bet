@@ -139,3 +139,28 @@ admin:
   resources:
     requests: {cpu: 25m, memory: 64Mi}
     limits: {cpu: 200m, memory: 256Mi}
+# ─── ClamAV daemon (in-cluster virus scanner for KYC) ──────────────────
+# Activated by setting backend env `KYC_VIRUS_SCANNER=clamav`. The
+# backend reaches this via the `clamd` Service in the same namespace
+# (matches `CLAMD_HOST` default in backend/src/kyc/virus-scanner.ts).
+#
+# Disabled by default so dev installs + CI fixtures keep using the
+# StubVirusScanner. Flip `enabled: true` in your prod values overlay.
+clamav:
+  enabled: false
+  # Pinned to a major.minor tag (1.3 line) rather than `latest` so
+  # rollouts are predictable. Upstream image bundles freshclam +
+  # clamd; we run both.
+  image: clamav/clamav:1.3
+  port: 3310
+  persistence:
+    enabled: true
+    size: 2Gi
+    storageClassName: longhorn
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi

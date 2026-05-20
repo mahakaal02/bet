@@ -143,6 +143,17 @@ spec:
               value: {{ include "kalki.databaseUrl" (dict "dbname" "uniquebid" "override" .Values.backend.databaseUrl "ctx" .) | quote }}
             {{- include "kalki.redisEnv" . | nindent 12 }}
             {{- include "kalki.publicUrlEnv" . | nindent 12 }}
+            {{- if .Values.clamav.enabled }}
+            # Activate the ClamAV daemon scanner (PR-INFRA-CLAMAV-1).
+            # Backend reaches `clamd` via the Service in this namespace;
+            # see helm/kalki/templates/clamav.yaml.
+            - name: KYC_VIRUS_SCANNER
+              value: "clamav"
+            - name: CLAMD_HOST
+              value: "clamd"
+            - name: CLAMD_PORT
+              value: {{ .Values.clamav.port | quote }}
+            {{- end }}
           envFrom:
             - secretRef:
                 name: kalki-shared
