@@ -32,6 +32,7 @@ import { ReconciliationModule } from './reconciliation/reconciliation.module';
 import { FraudModule } from './fraud/fraud.module';
 import { CsvModule } from './csv/csv.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { CampaignsModule } from './campaigns/campaigns.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
     FraudModule,
     CsvModule,
     AnalyticsModule,
+    CampaignsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
