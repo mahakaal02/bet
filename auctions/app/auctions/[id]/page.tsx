@@ -3,11 +3,13 @@ import { notFound } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { WatchToggle } from "@/components/WatchToggle";
 import { getSessionToken } from "@/lib/session";
 import {
   backend,
   BackendApiError,
   type Auction,
+  type WatchlistListResponse,
 } from "@/lib/backend";
 import { relativeTime } from "@/lib/utils";
 import { BidPanel } from "./BidPanel";
@@ -36,6 +38,28 @@ export default async function AuctionDetailPage({
   const token = await getSessionToken();
   const signedIn = !!token;
 
+  // Watchlist state: only relevant for signed-in users AND only when
+  // the `watchlist.enabled` flag is ON server-side. We piggy-back on
+  // `/me/watchlist` (one call, gracefully fails if the flag is off)
+  // rather than adding a per-auction `isWatching` endpoint — the
+  // shape is forward-compatible with a "you're watching N items"
+  // summary on the detail page in the future.
+  let initialWatching = false;
+  let watchlistEnabled = false;
+  if (signedIn && token) {
+    try {
+      const list = await backend.authed(token).get<WatchlistListResponse>(
+        "/me/watchlist",
+      );
+      watchlistEnabled = true;
+      initialWatching = list.items.some((i) => i.auction.id === auction.id);
+    } catch (err) {
+      // 403 = feature flag is off → hide the toggle. Other errors
+      // silently hide it too; the user doesn't lose any function.
+      watchlistEnabled = false;
+    }
+  }
+
   return (
     <main className="min-h-screen pb-20">
       <Navbar />
@@ -58,9 +82,17 @@ export default async function AuctionDetailPage({
                   <TimeHint auction={auction} />
                 </span>
               </div>
-              <h1 className="text-2xl font-black leading-tight text-slate-100">
-                {auction.title}
-              </h1>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <h1 className="text-2xl font-black leading-tight text-slate-100">
+                  {auction.title}
+                </h1>
+                {watchlistEnabled && (
+                  <WatchToggle
+                    auctionId={auction.id}
+                    initialWatching={initialWatching}
+                  />
+                )}
+              </div>
             </div>
 
             <Card className="space-y-2">

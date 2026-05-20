@@ -96,6 +96,8 @@ export const backend = {
           { method: "PATCH", body: JSON.stringify(body) },
           token,
         ),
+      delete: <T>(path: string) =>
+        request<T>(path, { method: "DELETE" }, token),
     };
   },
 };
@@ -143,6 +145,43 @@ export interface Auction {
   closedAt: string | null;
   createdAt: string;
   winner?: { username: string } | null;
+}
+
+// ─── Watchlist types (PR-WATCHLIST-1) ───────────────────────────────
+
+export interface WatchlistItem {
+  id: string;
+  watchedAt: string;
+  lastNotifiedAt: string | null;
+  auction: {
+    id: string;
+    title: string;
+    description: string;
+    imageUrl: string | null;
+    status: "UPCOMING" | "LIVE" | "ENDED";
+    startsAt: string | null;
+    endsAt: string | null;
+    coinsPerBid: number;
+    retailPrice: string;
+  };
+}
+
+export interface WatchlistListResponse {
+  items: WatchlistItem[];
+  counts: {
+    live: number;
+    upcoming: number;
+    other: number;
+    total: number;
+    cap: number;
+  };
+}
+
+export interface WatchToggleResponse {
+  watching: boolean;
+  since?: string;
+  alreadyWatching?: boolean;
+  removed?: number;
 }
 
 export interface LoginResponse {
