@@ -1,4 +1,4 @@
-import { getToken, clearToken } from './auth';
+import { clearUser } from './auth';
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
@@ -8,18 +8,31 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * `credentials: 'include'` is the load-bearing flag — it tells the
+ * browser to attach the `kalki_admin_session` httpOnly cookie set
+ * by `/auth/admin/login` (PR-ADMIN-COOKIE-AUTH). Without this every
+ * request would 401.
+ *
+ * Cross-origin note: in prod the admin SPA and the API live on
+ * different subdomains (kalki-admin vs kalki-backend). The backend
+ * MUST set CORS to allow this origin + credentials (see
+ * `backend/src/main.ts` + the `CORS_ALLOWED_ORIGINS` env var).
+ *
+ * No Authorization header anywhere — the SPA never reads or stores
+ * the JWT.
+ */
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = getToken();
   const res = await fetch(`${BASE}${path}`, {
     ...init,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init.headers ?? {}),
     },
   });
   if (res.status === 401) {
-    clearToken();
+    clearUser();
     throw new ApiError(401, 'unauthorised');
   }
   if (!res.ok) {
@@ -38,17 +51,17 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 /**
  * Multipart variant — the browser sets Content-Type (with boundary)
- * automatically, so we must NOT pass the JSON headers from `request`.
+ * automatically, so we must NOT spread the JSON headers from
+ * `request`. Same credentials handling.
  */
 async function postFormData<T>(path: string, form: FormData): Promise<T> {
-  const token = getToken();
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
     body: form,
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    credentials: 'include',
   });
   if (res.status === 401) {
-    clearToken();
+    clearUser();
     throw new ApiError(401, 'unauthorised');
   }
   if (!res.ok) {
@@ -70,12 +83,11 @@ async function postFormData<T>(path: string, form: FormData): Promise<T> {
  * Content-Type / Content-Disposition; we just return the Blob.
  */
 async function getBlob(path: string): Promise<Blob> {
-  const token = getToken();
   const res = await fetch(`${BASE}${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    credentials: 'include',
   });
   if (res.status === 401) {
-    clearToken();
+    clearUser();
     throw new ApiError(401, 'unauthorised');
   }
   if (!res.ok) {

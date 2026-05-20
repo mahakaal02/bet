@@ -1,4 +1,21 @@
-const KEY = 'uniquebid_admin_token';
+/**
+ * Admin auth state (PR-ADMIN-COOKIE-AUTH).
+ *
+ * The session JWT lives in an httpOnly cookie that JS can't read —
+ * the browser sends it automatically with `credentials: 'include'`.
+ * This module only tracks the *displayed* admin (email, isAdmin, …)
+ * for UI render, not the credential itself.
+ *
+ * Previously, the JWT was in localStorage. That was an XSS hazard:
+ * any malicious script (compromised npm dep, mis-served chart asset,
+ * etc.) could read the token + impersonate the admin. The httpOnly
+ * cookie removes that class of bug.
+ *
+ * Persistence: sessionStorage (not localStorage) so closing the tab
+ * also clears the displayed user, matching the natural session
+ * boundary an admin user expects on a privileged surface.
+ */
+
 const USER_KEY = 'uniquebid_admin_user';
 
 export interface AdminUser {
@@ -9,29 +26,31 @@ export interface AdminUser {
   coinBalance: number;
 }
 
-export function getToken(): string | null {
-  return localStorage.getItem(KEY);
-}
-
-export function setToken(token: string) {
-  localStorage.setItem(KEY, token);
-}
-
 export function getUser(): AdminUser | null {
-  const raw = localStorage.getItem(USER_KEY);
-  return raw ? (JSON.parse(raw) as AdminUser) : null;
+  try {
+    const raw = sessionStorage.getItem(USER_KEY);
+    return raw ? (JSON.parse(raw) as AdminUser) : null;
+  } catch {
+    // Corrupt / SecurityError — treat as "not signed in".
+    return null;
+  }
 }
 
-export function setUser(user: AdminUser) {
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
+export function setUser(user: AdminUser): void {
+  sessionStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
-export function clearToken() {
-  localStorage.removeItem(KEY);
-  localStorage.removeItem(USER_KEY);
+export function clearUser(): void {
+  sessionStorage.removeItem(USER_KEY);
 }
 
+/**
+ * `isAuthed()` is now display-only — the source of truth is the
+ * httpOnly cookie, which the backend validates per request. This
+ * helper just gates the SPA's route-guard component so we don't
+ * flash protected screens between sign-out and redirect.
+ */
 export function isAuthed(): boolean {
   const user = getUser();
-  return Boolean(getToken() && user?.isAdmin);
+  return Boolean(user?.isAdmin);
 }

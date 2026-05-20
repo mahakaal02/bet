@@ -1,12 +1,23 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { clearToken, getUser } from '../lib/auth';
+import { api } from '../lib/api';
+import { clearUser, getUser } from '../lib/auth';
 
 export default function Layout() {
   const navigate = useNavigate();
   const user = getUser();
 
-  function logout() {
-    clearToken();
+  async function logout() {
+    // POST /auth/admin/logout clears the httpOnly cookie server-side
+    // (Set-Cookie with Max-Age=0). The browser can't clear it
+    // directly because JS doesn't have access. We still clear the
+    // sessionStorage user before navigating so the route guard
+    // bounces a stale click on `/login` away from the protected area.
+    try {
+      await api.post('/auth/admin/logout', {});
+    } catch {
+      /* even on network error, clear local state below */
+    }
+    clearUser();
     navigate('/login', { replace: true });
   }
 
