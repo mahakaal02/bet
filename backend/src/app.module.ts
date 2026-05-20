@@ -24,6 +24,7 @@ import { AddressesModule } from './addresses/addresses.module';
 import { ProfileModule } from './profile/profile.module';
 import { AccountDeletionModule } from './account-deletion/account-deletion.module';
 import { ImpersonationModule } from './impersonation/impersonation.module';
+import { OrdersModule } from './orders/orders.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { ImpersonationModule } from './impersonation/impersonation.module';
     ProfileModule,
     AccountDeletionModule,
     ImpersonationModule,
+    OrdersModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
