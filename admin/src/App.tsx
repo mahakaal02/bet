@@ -26,6 +26,7 @@ import FeatureFlags from './pages/FeatureFlags';
 import Impersonate from './pages/Impersonate';
 import Tickets from './pages/Tickets';
 import Reconciliation from './pages/Reconciliation';
+import Analytics from './pages/Analytics';
 import KycReview from './pages/KycReview';
 import ProfileModeration from './pages/ProfileModeration';
 
@@ -101,6 +102,7 @@ export default function App() {
         <Route path="impersonate" element={<Impersonate />} />
         <Route path="tickets" element={<Tickets />} />
         <Route path="reconciliation" element={<Reconciliation />} />
+        <Route path="analytics" element={<Analytics />} />
         <Route path="kyc" element={<KycReview />} />
         <Route path="profile-moderation" element={<ProfileModeration />} />
       </Route>

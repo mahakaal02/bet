@@ -31,6 +31,7 @@ import { TicketsModule } from './tickets/tickets.module';
 import { ReconciliationModule } from './reconciliation/reconciliation.module';
 import { FraudModule } from './fraud/fraud.module';
 import { CsvModule } from './csv/csv.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { CsvModule } from './csv/csv.module';
     ReconciliationModule,
     FraudModule,
     CsvModule,
+    AnalyticsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
