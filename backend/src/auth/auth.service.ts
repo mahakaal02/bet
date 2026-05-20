@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
@@ -8,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
+import { TwoFactorService } from './two-factor.service';
 
 export interface JwtPayload {
   sub: string;
@@ -27,7 +29,15 @@ export interface JwtPayload {
    * a password reset — see `password-reset.service.ts`.
    */
   iat?: number;
+  /**
+   * Intermediate "2FA challenge" tokens carry `purpose: '2fa_challenge'`.
+   * They authenticate ONLY the `/auth/login/2fa` route and are rejected
+   * by `validateJwt()` for any other use — see `validateJwt()`.
+   */
+  purpose?: '2fa_challenge';
 }
+
+const TFA_CHALLENGE_TTL = '5m';
 
 @Injectable()
 export class AuthService {
@@ -35,6 +45,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly twoFactor: TwoFactorService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -67,10 +78,70 @@ export class AuthService {
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('invalid credentials');
 
+    // Step-up: if 2FA is enabled, don't issue a normal session yet —
+    // hand the client a short-lived "challenge" token that only the
+    // /auth/login/2fa endpoint accepts.
+    const twoFactor = await this.prisma.twoFactorAuth.findUnique({
+      where: { userId: user.id },
+      select: { verified: true, disabledAt: true },
+    });
+    if (twoFactor?.verified && !twoFactor.disabledAt) {
+      const challengeToken = this.jwt.sign(
+        {
+          sub: user.id,
+          username: user.username,
+          purpose: '2fa_challenge',
+        } satisfies JwtPayload,
+        { expiresIn: TFA_CHALLENGE_TTL },
+      );
+      return { needs2FA: true as const, challengeToken };
+    }
+
+    return this.issue(user, this.sanitize(user));
+  }
+
+  /**
+   * Complete a login that was challenged by 2FA. The challenge token
+   * is a short-lived JWT carrying `purpose: '2fa_challenge'`; we
+   * verify it, then route the code through `TwoFactorService.verifyLogin`
+   * (TOTP or backup code), then issue the real session.
+   */
+  async completeLoginWith2FA(input: {
+    challengeToken: string;
+    code: string;
+  }) {
+    let payload: JwtPayload;
+    try {
+      payload = this.jwt.verify<JwtPayload>(input.challengeToken);
+    } catch {
+      throw new UnauthorizedException('challenge token is invalid or expired');
+    }
+    if (payload.purpose !== '2fa_challenge' || !payload.sub) {
+      throw new BadRequestException('challenge token is not a 2FA challenge');
+    }
+
+    await this.twoFactor.verifyLogin(payload.sub, input.code);
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+    });
+    if (!user) throw new UnauthorizedException();
     return this.issue(user, this.sanitize(user));
   }
 
   async validateJwt(payload: JwtPayload) {
+    // 2FA-challenge tokens MAY NOT be used for general auth — they
+    // authenticate only the `/auth/login/2fa` endpoint, and that path
+    // verifies + consumes them inside `completeLoginWith2FA()`.
+    // Refusing them here closes the obvious side-channel where an
+    // attacker who intercepts a challenge token could otherwise treat
+    // it as a session.
+    if (payload.purpose === '2fa_challenge') {
+      throw new UnauthorizedException(
+        'this token is for completing 2FA only — full login required',
+      );
+    }
+
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user) throw new UnauthorizedException();
     // Session-invalidation anchor: if the user has rotated their
