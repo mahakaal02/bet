@@ -30,6 +30,7 @@ import { OrdersModule } from './orders/orders.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { ReconciliationModule } from './reconciliation/reconciliation.module';
 import { FraudModule } from './fraud/fraud.module';
+import { CsvModule } from './csv/csv.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { FraudModule } from './fraud/fraud.module';
     TicketsModule,
     ReconciliationModule,
     FraudModule,
+    CsvModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
