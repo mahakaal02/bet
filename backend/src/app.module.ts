@@ -27,6 +27,11 @@ import { ImpersonationModule } from './impersonation/impersonation.module';
 import { KycModule } from './kyc/kyc.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { OrdersModule } from './orders/orders.module';
+import { TicketsModule } from './tickets/tickets.module';
+import { ReconciliationModule } from './reconciliation/reconciliation.module';
+import { FraudModule } from './fraud/fraud.module';
+import { CsvModule } from './csv/csv.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 
 @Module({
@@ -63,6 +68,11 @@ import { CampaignsModule } from './campaigns/campaigns.module';
     KycModule,
     ReferralsModule,
     OrdersModule,
+    TicketsModule,
+    ReconciliationModule,
+    FraudModule,
+    CsvModule,
+    AnalyticsModule,
     CampaignsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
