@@ -7,8 +7,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import Decimal from 'decimal.js';
+import { OutboxKind } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BetWalletService } from '../bet-wallet/bet-wallet.service';
+import { OutboxService } from '../foundation/outbox.service';
+import { FeatureFlagService } from '../foundation/feature-flags.service';
 import { OutbidListenerService } from '../notifications/outbid-listener.service';
 import {
   type BidRow,
@@ -31,6 +34,8 @@ export class BidsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly betWallet: BetWalletService,
+    private readonly outbox: OutboxService,
+    private readonly flags: FeatureFlagService,
     private readonly outbidListener: OutbidListenerService,
   ) {}
 
@@ -97,33 +102,89 @@ export class BidsService {
       }
     }
 
-    // 2. Insert the bid first so we have a real id for the wallet ref.
-    const bid = await this.prisma.bid.create({
-      data: {
-        auctionId,
-        userId,
-        amount: candidate.toFixed(2),
-      },
-    });
+    // 2. Insert the bid + enqueue the wallet debit.
+    //
+    // Two paths, gated by `outbox.bid_wallet_debit`:
+    //
+    //   ON  → Atomic. `bid.create` + `outbox.enqueue` commit in the
+    //         same Prisma transaction. The outbox worker drains the
+    //         debit asynchronously (at-least-once, idempotent via
+    //         the `bid:<bidId>` reference). Audit finding #8 from
+    //         PR #28: this is the correct fix for the cross-service
+    //         consistency gap.
+    //
+    //   OFF → Legacy. Bid is inserted, then a blocking HTTP debit
+    //         fires. If the debit throws, the bid is deleted. Lost
+    //         response (5xx after Bet committed) leaves the user
+    //         short the coins — that's the bug, but it's also the
+    //         well-trodden path. Keep available for instant rollback
+    //         if the outbox path misbehaves.
+    //
+    // Flag is in `FeatureFlag` table, seeded OFF by the
+    // 20260520160000_outbox_seed migration. Flip ON via admin UI.
+    const useOutbox = await this.flags.isEnabled('outbox.bid_wallet_debit');
 
-    // 3. Debit through Bet.
-    try {
-      await this.betWallet.debit({
-        userId,
-        amount: auction.coinsPerBid,
-        kind: 'auction_bid',
-        reference: `bid:${bid.id}`,
-        metadata: { auctionId, bidId: bid.id, amount: candidate.toFixed(2) },
+    type BidPersisted = Awaited<ReturnType<typeof this.prisma.bid.create>>;
+    let bid: BidPersisted;
+    if (useOutbox) {
+      bid = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.bid.create({
+          data: {
+            auctionId,
+            userId,
+            amount: candidate.toFixed(2),
+          },
+        });
+        await this.outbox.enqueue(tx, {
+          kind: OutboxKind.BET_WALLET_DEBIT,
+          sourceTable: 'Bid',
+          sourceId: created.id,
+          payload: {
+            userId,
+            amount: auction.coinsPerBid,
+            kind: 'auction_bid',
+            reference: `bid:${created.id}`,
+            metadata: {
+              auctionId,
+              bidId: created.id,
+              amount: candidate.toFixed(2),
+            },
+          },
+          // The receiving service (Bet) dedupes on `(kind,
+          // reference)`. Mirror that pair as the outbox row's
+          // idempotency key so a duplicate enqueue (very unlikely
+          // — would require a Prisma client crash mid-transaction)
+          // hits a uniq constraint, not a duplicate dispatch.
+          idempotencyKey: `bet_wallet_debit:bid:${created.id}`,
+        });
+        return created;
       });
-    } catch (err) {
-      await this.prisma.bid
-        .delete({ where: { id: bid.id } })
-        .catch((deleteErr) =>
-          this.logger.error(
-            `failed to roll back bid ${bid.id} after wallet error: ${deleteErr.message}`,
-          ),
-        );
-      throw err;
+    } else {
+      bid = await this.prisma.bid.create({
+        data: {
+          auctionId,
+          userId,
+          amount: candidate.toFixed(2),
+        },
+      });
+      try {
+        await this.betWallet.debit({
+          userId,
+          amount: auction.coinsPerBid,
+          kind: 'auction_bid',
+          reference: `bid:${bid.id}`,
+          metadata: { auctionId, bidId: bid.id, amount: candidate.toFixed(2) },
+        });
+      } catch (err) {
+        await this.prisma.bid
+          .delete({ where: { id: bid.id } })
+          .catch((deleteErr) =>
+            this.logger.error(
+              `failed to roll back bid ${bid.id} after wallet error: ${deleteErr.message}`,
+            ),
+          );
+        throw err;
+      }
     }
 
     // NO_WINNER mode: if this new bid would have been the winner, the
