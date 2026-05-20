@@ -79,6 +79,10 @@ import { OutbidListenerService } from './outbid-listener.service';
   exports: [
     NotificationsService,
     OutbidListenerService,
+    // Exported for flows that need to email an address that isn't
+    // yet on the user's account row — currently only PR-EMAIL-1
+    // (email-change confirmation tokens).
+    EmailAdapter,
   ],
 })
 export class NotificationsModule {}
