@@ -1,10 +1,19 @@
-import { Body, Controller, Get, Logger, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Logger, Post, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { IsString, MaxLength, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser, AuthedUser } from './current-user.decorator';
 import { BetWalletService } from '../bet-wallet/bet-wallet.service';
+
+class Login2FADto {
+  @IsString() @MinLength(1) @MaxLength(1024)
+  challengeToken!: string;
+
+  @IsString() @MinLength(1) @MaxLength(32)
+  code!: string;
+}
 
 @Controller('auth')
 export class AuthController {
@@ -34,6 +43,28 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);
+  }
+
+  /**
+   * Step 2 of the 2FA login. The client receives `{ needs2FA: true,
+   * challengeToken }` from /auth/login when the account has 2FA
+   * enabled and finishes the dance here with the 6-digit TOTP code
+   * or an 8-char backup code. Returns the standard
+   * `{ token, user }` on success.
+   *
+   * Throttle is tighter than the password login: the password step
+   * already gated the attempt, and the per-user TOTP lockout in
+   * `TwoFactorService` covers the per-user dimension — this throttle
+   * is the per-IP belt.
+   */
+  @Throttle({ login_2fa: { limit: 8, ttl: 60_000 } })
+  @HttpCode(200)
+  @Post('login/2fa')
+  loginTwoFactor(@Body() dto: Login2FADto) {
+    return this.auth.completeLoginWith2FA({
+      challengeToken: dto.challengeToken,
+      code: dto.code,
+    });
   }
 
   /**

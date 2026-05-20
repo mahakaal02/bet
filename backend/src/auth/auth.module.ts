@@ -8,6 +8,8 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { PasswordResetController } from './password-reset.controller';
 import { PasswordResetService } from './password-reset.service';
+import { TwoFactorController } from './two-factor.controller';
+import { TwoFactorService } from './two-factor.service';
 import { EmailChangeController } from './email-change.controller';
 import { EmailChangeService } from './email-change.service';
 
@@ -27,14 +29,16 @@ import { EmailChangeService } from './email-change.service';
   controllers: [
     AuthController,
     PasswordResetController,
+    TwoFactorController,
     EmailChangeController,
   ],
   providers: [
     AuthService,
     JwtStrategy,
     PasswordResetService,
+    TwoFactorService,
     EmailChangeService,
   ],
-  exports: [AuthService, JwtModule],
+  exports: [AuthService, JwtModule, TwoFactorService],
 })
 export class AuthModule {}
