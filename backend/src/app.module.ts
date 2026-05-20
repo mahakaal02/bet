@@ -23,6 +23,7 @@ import { DailyLoginModule } from './daily-login/daily-login.module';
 import { AddressesModule } from './addresses/addresses.module';
 import { ProfileModule } from './profile/profile.module';
 import { AccountDeletionModule } from './account-deletion/account-deletion.module';
+import { ImpersonationModule } from './impersonation/impersonation.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { AccountDeletionModule } from './account-deletion/account-deletion.modul
     AddressesModule,
     ProfileModule,
     AccountDeletionModule,
+    ImpersonationModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

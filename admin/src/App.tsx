@@ -23,6 +23,7 @@ import AuditLog from './pages/AuditLog';
 import Roles from './pages/Roles';
 import Settings from './pages/Settings';
 import FeatureFlags from './pages/FeatureFlags';
+import Impersonate from './pages/Impersonate';
 
 function Protected({ children }: { children: JSX.Element }) {
   return isAuthed() ? children : <Navigate to="/login" replace />;
@@ -93,6 +94,7 @@ export default function App() {
         <Route path="roles" element={<Roles />} />
         <Route path="settings" element={<Settings />} />
         <Route path="feature-flags" element={<FeatureFlags />} />
+        <Route path="impersonate" element={<Impersonate />} />
       </Route>
     </Routes>
   );

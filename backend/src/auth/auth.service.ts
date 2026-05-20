@@ -32,11 +32,22 @@ export interface JwtPayload {
    */
   iat?: number;
   /**
-   * Intermediate "2FA challenge" tokens carry `purpose: '2fa_challenge'`.
-   * They authenticate ONLY the `/auth/login/2fa` route and are rejected
-   * by `validateJwt()` for any other use — see `validateJwt()`.
+   * Tokens with a `purpose` tag are scoped to a specific flow:
+   *
+   *   - `'2fa_challenge'` — intermediate 2FA login token. Only the
+   *     `/auth/login/2fa` route accepts it; `validateJwt()` rejects
+   *     it for any other route.
+   *   - `'impersonation'` — admin-issued "act as" token. Routes
+   *     accept it as a normal session for the impersonated user
+   *     (so downstream code Just Works), but the `actorId` /
+   *     `impersonationId` fields on the payload tell audit
+   *     writers who's actually behind the wheel.
    */
-  purpose?: '2fa_challenge';
+  purpose?: '2fa_challenge' | 'impersonation';
+  /** Set on impersonation tokens — the admin's user id. */
+  actorId?: string;
+  /** Set on impersonation tokens — the ImpersonationLog row id. */
+  impersonationId?: string;
 }
 
 const TFA_CHALLENGE_TTL = '5m';
@@ -195,6 +206,11 @@ export class AuthService {
         'this token is for completing 2FA only — full login required',
       );
     }
+    // Impersonation tokens DO authenticate normal routes — by design,
+    // they let the admin exercise the user's surface as the user.
+    // The `actorId` / `impersonationId` fields propagate via the
+    // request user shape so audit writers can attribute correctly.
+    // No special branch here; let the rest of validateJwt run.
 
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user) throw new UnauthorizedException();
