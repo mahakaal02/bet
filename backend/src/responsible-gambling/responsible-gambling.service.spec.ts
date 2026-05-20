@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ResponsibleGamblingService } from './responsible-gambling.service';
 
 /**
@@ -31,6 +32,12 @@ type Profile = {
   cooldownUntil: Date | null;
   selfExcludedUntil: Date | null;
   selfExcludedAt: Date | null;
+  // PR-RG-2 fields:
+  pendingLimits: Record<string, number | null> | null;
+  pendingActivatesAt: Date | null;
+  sessionStartedAt: Date | null;
+  lastSessionPingAt: Date | null;
+  lastReminderAt: Date | null;
   updatedAt: Date;
   createdAt: Date;
 };
@@ -49,6 +56,11 @@ function makeProfile(overrides: Partial<Profile> = {}): Profile {
     cooldownUntil: null,
     selfExcludedUntil: null,
     selfExcludedAt: null,
+    pendingLimits: null,
+    pendingActivatesAt: null,
+    sessionStartedAt: null,
+    lastSessionPingAt: null,
+    lastReminderAt: null,
     updatedAt: new Date(),
     createdAt: new Date(),
     ...overrides,
@@ -72,7 +84,13 @@ function makePrismaMock(opts: {
       }),
       update: jest.fn(async ({ data }: any) => {
         if (!profile) throw new Error('no profile');
-        profile = { ...profile, ...data, updatedAt: new Date() };
+        // Translate Prisma.JsonNull → actual JS null so test assertions
+        // can use .toBeNull() rather than dealing with the marker.
+        const normalised: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(data)) {
+          normalised[k] = v === Prisma.JsonNull ? null : v;
+        }
+        profile = { ...profile, ...normalised, updatedAt: new Date() } as Profile;
         return profile;
       }),
     },
@@ -124,22 +142,31 @@ describe('ResponsibleGamblingService.updateLimits', () => {
     expect(r.dailyWagerLimitCoins).toBe(2000);
   });
 
-  it('refuses to raise an existing limit', async () => {
-    const { svc } = makeService({
+  it('stages a raise in pendingLimits with 24h activation (PR-RG-2)', async () => {
+    const { svc, prisma, notifications } = makeService({
       profile: makeProfile({ dailyWagerLimitCoins: 2000 }),
     });
-    await expect(
-      svc.updateLimits('u-1', { dailyWagerLimitCoins: 5000 }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    const r = await svc.updateLimits('u-1', { dailyWagerLimitCoins: 5000 });
+    // Live value unchanged.
+    expect(r.dailyWagerLimitCoins).toBe(2000);
+    expect(r.pendingLimits).toEqual({ dailyWagerLimitCoins: 5000 });
+    expect(r.pendingActivatesAt).toBeInstanceOf(Date);
+    const diff = r.pendingActivatesAt!.getTime() - Date.now();
+    expect(diff).toBeGreaterThan(23 * 3_600_000);
+    expect(diff).toBeLessThanOrEqual(24 * 3_600_000);
+    expect(notifications.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ templateCode: 'rg_pending_raise_v1' }),
+    );
+    void prisma;
   });
 
-  it('refuses to remove an existing limit (treated as raise)', async () => {
+  it('stages removing-limit as a raise (PR-RG-2)', async () => {
     const { svc } = makeService({
       profile: makeProfile({ dailyWagerLimitCoins: 2000 }),
     });
-    await expect(
-      svc.updateLimits('u-1', { dailyWagerLimitCoins: null }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    const r = await svc.updateLimits('u-1', { dailyWagerLimitCoins: null });
+    expect(r.dailyWagerLimitCoins).toBe(2000);
+    expect(r.pendingLimits).toEqual({ dailyWagerLimitCoins: null });
   });
 
   it('400s on negative or non-integer limit', async () => {
@@ -345,5 +372,176 @@ describe('ResponsibleGamblingService.assertCanBet', () => {
     await expect(svc.assertCanBet('u-1', 100)).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+  });
+});
+
+// ─── PR-RG-2: pending raises ──────────────────────────────────────
+
+describe('ResponsibleGamblingService.cancelPendingRaise', () => {
+  it('clears the pending bag + writes a forensic event', async () => {
+    const future = new Date(Date.now() + 12 * 3_600_000);
+    const { svc, prisma } = makeService({
+      profile: makeProfile({
+        dailyWagerLimitCoins: 2000,
+        pendingLimits: { dailyWagerLimitCoins: 5000 },
+        pendingActivatesAt: future,
+      }),
+    });
+    const r = await svc.cancelPendingRaise('u-1');
+    expect(r.pendingLimits).toBeNull();
+    expect(r.pendingActivatesAt).toBeNull();
+    expect(prisma._events().some((e: any) => e.limitKind === 'pending_raise_cancelled')).toBe(true);
+  });
+
+  it('is a no-op when nothing is pending', async () => {
+    const { svc, prisma } = makeService({ profile: makeProfile() });
+    await svc.cancelPendingRaise('u-1');
+    expect(prisma._events()).toHaveLength(0);
+  });
+});
+
+describe('ResponsibleGamblingService.applyPendingIfDue', () => {
+  it('promotes pending values once the activate moment passes', async () => {
+    const past = new Date(Date.now() - 60_000);
+    const { svc } = makeService({
+      profile: makeProfile({
+        dailyWagerLimitCoins: 2000,
+        pendingLimits: { dailyWagerLimitCoins: 5000 },
+        pendingActivatesAt: past,
+      }),
+    });
+    const r = await svc.applyPendingIfDue('u-1');
+    expect(r!.dailyWagerLimitCoins).toBe(5000);
+    expect(r!.pendingLimits).toBeNull();
+    expect(r!.pendingActivatesAt).toBeNull();
+  });
+
+  it('does NOT promote before the activate moment', async () => {
+    const future = new Date(Date.now() + 60_000);
+    const { svc } = makeService({
+      profile: makeProfile({
+        dailyWagerLimitCoins: 2000,
+        pendingLimits: { dailyWagerLimitCoins: 5000 },
+        pendingActivatesAt: future,
+      }),
+    });
+    const r = await svc.applyPendingIfDue('u-1');
+    expect(r!.dailyWagerLimitCoins).toBe(2000);
+    expect(r!.pendingLimits).toEqual({ dailyWagerLimitCoins: 5000 });
+  });
+
+  it('lower + raise in the same PATCH: lower applies, raise stages', async () => {
+    const { svc } = makeService({
+      profile: makeProfile({
+        dailyWagerLimitCoins: 5000,
+        weeklyDepositLimitCoins: 10_000,
+      }),
+    });
+    const r = await svc.updateLimits('u-1', {
+      dailyWagerLimitCoins: 2000,       // lower → instant
+      weeklyDepositLimitCoins: 25_000,  // raise → pending
+    });
+    expect(r.dailyWagerLimitCoins).toBe(2000);
+    expect(r.weeklyDepositLimitCoins).toBe(10_000);
+    expect(r.pendingLimits).toEqual({ weeklyDepositLimitCoins: 25_000 });
+  });
+});
+
+// ─── PR-RG-2: session heartbeat ──────────────────────────────────
+
+describe('ResponsibleGamblingService.recordSessionPing', () => {
+  it('starts a fresh session on first ping', async () => {
+    const { svc, prisma } = makeService({ profile: makeProfile() });
+    const r = await svc.recordSessionPing('u-1');
+    expect(r.reminderDue).toBe(false);
+    expect(r.minutesElapsed).toBe(0);
+    expect(prisma._profile()!.sessionStartedAt).toBeInstanceOf(Date);
+    expect(prisma._profile()!.lastSessionPingAt).toBeInstanceOf(Date);
+  });
+
+  it('fires reminder when elapsed crosses threshold', async () => {
+    // Profile says reminder at 30 min; mock a session that started 31m ago.
+    const start = new Date(Date.now() - 31 * 60_000);
+    const recent = new Date(Date.now() - 30_000);
+    const { svc, notifications } = makeService({
+      profile: makeProfile({
+        sessionStartedAt: start,
+        lastSessionPingAt: recent,
+        sessionReminderMinutes: 30,
+      }),
+    });
+    const r = await svc.recordSessionPing('u-1');
+    expect(r.reminderDue).toBe(true);
+    expect(r.minutesElapsed).toBe(31);
+    expect(notifications.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ templateCode: 'rg_session_reminder_v1' }),
+    );
+  });
+
+  it('does not double-fire reminder in the same session', async () => {
+    // Session is 60 min old; we already fired the reminder 5 min ago.
+    const start = new Date(Date.now() - 60 * 60_000);
+    const recent = new Date(Date.now() - 5 * 60_000);
+    const { svc, notifications } = makeService({
+      profile: makeProfile({
+        sessionStartedAt: start,
+        lastSessionPingAt: recent,
+        lastReminderAt: new Date(Date.now() - 5 * 60_000),
+        sessionReminderMinutes: 30,
+      }),
+    });
+    const r = await svc.recordSessionPing('u-1');
+    expect(r.reminderDue).toBe(false);
+    expect(notifications.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('IDLE_RESET_MS gap restarts the session', async () => {
+    // Session was 60 min old, but last ping was 35 min ago (> 30m idle).
+    const oldStart = new Date(Date.now() - 60 * 60_000);
+    const longAgo = new Date(Date.now() - 35 * 60_000);
+    const { svc, prisma } = makeService({
+      profile: makeProfile({
+        sessionStartedAt: oldStart,
+        lastSessionPingAt: longAgo,
+        sessionReminderMinutes: 30,
+      }),
+    });
+    const r = await svc.recordSessionPing('u-1');
+    expect(r.reminderDue).toBe(false);
+    expect(r.minutesElapsed).toBe(0);
+    // sessionStartedAt was reset.
+    expect(prisma._profile()!.sessionStartedAt!.getTime()).toBeGreaterThan(oldStart.getTime());
+  });
+
+  it('also opportunistically applies a due pending raise', async () => {
+    const past = new Date(Date.now() - 60_000);
+    const { svc, prisma } = makeService({
+      profile: makeProfile({
+        dailyWagerLimitCoins: 2000,
+        pendingLimits: { dailyWagerLimitCoins: 5000 },
+        pendingActivatesAt: past,
+      }),
+    });
+    await svc.recordSessionPing('u-1');
+    expect(prisma._profile()!.dailyWagerLimitCoins).toBe(5000);
+    expect(prisma._profile()!.pendingLimits).toBeNull();
+  });
+});
+
+// ─── PR-RG-2: getProfile lazy promotion ───────────────────────────
+
+describe('ResponsibleGamblingService.getProfile (lazy promotion)', () => {
+  it('promotes a due pending raise on read', async () => {
+    const past = new Date(Date.now() - 60_000);
+    const { svc } = makeService({
+      profile: makeProfile({
+        dailyWagerLimitCoins: 2000,
+        pendingLimits: { dailyWagerLimitCoins: 5000 },
+        pendingActivatesAt: past,
+      }),
+    });
+    const r = await svc.getProfile('u-1');
+    expect(r.dailyWagerLimitCoins).toBe(5000);
+    expect(r.pendingLimits).toBeNull();
   });
 });

@@ -128,4 +128,36 @@ export class ResponsibleGamblingController {
     const limit = Math.max(1, Math.min(200, Number(limitRaw) || 50));
     return this.rg.listEvents(user.id, limit, cursor);
   }
+
+  /**
+   * Cancel a pending limit raise. PR-RG-2.
+   */
+  @Throttle({ rg_pending: { limit: 5, ttl: 60_000 } })
+  @HttpCode(200)
+  @Post('me/rg/pending/cancel')
+  async cancelPending(@CurrentUser() user: AuthedUser) {
+    const row = await this.rg.cancelPendingRaise(user.id);
+    return {
+      pendingLimits: row.pendingLimits,
+      pendingActivatesAt: row.pendingActivatesAt?.toISOString() ?? null,
+    };
+  }
+
+  /**
+   * Session-reminder heartbeat. PR-RG-2.
+   *
+   * The client pings this every ~60s while the user is active. The
+   * server tracks session start (with idle-reset semantics) and
+   * replies with `reminderDue: true` when the configured threshold
+   * has been crossed. The toast / banner is rendered client-side
+   * from the response — the same call also enqueues an INAPP
+   * notification so users on the receiving Socket.IO room get it
+   * even if their browser tab is in the background.
+   */
+  @Throttle({ rg_ping: { limit: 120, ttl: 60_000 } })
+  @HttpCode(200)
+  @Post('me/rg/session/ping')
+  async sessionPing(@CurrentUser() user: AuthedUser) {
+    return this.rg.recordSessionPing(user.id);
+  }
 }

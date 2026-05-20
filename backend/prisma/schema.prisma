@@ -777,6 +777,20 @@ model ResponsibleGamblingProfile {
   cooldownUntil            DateTime?
   selfExcludedUntil        DateTime?
   selfExcludedAt           DateTime?
+  // 24h cool-off for limit RAISES (PR-RG-2). When the user requests a
+  // looser limit we don't apply it immediately — we stash the new
+  // value in `pendingLimits` and schedule it to take effect at
+  // `pendingActivatesAt`. The user can cancel before that moment.
+  pendingLimits            Json?
+  pendingActivatesAt       DateTime?
+  // Session tracking for the periodic reminder feature (PR-RG-2).
+  // `sessionStartedAt` resets on first ping after > 30 min idle gap;
+  // `lastReminderAt` debounces the "you've been playing X minutes"
+  // toast so it doesn't fire on every heartbeat once the threshold
+  // has been crossed.
+  sessionStartedAt         DateTime?
+  lastSessionPingAt        DateTime?
+  lastReminderAt           DateTime?
   user                     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   updatedAt                DateTime  @updatedAt
   createdAt                DateTime  @default(now())
