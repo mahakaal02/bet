@@ -6,6 +6,8 @@ import { BetWalletModule } from '../bet-wallet/bet-wallet.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
+import { PasswordResetController } from './password-reset.controller';
+import { PasswordResetService } from './password-reset.service';
 
 @Module({
   imports: [
@@ -20,8 +22,8 @@ import { JwtStrategy } from './jwt.strategy';
       }),
     }),
   ],
-  controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  controllers: [AuthController, PasswordResetController],
+  providers: [AuthService, JwtStrategy, PasswordResetService],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}
