@@ -21,6 +21,12 @@ interface HistoryRow {
   before: string | null;
   after: string | null;
   changedAt: Date;
+  // PR-PROFILE-2 fields.
+  flagReason?: string | null;
+  reviewAction?: 'NONE' | 'PENDING' | 'KEPT_AS_IS' | 'FORCED_RENAME';
+  reviewedAt?: Date | null;
+  reviewedBy?: string | null;
+  reviewNotes?: string | null;
 }
 
 function makePrismaMock(opts: {
@@ -79,9 +85,45 @@ function makePrismaMock(opts: {
           before: data.before ?? null,
           after: data.after ?? null,
           changedAt: new Date(),
+          flagReason: data.flagReason ?? null,
+          reviewAction: data.reviewAction ?? 'NONE',
+          reviewedAt: data.reviewedAt ?? null,
+          reviewedBy: data.reviewedBy ?? null,
+          reviewNotes: data.reviewNotes ?? null,
         };
         history.push(row);
         return row;
+      }),
+      findUnique: jest.fn(async ({ where }: any) => history.find((h) => h.id === where.id) ?? null),
+      findMany: jest.fn(async ({ where, take, cursor, skip, orderBy, include }: any) => {
+        void orderBy; void include;
+        let pool = history.slice();
+        if (where?.reviewAction) {
+          pool = pool.filter((h) => h.reviewAction === where.reviewAction);
+        }
+        pool.sort((a, b) => b.changedAt.getTime() - a.changedAt.getTime());
+        if (cursor) {
+          const idx = pool.findIndex((h) => h.id === cursor.id);
+          if (idx >= 0) pool = pool.slice(idx + (skip ?? 0));
+        }
+        const out = pool.slice(0, take);
+        return out.map((h) => ({
+          ...h,
+          user: users.get(h.userId)
+            ? {
+                id: users.get(h.userId)!.id,
+                username: users.get(h.userId)!.username,
+                email: users.get(h.userId)!.email,
+                displayName: users.get(h.userId)!.displayName,
+              }
+            : { id: h.userId, username: 'ghost', email: null, displayName: null },
+        }));
+      }),
+      update: jest.fn(async ({ where, data }: any) => {
+        const h = history.find((r) => r.id === where.id);
+        if (!h) throw new Error(`no history row ${where.id}`);
+        Object.assign(h, data);
+        return h;
       }),
     },
     $transaction: jest.fn(async (ops: Promise<unknown>[]) =>
@@ -297,5 +339,184 @@ describe('ProfileService.setAvatarKey', () => {
     await expect(
       svc.setAvatarKey('nope', 'avatars/nope/abc.png'),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+// ─── PR-PROFILE-2: moderation queue ────────────────────────────────
+
+describe('ProfileService.setDisplayName flagging', () => {
+  it('writes flagReason + reviewAction=PENDING on suspicious names', async () => {
+    const { svc, prisma } = makeService({ user: BASE_USER });
+    await svc.setDisplayName('u-1', 'Kalki Official');
+    const row = prisma._history()[0];
+    expect(row.flagReason).toBeTruthy();
+    expect(row.reviewAction).toBe('PENDING');
+  });
+
+  it('leaves clean names at reviewAction=NONE', async () => {
+    const { svc, prisma } = makeService({ user: BASE_USER });
+    await svc.setDisplayName('u-1', 'Alice Doe');
+    expect(prisma._history()[0].reviewAction).toBe('NONE');
+    expect(prisma._history()[0].flagReason).toBeNull();
+  });
+});
+
+describe('ProfileService.listModerationQueue', () => {
+  it('returns only PENDING rows by default', async () => {
+    const { svc } = makeService({
+      user: BASE_USER,
+      history: [
+        {
+          id: 'h-flag',
+          userId: 'u-1',
+          field: 'displayName',
+          before: 'Alice',
+          after: 'Kalki Official',
+          changedAt: new Date(),
+          flagReason: 'impersonation:brand',
+          reviewAction: 'PENDING',
+        },
+        {
+          id: 'h-clean',
+          userId: 'u-1',
+          field: 'displayName',
+          before: null,
+          after: 'Alice',
+          changedAt: new Date(),
+          flagReason: null,
+          reviewAction: 'NONE',
+        },
+      ],
+    });
+    const res = await svc.listModerationQueue({});
+    expect(res.items).toHaveLength(1);
+    expect(res.items[0].historyId).toBe('h-flag');
+    expect(res.items[0].username).toBe('alice');
+  });
+
+  it('honours the action filter', async () => {
+    const { svc } = makeService({
+      user: BASE_USER,
+      history: [
+        {
+          id: 'h-kept',
+          userId: 'u-1',
+          field: 'displayName',
+          before: null,
+          after: 'BorderlineName',
+          changedAt: new Date(),
+          flagReason: 'public-figure:politician',
+          reviewAction: 'KEPT_AS_IS',
+        },
+      ],
+    });
+    const res = await svc.listModerationQueue({ action: 'KEPT_AS_IS' });
+    expect(res.items.map((i) => i.historyId)).toEqual(['h-kept']);
+  });
+});
+
+describe('ProfileService.keepAsIs', () => {
+  it('flips PENDING → KEPT_AS_IS + records reviewer', async () => {
+    const { svc, prisma } = makeService({
+      user: BASE_USER,
+      history: [
+        {
+          id: 'h-1',
+          userId: 'u-1',
+          field: 'displayName',
+          before: null,
+          after: 'Kalki Sport',
+          changedAt: new Date(),
+          flagReason: 'impersonation:brand',
+          reviewAction: 'PENDING',
+        },
+      ],
+    });
+    await svc.keepAsIs({ reviewer: { id: 'admin-1', email: 'admin@kalki.test' }, historyId: 'h-1' });
+    const row = prisma._history().find((h) => h.id === 'h-1')!;
+    expect(row.reviewAction).toBe('KEPT_AS_IS');
+    expect(row.reviewedBy).toBe('admin-1');
+  });
+});
+
+describe('ProfileService.forceRename', () => {
+  it('validates the new name, rejects garbage', async () => {
+    const { svc } = makeService({
+      user: BASE_USER,
+      history: [
+        {
+          id: 'h-1',
+          userId: 'u-1',
+          field: 'displayName',
+          before: null,
+          after: 'Bad Name',
+          changedAt: new Date(),
+          flagReason: 'impersonation:brand',
+          reviewAction: 'PENDING',
+        },
+      ],
+    });
+    await expect(
+      svc.forceRename({
+        reviewer: { id: 'admin-1', email: 'admin@kalki.test' },
+        historyId: 'h-1',
+        newDisplayName: 'x', // too short → blocked by validation
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('writes the new name, closes the flagged row, leaves audit trail', async () => {
+    const { svc, prisma } = makeService({
+      user: { ...BASE_USER, displayName: 'Sketchy' },
+      history: [
+        {
+          id: 'h-1',
+          userId: 'u-1',
+          field: 'displayName',
+          before: null,
+          after: 'Sketchy',
+          changedAt: new Date(),
+          flagReason: 'impersonation:brand',
+          reviewAction: 'PENDING',
+        },
+      ],
+    });
+    const res = await svc.forceRename({
+      reviewer: { id: 'admin-1', email: 'admin@kalki.test' },
+      historyId: 'h-1',
+      newDisplayName: 'New Friendly Name',
+      notes: 'too close to brand',
+    });
+    expect(res.newDisplayName).toBe('New Friendly Name');
+
+    const original = prisma._history().find((h) => h.id === 'h-1')!;
+    expect(original.reviewAction).toBe('FORCED_RENAME');
+    expect(original.reviewedBy).toBe('admin-1');
+
+    const newest = prisma._history().slice(-1)[0];
+    expect(newest.after).toBe('New Friendly Name');
+    expect(newest.flagReason).toBe('admin_forced_rename');
+
+    expect(prisma._users.get('u-1')!.displayName).toBe('New Friendly Name');
+  });
+});
+
+describe('detectSuspiciousDisplayName (re-export)', () => {
+  it('catches admin- prefix', () => {
+    // Imported inline so we don't add an import block at the top of
+    // the file (keeping the existing top imports minimal).
+    const { detectSuspiciousDisplayName } = require('./profile-validation');
+    expect(detectSuspiciousDisplayName('admin-bot')).toBe('impersonation:admin-prefix');
+  });
+
+  it('catches Cyrillic homoglyph in Latin name', () => {
+    const { detectSuspiciousDisplayName } = require('./profile-validation');
+    // 'аlice' uses Cyrillic а (U+0430) instead of Latin a (U+0061).
+    expect(detectSuspiciousDisplayName('аlice')).toMatch(/homoglyph/);
+  });
+
+  it('returns undefined for clean names', () => {
+    const { detectSuspiciousDisplayName } = require('./profile-validation');
+    expect(detectSuspiciousDisplayName('Alice Doe')).toBeUndefined();
   });
 });

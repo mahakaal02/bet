@@ -7,7 +7,26 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { validateDisplayName } from './profile-validation';
+import { detectSuspiciousDisplayName, validateDisplayName } from './profile-validation';
+import { ProfileReviewAction } from '@prisma/client';
+
+/** Joined row shape for the admin moderation queue. */
+export interface ProfileQueueRow {
+  historyId: string;
+  userId: string;
+  username: string;
+  email: string | null;
+  currentDisplayName: string | null;
+  field: string;
+  before: string | null;
+  after: string | null;
+  flagReason: string | null;
+  reviewAction: ProfileReviewAction;
+  reviewedAt: Date | null;
+  reviewedBy: string | null;
+  reviewNotes: string | null;
+  changedAt: Date;
+}
 
 /**
  * Profile customisation (Roadmap §F-USER-5).
@@ -106,6 +125,12 @@ export class ProfileService {
     // found + fixed in PR-ADDRESS-1.
     const previousName = user.displayName;
 
+    // PR-PROFILE-2: borderline-suspicious names get inserted with
+    // reviewAction=PENDING so the admin queue surfaces them. The user
+    // experience is unchanged — the name is accepted; the moderator
+    // sees it after the fact and can KEPT_AS_IS or FORCED_RENAME.
+    const flagReason = detectSuspiciousDisplayName(trimmed);
+
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: userId },
@@ -117,6 +142,8 @@ export class ProfileService {
           field: 'displayName',
           before: previousName,
           after: trimmed,
+          flagReason: flagReason ?? null,
+          reviewAction: flagReason ? ProfileReviewAction.PENDING : ProfileReviewAction.NONE,
         },
       }),
     ]);
@@ -176,6 +203,143 @@ export class ProfileService {
       avatarKey: trimmed,
       avatarUrl: `/uploads/${trimmed}`,
     };
+  }
+
+  // ─── Admin moderation queue (PR-PROFILE-2) ────────────────────────
+
+  /**
+   * Paginated list of profile-history rows for the admin moderation
+   * queue. Filterable by reviewAction (default PENDING).
+   *
+   * The returned shape carries the user's identity + current
+   * displayName so the queue page can show "@alice changed to
+   * 'Kalki Official' — does this need a forced rename?" without an
+   * extra round-trip per row.
+   */
+  async listModerationQueue(input: {
+    action?: 'PENDING' | 'KEPT_AS_IS' | 'FORCED_RENAME' | 'NONE';
+    cursor?: string;
+    limit?: number;
+  }): Promise<{ items: ProfileQueueRow[]; nextCursor: string | null }> {
+    const take = Math.min(50, Math.max(1, input.limit ?? 25));
+    const action = (input.action ?? 'PENDING') as ProfileReviewAction;
+    const rows = await this.prisma.userProfileHistory.findMany({
+      where: { reviewAction: action },
+      orderBy: [{ changedAt: 'desc' }, { id: 'desc' }],
+      take: take + 1,
+      ...(input.cursor ? { skip: 1, cursor: { id: input.cursor } } : {}),
+      include: {
+        user: { select: { id: true, username: true, email: true, displayName: true } },
+      },
+    });
+    const items: ProfileQueueRow[] = rows.slice(0, take).map((r) => ({
+      historyId: r.id,
+      userId: r.user.id,
+      username: r.user.username,
+      email: r.user.email,
+      currentDisplayName: r.user.displayName,
+      field: r.field,
+      before: r.before,
+      after: r.after,
+      flagReason: r.flagReason,
+      reviewAction: r.reviewAction,
+      reviewedAt: r.reviewedAt,
+      reviewedBy: r.reviewedBy,
+      reviewNotes: r.reviewNotes,
+      changedAt: r.changedAt,
+    }));
+    const nextCursor = rows.length > take ? rows[take].id : null;
+    return { items, nextCursor };
+  }
+
+  /**
+   * Mark a flagged row as "looked at, it's fine". Just flips state
+   * and writes the reviewer's id + notes. No change to the user's
+   * displayName.
+   */
+  async keepAsIs(input: {
+    reviewer: { id: string; email: string };
+    historyId: string;
+    notes?: string;
+  }): Promise<{ historyId: string; reviewAction: ProfileReviewAction }> {
+    const row = await this.requireHistory(input.historyId);
+    await this.prisma.userProfileHistory.update({
+      where: { id: input.historyId },
+      data: {
+        reviewAction: ProfileReviewAction.KEPT_AS_IS,
+        reviewedAt: new Date(),
+        reviewedBy: input.reviewer.id,
+        reviewNotes: input.notes ?? null,
+      },
+    });
+    return { historyId: row.id, reviewAction: ProfileReviewAction.KEPT_AS_IS };
+  }
+
+  /**
+   * Forced rename — admin overrides the user's chosen name. We write
+   * a NEW UserProfileHistory row (so the audit trail is intact) AND
+   * close out the original flagged row by marking it FORCED_RENAME.
+   *
+   * Bypasses the 30-day rename cooldown that would normally apply
+   * to the user themselves — admin actions aren't gated by user
+   * cooldowns.
+   */
+  async forceRename(input: {
+    reviewer: { id: string; email: string };
+    historyId: string;
+    newDisplayName: string;
+    notes?: string;
+  }): Promise<{ historyId: string; newDisplayName: string }> {
+    const validation = validateDisplayName(input.newDisplayName);
+    if (!validation.ok) {
+      throw new BadRequestException(`forced rename rejected: ${validation.reason}`);
+    }
+    const trimmed = input.newDisplayName.trim();
+    const row = await this.requireHistory(input.historyId);
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: row.userId },
+      select: { displayName: true },
+    });
+    if (!user) throw new NotFoundException('user not found');
+    const previousName = user.displayName;
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: row.userId },
+        data: { displayName: trimmed },
+      }),
+      this.prisma.userProfileHistory.create({
+        data: {
+          userId: row.userId,
+          field: 'displayName',
+          before: previousName,
+          after: trimmed,
+          flagReason: 'admin_forced_rename',
+          reviewAction: ProfileReviewAction.NONE,
+          reviewedBy: input.reviewer.id,
+          reviewedAt: new Date(),
+          reviewNotes: input.notes ?? null,
+        },
+      }),
+      this.prisma.userProfileHistory.update({
+        where: { id: input.historyId },
+        data: {
+          reviewAction: ProfileReviewAction.FORCED_RENAME,
+          reviewedAt: new Date(),
+          reviewedBy: input.reviewer.id,
+          reviewNotes: input.notes ?? null,
+        },
+      }),
+    ]);
+
+    return { historyId: input.historyId, newDisplayName: trimmed };
+  }
+
+  private async requireHistory(id: string) {
+    const row = await this.prisma.userProfileHistory.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('history row not found');
+    return row;
   }
 
   /**

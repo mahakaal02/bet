@@ -76,6 +76,51 @@ const PROFANITY_PATTERNS = [
 export interface DisplayNameValidationResult {
   ok: boolean;
   reason?: string;
+  // PR-PROFILE-2: even when ok=true, a borderline name lands in the
+  // moderation queue. Block-hard takes priority — if `ok` is false we
+  // don't bother surfacing a flag (the name is rejected outright).
+  flagReason?: string;
+}
+
+/**
+ * Patterns that don't quite warrant a hard block (the user might be
+ * legitimately named "amitabh" or have a creative handle) but that
+ * we want eyeballs on. Substring match (case-folded) — the per-
+ * pattern audit trail (`flagReason` on the History row) tells the
+ * moderator why this one landed.
+ *
+ * Tuned for high recall over precision — the queue is cheap, false
+ * positives are corrected by a "keep as is" click.
+ */
+const SUSPICIOUS_PATTERNS: readonly { match: string; reason: string }[] = [
+  // Common impersonation prefixes/suffixes.
+  { match: 'official', reason: 'impersonation:official-suffix' },
+  { match: 'admin_', reason: 'impersonation:admin-prefix' },
+  { match: 'admin-', reason: 'impersonation:admin-prefix' },
+  { match: 'support', reason: 'impersonation:support-prefix' },
+  { match: 'kalki', reason: 'impersonation:brand' },
+  { match: 'mod_', reason: 'impersonation:mod-prefix' },
+  // Homoglyph indicators — Cyrillic 'а', Greek 'ο', etc. mixed into
+  // an otherwise-Latin name typically signals a deliberate dodge.
+  { match: 'а', reason: 'homoglyph:cyrillic-a' },
+  { match: 'о', reason: 'homoglyph:cyrillic-o' },
+  { match: 'ο', reason: 'homoglyph:greek-o' },
+  // Public-figure name fragments worth a glance (extend cautiously).
+  { match: 'modi', reason: 'public-figure:politician' },
+  { match: 'gandhi', reason: 'public-figure:politician' },
+];
+
+/**
+ * Test a display name for borderline-suspicious substrings. Returns
+ * the first matching flag reason (or undefined if clean). Exposed
+ * for the profile.service to populate the moderation queue row.
+ */
+export function detectSuspiciousDisplayName(input: string): string | undefined {
+  const lower = (input ?? '').toLowerCase();
+  for (const p of SUSPICIOUS_PATTERNS) {
+    if (lower.includes(p.match)) return p.reason;
+  }
+  return undefined;
 }
 
 export function validateDisplayName(input: string): DisplayNameValidationResult {

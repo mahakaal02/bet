@@ -931,16 +931,39 @@ model SupportAttachment {
 
 // ───── Profile history (Roadmap F-USER-5 audit trail) ───────────────
 
+// PR-PROFILE-2 review states. NONE = automated change with no flag;
+// PENDING = profanity/reserved-name borderline match awaiting admin
+// eyes; KEPT_AS_IS = admin reviewed + said it's fine; FORCED_RENAME =
+// admin renamed the user (handled by an entry in this very table
+// where `field = "displayName"` and the admin is the author).
+enum ProfileReviewAction {
+  NONE
+  PENDING
+  KEPT_AS_IS
+  FORCED_RENAME
+}
+
 model UserProfileHistory {
-  id        String   @id @default(cuid())
-  userId    String
-  field     String                                                  // "displayName", "avatarKey"
-  before    String?
-  after     String?
-  changedAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String              @id @default(cuid())
+  userId       String
+  field        String                                                  // "displayName", "avatarKey"
+  before       String?
+  after        String?
+  changedAt    DateTime            @default(now())
+  // PR-PROFILE-2: moderation surface. flagReason is human-readable
+  // ("profanity:hindi-roman", "reserved:admin"); reviewAction is the
+  // disposition once an admin looks at it.
+  flagReason   String?
+  reviewAction ProfileReviewAction @default(NONE)
+  reviewedAt   DateTime?
+  reviewedBy   String?
+  reviewNotes  String?
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, changedAt])
+  // Cheap lookup for the queue page: "all unreviewed flagged rows,
+  // newest first."
+  @@index([reviewAction, changedAt])
 }
 
 // ───── Auth — password reset, 2FA, email change, account deletion ──
