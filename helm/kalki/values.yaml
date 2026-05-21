@@ -91,6 +91,20 @@ backend:
   prismaSeed: true
   databaseUrl: "" # if blank, built from postgres values
   env: {}
+  # PR-ADMIN-COOKIE-AUTH follow-up: when the admin SPA uses HttpOnly
+  # cookies for auth (it does, post-PR-71), the backend must respond
+  # to credentialed CORS preflights with a SPECIFIC origin — browsers
+  # forbid `Access-Control-Allow-Origin: *` together with `credentials:
+  # include`. The backend code reads CORS_ALLOWED_ORIGINS
+  # (comma-separated) and switches to the credentialed CORS config
+  # when set; empty/unset falls back to the wildcard for
+  # backwards-compat with mobile + bearer-only clients.
+  #
+  # Set this in your prod overlay to the admin SPA's origin, e.g.
+  # `https://kalki-admin.cloud.podstack.ai`. Add additional comma-
+  # separated origins (auctions, bet, aviator domains) if you ever
+  # serve credentialed cross-origin requests from them too.
+  corsAllowedOrigins: ""
   resources:
     requests: {cpu: 100m, memory: 256Mi}
     limits: {cpu: 1000m, memory: 1Gi}
