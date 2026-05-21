@@ -18,6 +18,10 @@ import { BetWalletService } from '../bet-wallet/bet-wallet.service';
 import { computeCrashMultiplier, multiplierAt } from './fairness';
 import { FairnessStore } from './fairness-store';
 import { AviatorChatService } from './chat.service';
+import {
+  CrashDistributionService,
+  GenerateResult,
+} from './crash/crash-distribution.service';
 
 type Phase = 'BETTING' | 'RUNNING' | 'CRASHED';
 
@@ -45,6 +49,14 @@ interface CurrentRoundState {
   nonce: number;
   crashMultiplier: number;
   startedAt: number;
+  /**
+   * Result of the heavy-tail engine when it produced this round; `null`
+   * when the round was decided by the legacy `computeCrashMultiplier`
+   * (engine disabled, or forced override / max-payout clip in play).
+   * Used by `crashRound` to feed the round's realised outcome back
+   * into the `ExposureTracker` EMA.
+   */
+  engine: GenerateResult | null;
 }
 
 interface RecentWinner {
@@ -79,6 +91,7 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly fairness: FairnessStore,
     private readonly chat: AviatorChatService,
     private readonly betWallet: BetWalletService,
+    private readonly crashEngine: CrashDistributionService,
   ) {}
 
   async onApplicationBootstrap() {
@@ -192,7 +205,23 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
 
     let roundNumber = this.lastRoundNumber + 1;
     const nonce = this.roundsUsedInCurrentSeed + 1;
-    const naturalCrash = computeCrashMultiplier(seed.serverSeed, seed.clientSeed, nonce);
+
+    // Heavy-tail engine has first refusal. When enabled via
+    // `aviator.crash.engine=heavytail`, it reads the same seed batch
+    // (different HMAC domain → no cryptographic overlap) and produces
+    // a multiplier whose distribution matches the configured RTP /
+    // bucket targets. When disabled, returns null and we fall back to
+    // the legacy `computeCrashMultiplier`. Refreshing config every
+    // round picks up admin edits without bouncing the pod.
+    await this.crashEngine.refreshConfig();
+    const engineResult = this.crashEngine.generate({
+      serverSeed: seed.serverSeed,
+      clientSeed: seed.clientSeed,
+      nonce,
+    });
+    const naturalCrash =
+      engineResult?.multiplier ??
+      computeCrashMultiplier(seed.serverSeed, seed.clientSeed, nonce);
 
     // Admin knobs (see model `AviatorSettings`):
     //   1. `forcedNextPayout` — one-shot override. Consume in a single
@@ -212,6 +241,24 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
     }
     // Never publish < 1.00 — the engine's lower bound is 1.00 (insta-crash).
     if (crashMultiplier < 1) crashMultiplier = 1;
+
+    // Structured audit log: one line per round capturing every input
+    // an auditor needs to reproduce the crash multiplier from cold.
+    // No PII; safe to ship to a centralised log store.
+    if (engineResult) {
+      this.logger.log(
+        `crash-engine round=${roundNumber} nonce=${nonce} ` +
+          `seedHash=${seed.serverSeedHash.slice(0, 12)} ` +
+          `mode=${engineResult.mode} ` +
+          `exposureFactor=${engineResult.exposureFactor.toFixed(4)} ` +
+          `rtp=${engineResult.targetRtp.toFixed(4)} ` +
+          `paramsHash=${engineResult.paramsHash} ` +
+          `naturalCrash=${engineResult.multiplier.toFixed(2)} ` +
+          `published=${crashMultiplier.toFixed(2)}` +
+          (forced !== null ? ` forced=${forced}` : '') +
+          (ceiling !== null ? ` ceiling=${ceiling}` : ''),
+      );
+    }
 
     let row;
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -250,6 +297,7 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
       nonce,
       crashMultiplier,
       startedAt: 0,
+      engine: engineResult,
     };
     this.bettingClosesAt = Date.now() + BETTING_MS;
 
@@ -319,6 +367,27 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
     await this.prisma.aviatorRound.update({
       where: { id: this.current.roundId },
       data: { status: 'CRASHED', crashedAt },
+    });
+
+    // Feed realised outcome back into the crash-engine's EMA tracker
+    // BEFORE clearing `this.bets`. Total payout sums each cashed-out
+    // bet at its locked-in multiplier; bets that didn't cash out
+    // contribute 0 (their stake is house revenue). This is the same
+    // formula `cashoutInternal` uses when crediting the wallet, so
+    // the rolling RTP the tracker reports matches the realised
+    // house P&L.
+    let totalStake = 0;
+    let totalPayout = 0;
+    for (const bet of this.bets.values()) {
+      totalStake += bet.amount;
+      if (bet.cashedOutAt !== null) {
+        totalPayout += Math.floor(bet.amount * bet.cashedOutAt);
+      }
+    }
+    this.crashEngine.observeRoundOutcome({
+      stake: totalStake,
+      payout: totalPayout,
+      bettors: this.bets.size,
     });
 
     this.io.emit('GAME_CRASH', {

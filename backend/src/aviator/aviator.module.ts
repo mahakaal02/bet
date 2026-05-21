@@ -5,11 +5,22 @@ import { AviatorController } from './aviator.controller';
 import { AviatorService } from './aviator.service';
 import { FairnessStore } from './fairness-store';
 import { AviatorChatService } from './chat.service';
+import { CrashDistributionService } from './crash/crash-distribution.service';
 
 @Module({
   imports: [AuthModule, BetWalletModule],
   controllers: [AviatorController],
-  providers: [AviatorService, FairnessStore, AviatorChatService],
-  exports: [AviatorService, FairnessStore, AviatorChatService],
+  providers: [
+    AviatorService,
+    FairnessStore,
+    AviatorChatService,
+    CrashDistributionService,
+  ],
+  exports: [
+    AviatorService,
+    FairnessStore,
+    AviatorChatService,
+    CrashDistributionService,
+  ],
 })
 export class AviatorModule {}
