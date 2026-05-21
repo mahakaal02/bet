@@ -125,15 +125,15 @@ spec:
           securityContext:
             runAsUser: 0
             runAsGroup: 0
-          # Invoke ts-node directly (not `prisma db seed`) so this
-          # works even on backend image builds that predate the
-          # `"prisma": { "seed": ... }` package.json entry — avoids
-          # a chicken-and-egg between this chart change and the image
-          # rebuild Flux schedules right after it. `ts-node` ships in
-          # devDependencies which the Dockerfile keeps in
-          # `node_modules` (no production prune step), so `npx` finds
-          # it.
-          command: ["sh","-c","npx --no-install ts-node prisma/seed.ts"]
+          # Invoke ts-node via Node's `-r ts-node/register` hook, NOT
+          # `npx ts-node` — on Node 20 the ts-node CLI hands off into
+          # ESM resolution and dies with
+          # `ERR_UNKNOWN_FILE_EXTENSION: Unknown file extension ".ts"`.
+          # The register hook keeps the process in CommonJS mode,
+          # which matches `tsconfig.json` (`module: "commonjs"`).
+          # `ts-node` itself still ships in `node_modules` (devDeps
+          # are not pruned in the Dockerfile's runner stage).
+          command: ["sh","-c","node -r ts-node/register prisma/seed.ts"]
           env:
             - name: DATABASE_URL
               value: {{ include "kalki.databaseUrl" (dict "dbname" "uniquebid" "override" .Values.backend.databaseUrl "ctx" .) | quote }}
