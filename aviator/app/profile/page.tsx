@@ -13,13 +13,21 @@ import { useGame } from '@/lib/store';
  *
  *   - Username + (best-effort) email pulled from the cached user blob.
  *   - Wallet balance from the live game store.
- *   - Sign-out triggers the same chain the other apps use: clear the
- *     Aviator localStorage here, then redirect through Bet's logout
- *     hop, then back to the auctions /login.
+ *   - Sign-out triggers the same chain the other apps use: clear
+ *     Aviator localStorage here, redirect through Bet's logout hop,
+ *     then through Auctions' sso-logout hop, then land on the
+ *     auctions /login.
  *
  * The chain is initiated CLIENT-side because Aviator's session lives
  * in localStorage — only browser JS can clear it. After cleanup we
- * hit Bet's SSO logout (which clears NextAuth) → auctions /login.
+ * hit Bet's SSO logout (clears NextAuth), then auctions' SSO logout
+ * (clears `kalki_token`), then land on /login.
+ *
+ * Why the auctions hop is required: auctions /login redirects already-
+ * signed-in users back to the hub `/`. Without clearing the auctions
+ * cookie along the way, the chain ends with the user bounced right
+ * back to the Kalki hub (= "logout doesn't work" from the user's
+ * perspective).
  */
 const EXCHANGE_BASE =
   process.env.NEXT_PUBLIC_EXCHANGE_URL ?? 'http://localhost:3100';
@@ -49,11 +57,18 @@ export default function AviatorProfilePage() {
     setBusy(true);
     // 1. Clear Aviator's local storage *here* before kicking off the
     //    chain — if the user mashes back-button before the chain
-    //    completes, at least Aviator is signed out.
+    //    completes, at least Aviator is signed out locally.
     clearAuth();
-    // 2. Forward to Bet's signout, which forwards to auctions /login.
+    // 2. Build the chain BOTTOM-UP so each hop encodes the next:
+    //      Bet sso-logout → Auctions sso-logout → Auctions /login
+    //    The browser follows the 303 chain in order, clearing each
+    //    cookie before landing on /login. Without the auctions hop,
+    //    /login sees the live `kalki_token` cookie and bounces to
+    //    `/` (the Kalki hub) — the symptom users reported as
+    //    "clicking logout returns to the hub".
     const finalUrl = `${AUCTIONS_BASE.replace(/\/$/, '')}/login`;
-    const betStep = `${EXCHANGE_BASE.replace(/\/$/, '')}/api/auth/sso-logout?next=${encodeURIComponent(finalUrl)}`;
+    const auctionsStep = `${AUCTIONS_BASE.replace(/\/$/, '')}/api/auth/sso-logout?next=${encodeURIComponent(finalUrl)}`;
+    const betStep = `${EXCHANGE_BASE.replace(/\/$/, '')}/api/auth/sso-logout?next=${encodeURIComponent(auctionsStep)}`;
     window.location.replace(betStep);
   }
 
