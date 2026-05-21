@@ -5,9 +5,14 @@
 -- the FK constraint un-created at the DB layer. ORDER-1 now consumes
 -- the relation, so we lock down referential integrity here.
 --
--- IF NOT EXISTS guards make this safe on any environment where some
--- earlier hand-rolled migration already added the constraint.
+-- Postgres does not support `ADD CONSTRAINT IF NOT EXISTS`, so we wrap
+-- the ALTER in a PL/pgSQL block and swallow `duplicate_object` to stay
+-- idempotent on environments where an earlier hand-rolled migration
+-- already created the constraint.
 
-ALTER TABLE "Order"
-  ADD CONSTRAINT IF NOT EXISTS "Order_auctionId_fkey"
-  FOREIGN KEY ("auctionId") REFERENCES "Auction"("id") ON DELETE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "Order"
+    ADD CONSTRAINT "Order_auctionId_fkey"
+    FOREIGN KEY ("auctionId") REFERENCES "Auction"("id") ON DELETE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
