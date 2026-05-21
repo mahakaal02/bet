@@ -117,9 +117,19 @@ backend:
   # only honour it when the SPA actually runs at that hostname) and
   # keeps the chart self-contained.
   #
-  # Add comma-separated origins (auctions, bet, aviator domains) if
-  # you ever serve credentialed cross-origin requests from them too.
-  corsAllowedOrigins: "https://kalki-admin.cloud.podstack.ai"
+  # All four SPA origins included by default. The admin SPA is the
+  # one that NEEDS credentialed CORS (httpOnly cookie auth), but the
+  # other three game frontends also fetch the backend from the
+  # browser (Aviator's `/wallet/balance`, Auctions' watchlist polls,
+  # Bet's wallet refresh). With only `kalki-admin` in this list, the
+  # browser rejected those cross-origin requests with
+  # `Access-Control-Allow-Origin` errors → wallet appeared
+  # disconnected in Aviator, watchlist refresh failed in Auctions,
+  # etc.
+  #
+  # Order doesn't matter — the cors middleware does an O(n) match.
+  # Extending: append `,https://<your-origin>` to the string below.
+  corsAllowedOrigins: "https://kalki-admin.cloud.podstack.ai,https://kalki-aviator.cloud.podstack.ai,https://kalki-auctions.cloud.podstack.ai,https://kalki-bet.cloud.podstack.ai"
   resources:
     requests: {cpu: 100m, memory: 256Mi}
     limits: {cpu: 1000m, memory: 1Gi}

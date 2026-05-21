@@ -171,7 +171,7 @@ spec:
             # silently fall back to wildcard CORS — and the admin
             # SPA cookie-auth flow would break again.
             - name: CORS_ALLOWED_ORIGINS
-              value: {{ .Values.backend.corsAllowedOrigins | default "https://kalki-admin.cloud.podstack.ai" | quote }}
+              value: {{ .Values.backend.corsAllowedOrigins | default "https://kalki-admin.cloud.podstack.ai,https://kalki-aviator.cloud.podstack.ai,https://kalki-auctions.cloud.podstack.ai,https://kalki-bet.cloud.podstack.ai" | quote }}
             {{- if .Values.clamav.enabled }}
             # Activate the ClamAV daemon scanner (PR-INFRA-CLAMAV-1).
             # Backend reaches `clamd` via the Service in this namespace;
