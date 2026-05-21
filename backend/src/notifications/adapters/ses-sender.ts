@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 /**
@@ -41,7 +41,13 @@ export class SesSender {
 
   constructor(
     config: ConfigService,
-    fetchImpl?: FetchImpl,
+    // `FetchImpl` is a TypeScript function-type alias — at runtime
+    // TS emits the decorator metadata as the bare `Function`
+    // constructor, which Nest then tries (and fails) to resolve as
+    // a provider. `@Optional()` tells the DI container to pass
+    // `undefined` when no provider is registered — preserving the
+    // test-time injection seam without breaking prod bootstrap.
+    @Optional() fetchImpl?: FetchImpl,
   ) {
     this.region = config.get<string>('AWS_REGION') ?? 'ap-south-1';
     this.accessKey = config.get<string>('AWS_ACCESS_KEY_ID') ?? '';
