@@ -183,7 +183,7 @@ auctions:
     limits: {cpu: 500m, memory: 512Mi}
 aviator:
   image: kalki-aviator
-  imageTag: 20260521T174413Z-4364773 # {"$imagepolicy": "flux-system:kalki-aviator:tag"}
+  imageTag: 20260521T180210Z-f15d534 # {"$imagepolicy": "flux-system:kalki-aviator:tag"}
   port: 3000
   replicas: 1
   resources:
