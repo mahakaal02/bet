@@ -100,11 +100,18 @@ backend:
   # when set; empty/unset falls back to the wildcard for
   # backwards-compat with mobile + bearer-only clients.
   #
-  # Set this in your prod overlay to the admin SPA's origin, e.g.
-  # `https://kalki-admin.cloud.podstack.ai`. Add additional comma-
-  # separated origins (auctions, bet, aviator domains) if you ever
-  # serve credentialed cross-origin requests from them too.
-  corsAllowedOrigins: ""
+  # Baked into the chart defaults (was previously an empty string,
+  # expecting the cluster overlay Secret to set it). Moved here so
+  # the prod kalki cluster gets the value via plain Flux git-sync —
+  # the in-cluster `kalki-helm-values` Secret doesn't need a manual
+  # kubectl edit to flip CORS modes. Non-prod clusters running the
+  # same chart inherit this origin too, which is harmless (browsers
+  # only honour it when the SPA actually runs at that hostname) and
+  # keeps the chart self-contained.
+  #
+  # Add comma-separated origins (auctions, bet, aviator domains) if
+  # you ever serve credentialed cross-origin requests from them too.
+  corsAllowedOrigins: "https://kalki-admin.cloud.podstack.ai"
   resources:
     requests: {cpu: 100m, memory: 256Mi}
     limits: {cpu: 1000m, memory: 1Gi}
