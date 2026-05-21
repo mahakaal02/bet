@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { EmailSuppressionReason, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -58,11 +58,18 @@ export type SesNotification = BounceMessage | ComplaintMessage | { notificationT
 @Injectable()
 export class EmailWebhookService {
   private readonly logger = new Logger(EmailWebhookService.name);
+  private readonly fetchImpl: typeof globalThis.fetch;
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly fetchImpl: typeof globalThis.fetch = globalThis.fetch,
-  ) {}
+    // `typeof globalThis.fetch` emits `Function` as decorator metadata,
+    // which Nest tries (and fails) to resolve as a provider. `@Optional()`
+    // tells the DI container to pass `undefined` when no provider exists —
+    // we fall back to the global `fetch` at runtime. Mirrors `SesSender`.
+    @Optional() fetchImpl?: typeof globalThis.fetch,
+  ) {
+    this.fetchImpl = fetchImpl ?? globalThis.fetch;
+  }
 
   /**
    * Handle one SNS POST. Returns a debug summary so the controller
