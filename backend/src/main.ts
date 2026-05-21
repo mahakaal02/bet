@@ -58,10 +58,12 @@ async function bootstrapApi(): Promise<void> {
     app.enableCors({
       origin: allowedOrigins,
       credentials: true,
-      // `*` for allowedHeaders is reflection-style; the cors
-      // middleware echoes whatever the preflight requested,
-      // which is what we want as new headers get added.
-      allowedHeaders: '*',
+      // Omit `allowedHeaders` so the cors middleware echoes
+      // `Access-Control-Request-Headers` back verbatim. The literal
+      // `'*'` does NOT act as a wildcard when `credentials: true` —
+      // per the CORS spec it's treated as the literal header name,
+      // which causes browsers to reject preflights for `authorization`
+      // / `content-type`.
       exposedHeaders: ['Set-Cookie'],
     });
   } else {
