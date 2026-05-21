@@ -37,6 +37,18 @@ metadata:
     {{- include "kalki.labels" (dict "name" "backend" "ctx" .) | nindent 4 }}
 spec:
   replicas: {{ .Values.backend.replicas }}
+  # `Recreate` (not default `RollingUpdate`) because the uploads PVC
+  # is ReadWriteOnce (Longhorn). A rolling update would schedule a
+  # surge pod alongside the running one, where it hangs on
+  # `Multi-Attach error` for the duration of Helm's 5m wait — three
+  # consecutive timeouts then flip the HelmRelease to
+  # `Stalled: RetriesExceeded` and image bumps stop rolling out.
+  # `Recreate` kills the old pod first, releases the volume, then
+  # starts the new one. Brief downtime per rollout is acceptable for
+  # this single-replica workload until leader election lets us scale
+  # the backend horizontally.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: backend
