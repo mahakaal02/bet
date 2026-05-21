@@ -7,6 +7,47 @@ interface AviatorSettings {
   updatedAt: string;
 }
 
+type EngineKind = 'legacy' | 'heavytail';
+type CrashMode = 'balanced' | 'fast_loss' | 'streamer';
+
+interface BucketProbability {
+  label: string;
+  probability: number;
+}
+
+interface CrashEngineSnapshot {
+  engineEnabled: boolean;
+  adaptiveEnabled: boolean;
+  baseMode: 'BALANCED' | 'FAST_LOSS' | 'STREAMER';
+  activeMode: 'BALANCED' | 'FAST_LOSS' | 'STREAMER';
+  exposureFactor: number;
+  targetRtp: number;
+  analyticRtpAtRef: number;
+  rtpBands: {
+    configured: number;
+    atRef: number;
+    atLow: number;
+    atHigh: number;
+    pInsta: number;
+  };
+  params: {
+    rtp: number;
+    bias: number;
+    biasUpper: number;
+    k: number;
+    cRef: number;
+    maxMultiplier: number;
+  };
+  exposure: {
+    smoothedStake: number;
+    smoothedPayout: number;
+    smoothedBettors: number;
+    rollingRtp: number;
+    roundsObserved: number;
+  };
+  buckets: BucketProbability[];
+}
+
 /**
  * Admin knobs for Aviator. Two concerns:
  *
@@ -40,9 +81,26 @@ export default function AviatorControls() {
   const [initialMax, setInitialMax] = useState('');
   const [initialForced, setInitialForced] = useState('');
 
+  // Crash-engine card state — separate save buttons + dirty tracking
+  // so a half-edit of the engine knobs doesn't get clobbered when the
+  // user saves max-payout.
+  const [engineSnap, setEngineSnap] = useState<CrashEngineSnapshot | null>(null);
+  const [engineKind, setEngineKind] = useState<EngineKind>('legacy');
+  const [engineMode, setEngineMode] = useState<CrashMode>('balanced');
+  const [engineRtp, setEngineRtp] = useState('0.96');
+  const [adaptiveEnabled, setAdaptiveEnabled] = useState(true);
+  const [initEngineKind, setInitEngineKind] = useState<EngineKind>('legacy');
+  const [initEngineMode, setInitEngineMode] = useState<CrashMode>('balanced');
+  const [initEngineRtp, setInitEngineRtp] = useState('0.96');
+  const [initAdaptive, setInitAdaptive] = useState(true);
+  const [savingEngine, setSavingEngine] = useState(false);
+
   async function refresh() {
     try {
-      const data = await api.get<AviatorSettings>('/admin/aviator/settings');
+      const [data, engine] = await Promise.all([
+        api.get<AviatorSettings>('/admin/aviator/settings'),
+        api.get<CrashEngineSnapshot>('/admin/aviator/crash-engine'),
+      ]);
       const mp = data.maxPayout ?? '';
       const fp = data.forcedNextPayout ?? '';
       setMaxPayout(mp);
@@ -50,6 +108,19 @@ export default function AviatorControls() {
       setInitialMax(mp);
       setInitialForced(fp);
       if (fp) setAdvanced(true);
+
+      setEngineSnap(engine);
+      const kind: EngineKind = engine.engineEnabled ? 'heavytail' : 'legacy';
+      const mode = engine.baseMode.toLowerCase() as CrashMode;
+      const rtp = engine.targetRtp.toString();
+      setEngineKind(kind);
+      setEngineMode(mode);
+      setEngineRtp(rtp);
+      setAdaptiveEnabled(engine.adaptiveEnabled);
+      setInitEngineKind(kind);
+      setInitEngineMode(mode);
+      setInitEngineRtp(rtp);
+      setInitAdaptive(engine.adaptiveEnabled);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'failed to load settings');
     } finally {
@@ -60,6 +131,43 @@ export default function AviatorControls() {
   useEffect(() => {
     refresh();
   }, []);
+
+  async function saveEngine(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSaved(null);
+
+    const rtpNum = Number(engineRtp);
+    if (!Number.isFinite(rtpNum) || rtpNum < 0.5 || rtpNum > 0.999) {
+      setError('RTP must be a number in [0.5, 0.999]');
+      return;
+    }
+
+    // Confirm when enabling — this is a payout-shaping change.
+    if (engineKind === 'heavytail' && initEngineKind === 'legacy') {
+      const ok = window.confirm(
+        `Switch to the heavy-tail crash engine for all future rounds?\n\nThis changes the multiplier distribution. The legacy engine remains the fallback — flip back any time. RTP at C_ref will be locked to ${rtpNum}.`,
+      );
+      if (!ok) return;
+    }
+
+    setSavingEngine(true);
+    try {
+      const body: Record<string, unknown> = {};
+      if (engineKind !== initEngineKind) body.engine = engineKind;
+      if (engineRtp !== initEngineRtp) body.rtp = rtpNum;
+      if (engineMode !== initEngineMode) body.mode = engineMode;
+      if (adaptiveEnabled !== initAdaptive) body.adaptiveEnabled = adaptiveEnabled;
+      const next = await api.patch<CrashEngineSnapshot>('/admin/aviator/crash-engine', body);
+      setEngineSnap(next);
+      setSaved('Crash-engine config saved. Effective on the next round.');
+      await refresh();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'save failed');
+    } finally {
+      setSavingEngine(false);
+    }
+  }
 
   async function saveMax(e: FormEvent) {
     e.preventDefault();
@@ -111,12 +219,18 @@ export default function AviatorControls() {
 
   const maxDirty = maxPayout.trim() !== initialMax.trim();
   const forcedDirty = forced.trim() !== initialForced.trim();
+  const engineDirty =
+    engineKind !== initEngineKind ||
+    engineMode !== initEngineMode ||
+    engineRtp.trim() !== initEngineRtp.trim() ||
+    adaptiveEnabled !== initAdaptive;
 
   return (
     <div className="max-w-2xl">
       <h1 className="text-2xl font-semibold mb-1">Aviator controls</h1>
       <p className="text-sm text-slate-500 mb-6">
-        Tune the Aviator crash ceiling and queue one-off forced payouts.
+        Tune the crash distribution engine, set a global payout ceiling, and
+        queue one-off forced payouts.
       </p>
 
       {error && (
@@ -129,6 +243,163 @@ export default function AviatorControls() {
           {saved}
         </div>
       )}
+
+      {/* ── Crash distribution engine ───────────────────────────── */}
+      <form
+        onSubmit={saveEngine}
+        className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 mb-4"
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-800">
+              Crash distribution engine
+            </h2>
+            <p className="text-[12px] text-slate-500">
+              Picks the multiplier each round. Legacy is the existing 1-in-33
+              insta-crash + 1/x tail; heavy-tail adds configurable RTP,
+              volatility modes, and adaptive exposure blending.
+            </p>
+          </div>
+          {engineSnap && (
+            <span
+              className={
+                'inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ' +
+                (engineSnap.engineEnabled
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-slate-200 text-slate-700')
+              }
+            >
+              {engineSnap.engineEnabled ? 'Heavy-tail live' : 'Legacy'}
+            </span>
+          )}
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-3 mt-3">
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Engine</span>
+            <select
+              value={engineKind}
+              onChange={(e) => setEngineKind(e.target.value as EngineKind)}
+              className="mt-1 w-full px-3 py-2 border border-slate-300 rounded bg-white"
+            >
+              <option value="legacy">Legacy (existing 1/x with 1-in-33 edge)</option>
+              <option value="heavytail">Heavy-tail (configurable RTP + modes)</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">
+              Target RTP <span className="text-slate-400">(1 − house edge)</span>
+            </span>
+            <input
+              value={engineRtp}
+              onChange={(e) => setEngineRtp(e.target.value)}
+              disabled={engineKind === 'legacy'}
+              inputMode="decimal"
+              pattern="0?\.\d+"
+              placeholder="0.96"
+              className="mt-1 w-full px-3 py-2 border border-slate-300 rounded disabled:bg-slate-50 disabled:text-slate-400"
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Base mode</span>
+            <select
+              value={engineMode}
+              onChange={(e) => setEngineMode(e.target.value as CrashMode)}
+              disabled={engineKind === 'legacy'}
+              className="mt-1 w-full px-3 py-2 border border-slate-300 rounded bg-white disabled:bg-slate-50 disabled:text-slate-400"
+            >
+              <option value="balanced">Balanced (default)</option>
+              <option value="fast_loss">Fast loss (house-protection)</option>
+              <option value="streamer">Streamer (jackpot moments)</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 self-end pb-2">
+            <input
+              type="checkbox"
+              checked={adaptiveEnabled}
+              onChange={(e) => setAdaptiveEnabled(e.target.checked)}
+              disabled={engineKind === 'legacy'}
+              className="rounded border-slate-300"
+            />
+            <span className="text-sm text-slate-700">
+              Adaptive blending
+              <span className="text-slate-400 ml-1 text-[12px]">
+                (EMA exposure → auto-shift modes)
+              </span>
+            </span>
+          </label>
+        </div>
+
+        {engineSnap?.engineEnabled && (
+          <div className="mt-4 rounded border border-slate-200 bg-slate-50 p-3 text-[12px] text-slate-700">
+            <div className="grid sm:grid-cols-3 gap-3 mb-2">
+              <div>
+                <div className="text-slate-500 uppercase tracking-wide text-[10px]">
+                  Active mode
+                </div>
+                <div className="font-medium">{engineSnap.activeMode}</div>
+              </div>
+              <div>
+                <div className="text-slate-500 uppercase tracking-wide text-[10px]">
+                  Exposure factor
+                </div>
+                <div className="font-medium">
+                  {engineSnap.exposureFactor.toFixed(3)}
+                </div>
+              </div>
+              <div>
+                <div className="text-slate-500 uppercase tracking-wide text-[10px]">
+                  Analytic RTP @ {engineSnap.params.cRef.toFixed(1)}×
+                </div>
+                <div className="font-medium">
+                  {(engineSnap.analyticRtpAtRef * 100).toFixed(2)}%
+                </div>
+              </div>
+            </div>
+            <div>
+              <div className="text-slate-500 uppercase tracking-wide text-[10px] mb-1">
+                Live bucket histogram (analytic)
+              </div>
+              <div className="space-y-1">
+                {engineSnap.buckets.map((b) => (
+                  <div key={b.label} className="flex items-center gap-2">
+                    <span className="inline-block w-20 text-slate-600">{b.label}</span>
+                    <div className="flex-1 h-2 bg-slate-200 rounded overflow-hidden">
+                      <div
+                        className="h-full bg-brand-indigo"
+                        style={{ width: `${Math.min(100, b.probability * 100 * 2)}%` }}
+                      />
+                    </div>
+                    <span className="w-12 text-right tabular-nums text-slate-600">
+                      {(b.probability * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="mt-2 text-[11px] text-slate-500">
+              Rounds observed: {engineSnap.exposure.roundsObserved} · Rolling
+              realised RTP:{' '}
+              {engineSnap.exposure.smoothedStake > 0
+                ? (engineSnap.exposure.rollingRtp * 100).toFixed(1) + '%'
+                : '—'}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={savingEngine || !engineDirty}
+            className="px-4 py-2 bg-brand-indigo text-white rounded text-sm font-medium hover:bg-brand-indigo-dark transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {savingEngine ? 'Saving…' : 'Save engine config'}
+          </button>
+          {!savingEngine && !engineDirty && (
+            <span className="text-xs text-slate-500">No changes to save.</span>
+          )}
+        </div>
+      </form>
 
       <form
         onSubmit={saveMax}

@@ -17,6 +17,11 @@ import { CoinPacksService } from '../coin-packs/coin-packs.service';
 import { AviatorService } from '../aviator/aviator.service';
 import { AviatorChatService } from '../aviator/chat.service';
 import { FairnessStore } from '../aviator/fairness-store';
+import { CrashDistributionService } from '../aviator/crash/crash-distribution.service';
+import { SettingType } from '@prisma/client';
+import { SettingsService } from '../foundation/settings.service';
+import { AuthedUser, CurrentUser } from '../auth/current-user.decorator';
+import { BadRequestException } from '@nestjs/common';
 import {
   CreateAuctionDto,
   CreateCoinPackDto,
@@ -35,6 +40,8 @@ export class AdminController {
     private readonly aviator: AviatorService,
     private readonly aviatorChat: AviatorChatService,
     private readonly fairness: FairnessStore,
+    private readonly crashEngine: CrashDistributionService,
+    private readonly settings: SettingsService,
   ) {}
 
   @Get('coin-settings')
@@ -160,6 +167,70 @@ export class AdminController {
     @Body() dto: { maxPayout?: string | null; forcedNextPayout?: string | null },
   ) {
     return this.aviator.updateAdminSettings(dto);
+  }
+
+  // ── Crash-engine controls ────────────────────────────────────────
+  // The four operator-facing knobs for the heavy-tail crash engine.
+  // Reads return a live snapshot (mode in use, exposure factor, bucket
+  // histogram). Writes go through SettingsService so they're audited
+  // via SystemSettingHistory exactly like the generic Settings UI.
+
+  @Get('aviator/crash-engine')
+  async getCrashEngine() {
+    // Force a config refresh so the snapshot reflects any setting
+    // edit from the generic /settings page since the last round.
+    await this.crashEngine.refreshConfig();
+    return this.crashEngine.snapshot();
+  }
+
+  @Patch('aviator/crash-engine')
+  async updateCrashEngine(
+    @Body()
+    dto: {
+      engine?: 'legacy' | 'heavytail';
+      rtp?: number;
+      mode?: 'balanced' | 'fast_loss' | 'streamer';
+      adaptiveEnabled?: boolean;
+    },
+    @CurrentUser() actor: AuthedUser,
+  ) {
+    // Validate up front so a misclicked admin can't write garbage
+    // into SystemSetting and then have the engine clamp it silently.
+    if (dto.engine !== undefined && dto.engine !== 'legacy' && dto.engine !== 'heavytail') {
+      throw new BadRequestException('engine must be "legacy" or "heavytail"');
+    }
+    if (dto.mode !== undefined && !['balanced', 'fast_loss', 'streamer'].includes(dto.mode)) {
+      throw new BadRequestException('mode must be balanced | fast_loss | streamer');
+    }
+    if (dto.rtp !== undefined) {
+      if (!Number.isFinite(dto.rtp) || dto.rtp < 0.5 || dto.rtp > 0.999) {
+        throw new BadRequestException('rtp must be a finite number in [0.5, 0.999]');
+      }
+    }
+    if (dto.adaptiveEnabled !== undefined && typeof dto.adaptiveEnabled !== 'boolean') {
+      throw new BadRequestException('adaptiveEnabled must be boolean');
+    }
+
+    if (dto.engine !== undefined) {
+      await this.settings.set('aviator.crash.engine', dto.engine, SettingType.STRING, actor.id);
+    }
+    if (dto.rtp !== undefined) {
+      await this.settings.set('aviator.crash.rtp', dto.rtp, SettingType.FLOAT, actor.id);
+    }
+    if (dto.mode !== undefined) {
+      await this.settings.set('aviator.crash.mode', dto.mode, SettingType.STRING, actor.id);
+    }
+    if (dto.adaptiveEnabled !== undefined) {
+      await this.settings.set(
+        'aviator.crash.adaptive_enabled',
+        dto.adaptiveEnabled,
+        SettingType.BOOL,
+        actor.id,
+      );
+    }
+
+    await this.crashEngine.refreshConfig();
+    return this.crashEngine.snapshot();
   }
 
   @Get('aviator/rounds')
