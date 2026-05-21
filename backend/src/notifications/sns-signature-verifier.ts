@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { createVerify } from 'crypto';
 
 /**
@@ -95,7 +95,11 @@ export class SnsSignatureVerifier {
   private readonly certCache = new Map<string, string>();
   private readonly fetchImpl: FetchImpl;
 
-  constructor(fetchImpl?: FetchImpl) {
+  // `FetchImpl` is a function type — Nest emits `Function` as decorator
+  // metadata and tries (and fails) to resolve it as a provider.
+  // `@Optional()` lets the DI container pass `undefined`; we fall back
+  // to `globalThis.fetch`. Mirrors EmailWebhookService / SesSender.
+  constructor(@Optional() fetchImpl?: FetchImpl) {
     this.fetchImpl = fetchImpl ?? (globalThis.fetch as unknown as FetchImpl);
   }
 
