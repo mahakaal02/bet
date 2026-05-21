@@ -361,7 +361,25 @@ function drawCurveAndMascot(
   // headroom — without this the trajectory crashes into the top of
   // the frame after ~6 seconds.
   const T_VIEW_MS = Math.max(8_000, elapsedMs + 1_500);
-  const M_VIEW_MAX = Math.max(2.0, currentMultiplier * 1.35);
+
+  // M_VIEW_MAX uses the LARGER of the server-reported multiplier
+  // and the locally-interpolated head value (`multiplierAt(elapsedMs)`).
+  //
+  // Why both: `currentMultiplier` is set from server `MULTIPLIER_UPDATE`
+  // events, which arrive every ~100-150 ms. Between events the local
+  // clock has already advanced the curve via `multiplierAt(t)`, so
+  // the leading curve point can briefly be higher than the stale
+  // server value. If the viewport bound only tracks the server
+  // value, the curve overshoots the top of the canvas during those
+  // gap frames — the mascot (which we clamp to canvas bounds) then
+  // appears to "lag behind" the curve. Taking the max keeps the
+  // viewport big enough for whichever value is ahead, so the curve
+  // head stays in view and the mascot sits on it harmoniously.
+  //
+  // The 1.35 headroom factor (35 % extra) is unchanged — it leaves
+  // breathing room so the mascot never sits right at the top edge.
+  const headMultiplier = Math.max(currentMultiplier, multiplierAt(elapsedMs));
+  const M_VIEW_MAX = Math.max(2.0, headMultiplier * 1.35);
 
   const steps = 110;
   const points: [number, number][] = [];
@@ -710,7 +728,12 @@ function drawAutoCashoutMarker(
   const drawW = w - PADDING.left - PADDING.right;
   const drawH = h - PADDING.top - PADDING.bottom;
   const T_VIEW_MS = Math.max(8_000, elapsed + 1_500);
-  const M_VIEW_MAX = Math.max(2.0, currentMultiplier * 1.35);
+
+  // Keep this viewport math in lockstep with `drawCurveAndMascot`
+  // (above) — see the long comment there. If they diverge the
+  // auto-cashout marker drifts off the curve.
+  const headMultiplier = Math.max(currentMultiplier, multiplierAt(elapsed));
+  const M_VIEW_MAX = Math.max(2.0, headMultiplier * 1.35);
 
   const x = PADDING.left + (targetT / T_VIEW_MS) * drawW;
   const y = PADDING.top + drawH - ((autoCashoutAt - 1) / (M_VIEW_MAX - 1)) * drawH;
