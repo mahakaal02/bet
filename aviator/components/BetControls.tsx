@@ -179,24 +179,52 @@ export default function BetControls() {
   // mode="wait" (which used to leave a no-button gap during variant
   // transitions and made clicks feel "swallowed"). Disabled / busy
   // states are pure presentation; the click handler resolves cleanly.
-  const heroState: HeroState =
-    !currentBet || cashedOut
-      ? phase === 'BETTING'
-        ? insufficient || (balance != null && balance < MIN_BET)
-          ? 'topup'
-          : 'place'
-        : phase === 'RUNNING'
-        ? cashedOut
-          ? 'waiting'
-          : 'waiting'
-        : phase === 'CRASHED'
-        ? 'waiting'
-        : 'waiting'
-      : phase === 'RUNNING'
-      ? 'cashout'
-      : phase === 'CRASHED'
-      ? 'busted'
-      : 'waiting';
+  //
+  // State matrix (with explicit labels for the formerly-ambiguous
+  // "WAITING…" branches):
+  //
+  //   currentBet | cashedOut | phase     → state    → label
+  //   -----------|-----------|-----------|----------|-----------------
+  //   null       | -         | BETTING   → place    | PLACE BET
+  //   null       | -         | BETTING   → topup    | TOP UP TO BET (when insufficient balance)
+  //   null       | -         | RUNNING   → between  | WAIT FOR NEXT ROUND
+  //   null       | -         | CRASHED   → between  | WAIT FOR NEXT ROUND
+  //   set        | false     | BETTING   → placed   | BET PLACED · <coins>     ← was "WAITING…", users complained
+  //   set        | false     | RUNNING   → cashout  | CASHOUT (live)
+  //   set        | false     | CRASHED   → busted   | BUSTED · −<coins>
+  //   set        | true      | BETTING   → between  | WAIT FOR NEXT ROUND   (cashed out, round resetting)
+  //   set        | true      | RUNNING   → waiting  | CASHED OUT — WAITING
+  //   set        | true      | CRASHED   → waiting  | CASHED OUT — WAITING
+  const heroState: HeroState = (() => {
+    // Branch 1: no live bet (either never placed, or already cashed
+    // out so the bet ended successfully).
+    if (!currentBet || cashedOut) {
+      if (phase === 'BETTING') {
+        if (insufficient || (balance != null && balance < MIN_BET)) return 'topup';
+        return 'place';
+      }
+      // Cashed-out users get the existing "CASHED OUT — WAITING"
+      // chip during RUNNING / CRASHED — different intent from
+      // someone who just hasn't bet yet.
+      if (cashedOut && (phase === 'RUNNING' || phase === 'CRASHED')) {
+        return 'waiting';
+      }
+      // No bet, watching the round play out. Distinct from "WAITING…"
+      // because there's nothing for the user to act on; they're just
+      // waiting for the next BETTING window.
+      return 'between';
+    }
+    // Branch 2: live bet present, not yet cashed out.
+    if (phase === 'RUNNING') return 'cashout';
+    if (phase === 'CRASHED') return 'busted';
+    // BETTING phase with a placed bet — the round hasn't started yet
+    // but the user's stake is locked in. Was rendered as the
+    // ambiguous "WAITING…" before; now an explicit confirmation.
+    if (phase === 'BETTING') return 'placed';
+    // UNKNOWN phase (pre-socket-connect) with a bet shouldn't happen
+    // in practice, but be safe — render the same neutral chip.
+    return 'between';
+  })();
 
   const inputLocked = !!currentBet && !cashedOut;
   const tier = tierFor(liveMultiplier);
@@ -206,8 +234,9 @@ export default function BetControls() {
     if (heroState === 'place') return void placeBet();
     if (heroState === 'cashout') return void cashout();
     if (heroState === 'topup') return openTopupPage();
-    // busted / waiting → noop. The button is still mounted (visible
-    // as locked) so the layout doesn't shift, but it doesn't react.
+    // busted / waiting / placed / between → noop. The button is
+    // still mounted (visible as locked) so the layout doesn't
+    // shift, but it doesn't react.
   }
 
   return (
@@ -383,7 +412,24 @@ export default function BetControls() {
    Sub-components
    ============================================================ */
 
-type HeroState = 'place' | 'topup' | 'cashout' | 'busted' | 'waiting';
+/**
+ * `placed`  — user just placed a bet during the BETTING window; the
+ *             round hasn't started yet. Replaces the formerly
+ *             ambiguous "WAITING…" message users complained about.
+ * `between` — no live bet, round is RUNNING or CRASHED; the user
+ *             is simply waiting for the next BETTING window.
+ * `waiting` — user already cashed out, the round is finishing.
+ *             Kept distinct so the chip can say "CASHED OUT —
+ *             WAITING" instead of the generic "wait for next round".
+ */
+type HeroState =
+  | 'place'
+  | 'topup'
+  | 'cashout'
+  | 'busted'
+  | 'placed'
+  | 'between'
+  | 'waiting';
 
 function StepperBtn({
   label,
@@ -556,9 +602,46 @@ function HeroButton({
       label = `BUSTED · −${formatCoins(currentBetAmount)}`;
       actionable = false;
       break;
+    case 'placed':
+      // Confirmation chip: the user just placed a bet during the
+      // BETTING window. Keep the tone positive (success-tinted)
+      // so it reads as "you're in" rather than "something's
+      // stuck". Coin amount echoed so the user sees the stake
+      // they committed.
+      visualStyle = 'bg-success/15 border border-success/40 text-success';
+      label = (
+        <span className="flex flex-col items-center leading-tight">
+          <span className="text-[10px] tracking-[0.18em] opacity-90">BET PLACED</span>
+          <span className="font-mono text-lg font-black tabular-nums">
+            {formatCoins(currentBetAmount)} coins
+          </span>
+        </span>
+      );
+      actionable = false;
+      break;
+    case 'between':
+      // No bet, round is mid-flight or just ended. Tells the user
+      // exactly what they're waiting for — the next BETTING phase.
+      visualStyle = 'bg-elevated/80 text-text-secondary';
+      label = (
+        <span className="flex flex-col items-center leading-tight">
+          <span className="text-[10px] tracking-[0.18em] opacity-85">
+            WAIT FOR NEXT ROUND
+          </span>
+          <span className="text-[10px] opacity-60">
+            Betting opens in a few seconds
+          </span>
+        </span>
+      );
+      actionable = false;
+      break;
     case 'waiting':
     default:
       visualStyle = 'bg-elevated/80 text-text-secondary';
+      // Reached only when the user cashed out and the round is
+      // still resolving — "WAITING…" is fine here because the
+      // intent (we already won; just letting the round play
+      // out) is unambiguous.
       label = cashedOut ? 'CASHED OUT — WAITING' : 'WAITING…';
       actionable = false;
       break;
