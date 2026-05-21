@@ -125,15 +125,16 @@ spec:
           securityContext:
             runAsUser: 0
             runAsGroup: 0
-          # Invoke ts-node via Node's `-r ts-node/register` hook, NOT
-          # `npx ts-node` — on Node 20 the ts-node CLI hands off into
-          # ESM resolution and dies with
-          # `ERR_UNKNOWN_FILE_EXTENSION: Unknown file extension ".ts"`.
-          # The register hook keeps the process in CommonJS mode,
-          # which matches `tsconfig.json` (`module: "commonjs"`).
-          # `ts-node` itself still ships in `node_modules` (devDeps
-          # are not pruned in the Dockerfile's runner stage).
-          command: ["sh","-c","node -r ts-node/register prisma/seed.ts"]
+          # Load the .ts seed via a CJS `require()` after registering
+          # ts-node — `node -r ts-node/register prisma/seed.ts` is NOT
+          # enough on Node 20, because the entry-point resolver routes
+          # unknown extensions (`.ts`) through the ESM loader, which
+          # ts-node/register (a CJS hook) doesn't patch. The `-e` form
+          # keeps the entry inside CommonJS, where ts-node's
+          # `Module._extensions['.ts']` hook fires and compiles the
+          # file. `ts-node` itself still ships in `node_modules`
+          # (devDeps are not pruned in the Dockerfile's runner stage).
+          command: ["sh","-c","node -r ts-node/register -e \"require('./prisma/seed.ts')\""]
           env:
             - name: DATABASE_URL
               value: {{ include "kalki.databaseUrl" (dict "dbname" "uniquebid" "override" .Values.backend.databaseUrl "ctx" .) | quote }}
