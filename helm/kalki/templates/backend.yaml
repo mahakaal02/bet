@@ -143,6 +143,17 @@ spec:
               value: {{ include "kalki.databaseUrl" (dict "dbname" "uniquebid" "override" .Values.backend.databaseUrl "ctx" .) | quote }}
             {{- include "kalki.redisEnv" . | nindent 12 }}
             {{- include "kalki.publicUrlEnv" . | nindent 12 }}
+            {{- if .Values.backend.corsAllowedOrigins }}
+            # PR-ADMIN-COOKIE-AUTH follow-up — backend's `enableCors()`
+            # switches to credentialed mode (specific origin + Allow-
+            # Credentials: true) when this is set. Required for the
+            # admin SPA's HttpOnly-cookie session to land in the
+            # browser. Comma-separated list of origins. See
+            # values.yaml `backend.corsAllowedOrigins` for full
+            # rationale.
+            - name: CORS_ALLOWED_ORIGINS
+              value: {{ .Values.backend.corsAllowedOrigins | quote }}
+            {{- end }}
             {{- if .Values.clamav.enabled }}
             # Activate the ClamAV daemon scanner (PR-INFRA-CLAMAV-1).
             # Backend reaches `clamd` via the Service in this namespace;
