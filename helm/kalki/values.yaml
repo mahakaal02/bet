@@ -8,9 +8,17 @@ global:
   # value is the fallback for any service that doesn't have one yet.
   imageTag: latest
   imagePullPolicy: IfNotPresent
-# Exclude L40s GPU node. Anti-affinity is applied to every workload.
+# Anti-affinity is applied to every kalki workload (see _helpers.tpl
+# `kalki.nodeAffinity` → `kubernetes.io/hostname NotIn …`).
+# - podstackl40s: L40s GPU node, reserved for AI workloads.
+# - podstack-huawei-cp-01: the kalki-backend uploads PVC is a
+#   ReadWriteOnce Longhorn volume attached on cp-02. Pinning the
+#   workload off cp-01 prevents the deployment controller from
+#   scheduling a surge pod on cp-01 mid-rollout, where it would
+#   deadlock on `Multi-Attach error` waiting for cp-02 to detach.
 excludeNodes:
   - podstackl40s
+  - podstack-huawei-cp-01
 traefik:
   entryPoint: websecure
   certResolver: letsencrypt # matches existing kalkai chart
