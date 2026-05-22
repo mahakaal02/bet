@@ -30,6 +30,21 @@ import { formatCoins } from '@/lib/format';
  *   - The button is always rendered (no AnimatePresence mode="wait"
  *     gap where the variant key was changing). Disabled states are
  *     visual only — the click handler still resolves cleanly.
+ *
+ * Layout (PR-AVIATOR-COMPACT-BET-CONTROLS):
+ *   - Single bet panel (not a dual side-by-side like Spribe ships).
+ *     We have one bet per round; rendering a second always-disabled
+ *     slot just to mirror the reference design wastes space.
+ *   - Bet | Auto tab toggle at the top. Tapping "Auto" reveals the
+ *     auto-cashout multiplier input + preset chips below the amount
+ *     section. Tapping "Bet" collapses it back. Cleaner than the
+ *     prior layout where the auto-cashout column sat next to the
+ *     stake column eating ~33% of horizontal width even when unused.
+ *   - Amount stepper (− [input] +) and quick chips on the LEFT,
+ *     big BET hero button on the RIGHT (≈half width on tablet+).
+ *     On phone the hero stacks below — single-column layout works
+ *     better at narrow widths because the BET button needs full
+ *     reach for the player's thumb.
  */
 
 const MIN_BET = 100;
@@ -68,6 +83,8 @@ function openTopupPage() {
     : base;
 }
 
+type Mode = 'bet' | 'auto';
+
 export default function BetControls() {
   const phase = useGame((s) => s.phase);
   const balance = useGame((s) => s.balance);
@@ -78,7 +95,7 @@ export default function BetControls() {
   const nextStake = useGame((s) => s.nextStake);
 
   const [amount, setAmount] = useState<number>(Math.max(MIN_BET, nextStake));
-  const [autoEnabled, setAutoEnabled] = useState(false);
+  const [mode, setMode] = useState<Mode>('bet');
   const [autoAt, setAutoAt] = useState<string>('2.00');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +131,10 @@ export default function BetControls() {
     setBusy(true);
     setError(null);
     try {
-      const auto = autoEnabled && autoAt.trim() ? Number(autoAt) : null;
+      // Mode-aware auto-cashout: the "Auto" tab carries an explicit
+      // multiplier; "Bet" tab sends null and the server lets the
+      // round ride until the user taps cashout manually.
+      const auto = mode === 'auto' && autoAt.trim() ? Number(autoAt) : null;
       if (auto !== null && (isNaN(auto) || auto < 1.01)) {
         throw new Error('Auto cashout must be at least 1.01×');
       }
@@ -253,18 +273,28 @@ export default function BetControls() {
   }
 
   return (
-    <div className="glass rounded-3xl p-4 lg:p-5 space-y-4">
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_auto] gap-4 items-stretch">
-        {/* Amount column ------------------------------------------- */}
+    <div className="glass rounded-3xl p-3 lg:p-4 space-y-3">
+      {/* Mode tabs — Bet (manual) vs Auto (with cashout multiplier).
+          Live-bet state forces the tabs into read-only; switching mid-
+          round would imply mutating the bet's autoCashoutAt server-side
+          (we don't support that yet). The chosen tab still reads
+          truthfully even when locked. */}
+      <ModeTabs
+        mode={mode}
+        onChange={setMode}
+        disabled={inputLocked}
+      />
+
+      {/* Main row: controls on the LEFT, hero BET button on the RIGHT.
+          Single column on phone (BET stacks below) — the button needs
+          full thumb-reach width when the panel is narrow. Tablet+
+          splits 1fr | 1fr so neither side dominates. */}
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr] gap-3 items-stretch">
+        {/* LEFT: amount stepper + quick chips (+ auto inputs when Auto tab) */}
         <div className="space-y-2.5">
-          <div className="flex items-center justify-between">
-            <label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-secondary">
-              Bet amount
-            </label>
-            <span className="text-[10px] font-mono text-text-muted">
-              {balance != null ? `wallet ${formatCoins(balance)}` : ''}
-            </span>
-          </div>
+          {/* Amount stepper — − [input] + arrangement. The stepper
+              buttons hug the input on either side so the whole row
+              reads as one control. */}
           <div className="flex items-stretch gap-1.5">
             <StepperBtn
               label="−"
@@ -273,7 +303,7 @@ export default function BetControls() {
               }
               disabled={inputLocked || amount <= MIN_BET}
             />
-            <div className="relative flex-1">
+            <div className="relative flex-1 min-w-0">
               <input
                 type="number"
                 min={0}
@@ -291,13 +321,13 @@ export default function BetControls() {
                 }}
                 disabled={inputLocked}
                 aria-label="Bet amount in coins"
-                className={`w-full h-12 pl-3 pr-16 bg-elevated/80 border rounded-xl font-mono text-base font-bold outline-none transition tabular-nums ${
+                className={`w-full h-11 pl-3 pr-14 bg-elevated/80 border rounded-xl font-mono text-base font-bold outline-none transition tabular-nums text-center ${
                   insufficient || belowMin
                     ? 'border-danger/60 focus:border-danger'
                     : 'border-border focus:border-aurora-violet/70'
                 } disabled:opacity-60`}
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-text-muted text-xs pointer-events-none">
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-text-muted text-[10px] pointer-events-none uppercase tracking-wider">
                 coins
               </span>
             </div>
@@ -307,7 +337,14 @@ export default function BetControls() {
               disabled={inputLocked}
             />
           </div>
-          <div className="flex flex-wrap gap-1.5">
+
+          {/* Quick stake chips. 4-wide grid keeps them tight and
+              predictable — flex-wrap could shift between 3 and 4 per
+              row depending on width and feels jumpy. 7 chips → 2 rows
+              of 4 (last cell renders the "Max" accent chip and trails
+              by itself on the second row, which is fine and matches
+              the reference's visual weight). */}
+          <div className="grid grid-cols-4 gap-1.5">
             {QUICK_AMOUNTS.map((q) => (
               <QuickChip
                 key={q}
@@ -343,58 +380,57 @@ export default function BetControls() {
               Max
             </QuickChip>
           </div>
+
+          {/* Auto cashout section — only renders when the Auto tab is
+              active. Collapsible to keep the panel compact when the
+              user is on the default Bet tab. The visual treatment
+              (dashed divider + smaller header) signals "this is a
+              sub-option of the chosen mode" without needing a
+              separate card. */}
+          {mode === 'auto' && (
+            <div className="pt-1.5 mt-1 border-t border-dashed border-divider space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-secondary">
+                  Auto cashout at
+                </label>
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="2.00"
+                  value={autoAt}
+                  onChange={(e) => setAutoAt(e.target.value)}
+                  disabled={inputLocked}
+                  aria-label="Auto cashout multiplier"
+                  className="w-full h-10 pl-3 pr-7 bg-elevated/80 border border-border focus:border-success/70 rounded-xl font-mono text-sm font-bold outline-none transition tabular-nums text-center disabled:opacity-60"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-text-muted text-sm">
+                  ×
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {AUTO_PRESETS.map((p) => (
+                  <QuickChip
+                    key={p}
+                    onClick={() => setAutoAt(p.toFixed(2))}
+                    disabled={inputLocked}
+                    active={Number(autoAt) === p}
+                  >
+                    {p}×
+                  </QuickChip>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Auto cashout column ------------------------------------- */}
-        <div className="space-y-2.5">
-          <div className="flex items-center justify-between">
-            <label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-secondary">
-              Auto cashout
-            </label>
-            <AutoToggle
-              enabled={autoEnabled}
-              onChange={setAutoEnabled}
-              disabled={inputLocked}
-            />
-          </div>
-          <div className="relative">
-            <input
-              type="text"
-              inputMode="decimal"
-              placeholder="2.00"
-              value={autoAt}
-              onChange={(e) => setAutoAt(e.target.value)}
-              disabled={inputLocked || !autoEnabled}
-              aria-label="Auto cashout multiplier"
-              className={`w-full h-12 pl-3 pr-8 bg-elevated/80 border rounded-xl font-mono text-base font-bold outline-none transition tabular-nums ${
-                autoEnabled
-                  ? 'border-border focus:border-success/70 text-text-primary'
-                  : 'border-border text-text-muted'
-              } disabled:opacity-60`}
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-text-muted text-sm">
-              ×
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {AUTO_PRESETS.map((p) => (
-              <QuickChip
-                key={p}
-                onClick={() => {
-                  setAutoEnabled(true);
-                  setAutoAt(p.toFixed(2));
-                }}
-                disabled={inputLocked}
-                active={autoEnabled && Number(autoAt) === p}
-              >
-                {p}×
-              </QuickChip>
-            ))}
-          </div>
-        </div>
-
-        {/* Hero action column -------------------------------------- */}
-        <div className="flex flex-col gap-2 min-w-0 lg:w-[260px]">
+        {/* RIGHT: hero BET button. Fills the right half on tablet+;
+            stacks below on phone (sm: breakpoint shifts to side-by-
+            side). Fixed minimum height keeps the button visually
+            "big" regardless of how much auto-cashout content
+            renders on the left. */}
+        <div className="flex flex-col gap-2 min-w-0">
           <HeroButton
             state={heroState}
             onClick={onHeroClick}
@@ -435,6 +471,24 @@ export default function BetControls() {
           />
         </div>
       </div>
+
+      {/* Wallet readout — moved out of the per-column header so it
+          gets a dedicated line at the bottom of the panel. Less
+          cluttered than packing it next to "Bet amount" and gives
+          the balance figure proper prominence. */}
+      {balance != null && (
+        <div className="flex items-center justify-between text-[10px] font-mono text-text-muted px-1">
+          <span>
+            Wallet{' '}
+            <span className="text-text-secondary font-bold tabular-nums">
+              {formatCoins(balance)}
+            </span>
+          </span>
+          <span className="uppercase tracking-[0.18em]">
+            Min bet {MIN_BET} coins
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -470,6 +524,49 @@ type HeroState =
    */
   | 'capped';
 
+/**
+ * Mode tabs — Bet / Auto pill. Two segmented buttons inside a single
+ * elevated pill; the active button picks up the success accent so
+ * the choice reads at a glance. Disabled when a bet is in flight
+ * (mode change would imply mutating the placed bet's autoCashoutAt,
+ * which the server doesn't support yet).
+ */
+function ModeTabs({
+  mode,
+  onChange,
+  disabled,
+}: {
+  mode: Mode;
+  onChange: (m: Mode) => void;
+  disabled?: boolean;
+}) {
+  const tab = (key: Mode, label: string) => {
+    const active = mode === key;
+    return (
+      <button
+        key={key}
+        type="button"
+        onClick={() => !disabled && onChange(key)}
+        disabled={disabled}
+        aria-pressed={active}
+        className={`flex-1 h-8 rounded-full text-xs font-bold uppercase tracking-[0.16em] transition ${
+          active
+            ? 'bg-success/15 text-success border border-success/40'
+            : 'text-text-muted hover:text-text-secondary'
+        } disabled:opacity-50 disabled:cursor-not-allowed`}
+      >
+        {label}
+      </button>
+    );
+  };
+  return (
+    <div className="inline-flex p-1 rounded-full bg-elevated/70 border border-border w-fit">
+      {tab('bet', 'Bet')}
+      {tab('auto', 'Auto')}
+    </div>
+  );
+}
+
 function StepperBtn({
   label,
   onClick,
@@ -484,7 +581,7 @@ function StepperBtn({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="w-11 h-12 rounded-xl bg-elevated border border-border hover:bg-elevated-hi hover:border-border-strong text-text-primary font-mono text-lg chip-press disabled:opacity-40 disabled:hover:bg-elevated disabled:hover:border-border"
+      className="w-10 h-11 rounded-xl bg-elevated border border-border hover:bg-elevated-hi hover:border-border-strong text-text-primary font-mono text-lg chip-press disabled:opacity-40 disabled:hover:bg-elevated disabled:hover:border-border shrink-0"
     >
       {label}
     </button>
@@ -505,7 +602,7 @@ function QuickChip({
   accent?: boolean;
 }) {
   const base =
-    'px-2.5 py-1 rounded-lg text-xs font-bold font-mono chip-press transition border';
+    'h-8 rounded-lg text-xs font-bold font-mono chip-press transition border flex items-center justify-center';
   let cls: string;
   if (active) {
     cls = `${base} bg-success/15 border-success/50 text-success`;
@@ -526,35 +623,6 @@ function QuickChip({
   );
 }
 
-function AutoToggle({
-  enabled,
-  onChange,
-  disabled,
-}: {
-  enabled: boolean;
-  onChange: (v: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={enabled}
-      onClick={() => !disabled && onChange(!enabled)}
-      disabled={disabled}
-      className={`relative inline-flex h-5 w-9 items-center rounded-full transition disabled:opacity-50 ${
-        enabled ? 'bg-success' : 'bg-elevated border border-border'
-      }`}
-    >
-      <span
-        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-md transition ${
-          enabled ? 'translate-x-[18px]' : 'translate-x-0.5'
-        }`}
-      />
-    </button>
-  );
-}
-
 /**
  * Always-mounted hero button. The previous version was wrapped in
  * an `AnimatePresence mode="wait"` that swapped child components
@@ -566,6 +634,11 @@ function AutoToggle({
  * label change with a fade. State is communicated via colour +
  * label, with an explicit `aria-disabled` only when the action
  * is genuinely a no-op (busted / waiting / mid-flight).
+ *
+ * Sizing note: `min-h-[112px]` keeps the hero visually "big"
+ * regardless of how much content the left column renders (the
+ * left grows when the Auto tab is open). On phone the button
+ * still fills the full width once it stacks below.
  */
 function HeroButton({
   state,
@@ -599,7 +672,7 @@ function HeroButton({
   cappedMultiplier: number | null;
 }) {
   const base =
-    'relative w-full h-[68px] rounded-2xl font-extrabold text-white shadow-card overflow-hidden flex items-center justify-center transition select-none';
+    'relative w-full flex-1 min-h-[112px] rounded-2xl font-extrabold text-white shadow-card overflow-hidden flex items-center justify-center transition select-none';
 
   let visualStyle = '';
   let inlineStyle: React.CSSProperties | undefined;
@@ -608,24 +681,29 @@ function HeroButton({
 
   switch (state) {
     case 'place':
-      visualStyle = 'bg-gradient-to-br from-aurora-violet to-[#5C2BFF] hover:brightness-110 active:brightness-95';
+      // The reference's BET button is a vivid green — mapping to our
+      // `success` token keeps it on-system without forking the colour
+      // ramp. Was violet/blue before; the green reads more clearly as
+      // "this is the primary action".
+      visualStyle = 'bg-gradient-to-br from-success to-[#10A38A] hover:brightness-110 active:brightness-95';
       label = busy ? (
         '…'
       ) : amount > 0 ? (
-        <span className="flex flex-col items-center leading-tight">
-          <span className="text-[10px] tracking-[0.18em] opacity-85">PLACE BET</span>
-          <span className="font-mono text-lg font-black">{formatCoins(amount)}</span>
+        <span className="flex flex-col items-center leading-tight gap-1">
+          <span className="text-xs tracking-[0.22em] font-bold opacity-95">BET</span>
+          <span className="font-mono text-2xl font-black tabular-nums">{formatCoins(amount)}</span>
+          <span className="text-[10px] tracking-[0.16em] opacity-75">coins</span>
         </span>
       ) : (
-        'PLACE BET'
+        'BET'
       );
       break;
     case 'topup':
-      visualStyle = 'bg-gradient-to-br from-success to-[#10A38A] hover:brightness-110 active:brightness-95';
+      visualStyle = 'bg-gradient-to-br from-warning to-[#D96A2A] hover:brightness-110 active:brightness-95';
       label = (
-        <span className="flex flex-col items-center leading-tight">
-          <span className="text-[10px] tracking-[0.18em] opacity-90">TOP UP TO BET</span>
-          <span className="font-mono text-sm font-black">Add coins</span>
+        <span className="flex flex-col items-center leading-tight gap-1">
+          <span className="text-xs tracking-[0.22em] font-bold opacity-95">TOP UP TO BET</span>
+          <span className="font-mono text-base font-black">Add coins</span>
         </span>
       );
       break;
@@ -635,9 +713,9 @@ function HeroButton({
         backgroundImage: `linear-gradient(135deg, ${tierColor}, ${shade(tierColor, -25)})`,
       };
       label = (
-        <span className="flex flex-col items-center leading-tight">
-          <span className="text-[10px] font-bold tracking-[0.18em] opacity-90">CASHOUT</span>
-          <span className="font-mono text-lg font-black tabular-nums">
+        <span className="flex flex-col items-center leading-tight gap-1">
+          <span className="text-xs font-bold tracking-[0.22em] opacity-95">CASHOUT</span>
+          <span className="font-mono text-2xl font-black tabular-nums">
             {formatCoins(liveProfit)}
           </span>
           <span className="text-[10px] font-mono opacity-80 tabular-nums">
@@ -648,7 +726,14 @@ function HeroButton({
       break;
     case 'busted':
       visualStyle = 'bg-gradient-to-br from-[#7A2233] to-[#3D1019] opacity-95';
-      label = `BUSTED · −${formatCoins(currentBetAmount)}`;
+      label = (
+        <span className="flex flex-col items-center leading-tight gap-1">
+          <span className="text-xs tracking-[0.22em] opacity-95">BUSTED</span>
+          <span className="font-mono text-xl font-black tabular-nums">
+            −{formatCoins(currentBetAmount)}
+          </span>
+        </span>
+      );
       actionable = false;
       break;
     case 'placed':
@@ -659,11 +744,12 @@ function HeroButton({
       // they committed.
       visualStyle = 'bg-success/15 border border-success/40 text-success';
       label = (
-        <span className="flex flex-col items-center leading-tight">
-          <span className="text-[10px] tracking-[0.18em] opacity-90">BET PLACED</span>
-          <span className="font-mono text-lg font-black tabular-nums">
-            {formatCoins(currentBetAmount)} coins
+        <span className="flex flex-col items-center leading-tight gap-1">
+          <span className="text-xs tracking-[0.22em] font-bold opacity-95">BET PLACED</span>
+          <span className="font-mono text-xl font-black tabular-nums">
+            {formatCoins(currentBetAmount)}
           </span>
+          <span className="text-[10px] tracking-[0.16em] opacity-70">coins · waiting for round</span>
         </span>
       );
       actionable = false;
@@ -671,10 +757,10 @@ function HeroButton({
     case 'between':
       // No bet, round is mid-flight or just ended. Tells the user
       // exactly what they're waiting for — the next BETTING phase.
-      visualStyle = 'bg-elevated/80 text-text-secondary';
+      visualStyle = 'bg-elevated/80 text-text-secondary border border-border';
       label = (
-        <span className="flex flex-col items-center leading-tight">
-          <span className="text-[10px] tracking-[0.18em] opacity-85">
+        <span className="flex flex-col items-center leading-tight gap-1">
+          <span className="text-xs tracking-[0.22em] opacity-90">
             WAIT FOR NEXT ROUND
           </span>
           <span className="text-[10px] opacity-60">
@@ -696,18 +782,18 @@ function HeroButton({
       visualStyle =
         'bg-gradient-to-br from-warning/30 to-warning/15 border border-warning/50 text-warning';
       label = (
-        <span className="flex flex-col items-center leading-tight">
-          <span className="text-[10px] font-bold tracking-[0.18em] opacity-90">
+        <span className="flex flex-col items-center leading-tight gap-1">
+          <span className="text-xs font-bold tracking-[0.22em] opacity-95">
             MAX PAYOUT REACHED
           </span>
-          <span className="font-mono text-lg font-black tabular-nums">
+          <span className="font-mono text-xl font-black tabular-nums">
             {cappedPayout != null
-              ? `+${formatCoins(cappedPayout)} coins`
+              ? `+${formatCoins(cappedPayout)}`
               : 'Auto cashed out'}
           </span>
           <span className="text-[10px] font-mono opacity-80 tabular-nums">
             {cappedMultiplier != null
-              ? `Auto cashed out @ ${cappedMultiplier.toFixed(2)}×`
+              ? `@ ${cappedMultiplier.toFixed(2)}×`
               : 'Auto cashed out'}
           </span>
         </span>
@@ -716,12 +802,19 @@ function HeroButton({
       break;
     case 'waiting':
     default:
-      visualStyle = 'bg-elevated/80 text-text-secondary';
+      visualStyle = 'bg-elevated/80 text-text-secondary border border-border';
       // Reached only when the user cashed out and the round is
       // still resolving — "WAITING…" is fine here because the
       // intent (we already won; just letting the round play
       // out) is unambiguous.
-      label = cashedOut ? 'CASHED OUT — WAITING' : 'WAITING…';
+      label = cashedOut ? (
+        <span className="flex flex-col items-center leading-tight gap-1">
+          <span className="text-xs tracking-[0.22em] opacity-90">CASHED OUT</span>
+          <span className="text-[10px] opacity-70">Waiting for round to finish</span>
+        </span>
+      ) : (
+        'WAITING…'
+      );
       actionable = false;
       break;
   }
