@@ -1,10 +1,5 @@
 package com.uniquebid.app.ui.screens.auctions
 
-import android.annotation.SuppressLint
-import android.view.ViewGroup
-import android.webkit.WebChromeClient
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -20,12 +15,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.uniquebid.app.ui.components.buildHardenedWebView
 
 /**
  * Hosts the Auctions section (served by the Bet Next.js app at
@@ -41,6 +38,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
  * `backendUserId` so `placeBidAction` can mint a backend JWT and call
  * the auctions REST API as the right user. None of that ceremony lives
  * here — the WebView just opens the URL.
+ *
+ * WebView setup is in [com.uniquebid.app.ui.components.buildHardenedWebView]
+ * (PR-ANDROID-STAY-LOGGED-IN). Per-screen overrides should go through
+ * that builder, not here — the three game surfaces must stay aligned.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,7 +51,14 @@ fun AuctionsWebScreen(
 ) {
     val url = remember { viewModel.url() }
 
-    var canGoBack = false
+    // `canGoBack` is a Compose state holder (was a plain `var` in
+    // earlier versions). The plain var was captured by the
+    // `BackHandler` closure on first composition and never read the
+    // value written by the `update` lambda — meaning the back button
+    // always saw `false` regardless of the WebView's actual history.
+    // Switching to a State means the recomposition triggered by
+    // setValue propagates the latest value into the closure.
+    val canGoBack = remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -87,27 +95,8 @@ fun AuctionsWebScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(inner),
-                factory = { ctx ->
-                    @SuppressLint("SetJavaScriptEnabled")
-                    WebView(ctx).apply {
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                        )
-                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                        webViewClient = WebViewClient()
-                        webChromeClient = WebChromeClient()
-                        with(settings) {
-                            javaScriptEnabled = true
-                            domStorageEnabled = true
-                            cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
-                        }
-                        loadUrl(url)
-                    }
-                },
-                update = { view ->
-                    canGoBack = view.canGoBack()
-                },
+                factory = { ctx -> buildHardenedWebView(ctx, url) },
+                update = { view -> canGoBack.value = view.canGoBack() },
             )
         }
 
@@ -116,7 +105,7 @@ fun AuctionsWebScreen(
         // walk the WebView history instead, but for v1 the trip back is
         // one tap regardless of how deep the user navigated.
         BackHandler(enabled = true) {
-            if (canGoBack) onBack() else onBack()
+            if (canGoBack.value) onBack() else onBack()
         }
     }
 }
