@@ -7,6 +7,24 @@ interface AviatorSettings {
   updatedAt: string;
 }
 
+interface PayoutCapConfig {
+  enabled: boolean;
+  maxCoins: number;
+}
+
+/**
+ * PR-AVIATOR-PAYOUT-CAP — verbatim warning text from the product
+ * spec. Shown in a `window.confirm` when the admin disables the
+ * cap; explicit OK/Cancel ensures the action isn't a one-misclick
+ * away.
+ */
+const DISABLE_CAP_WARNING =
+  'Disabling payout cap can expose the platform to extreme financial ' +
+  'risk from unusually high multiplier rounds and coordinated betting ' +
+  'behavior. Proceed only if you fully understand the implications.';
+
+const DEFAULT_CAP_COINS = 20_000;
+
 type EngineKind = 'legacy' | 'heavytail';
 type CrashMode = 'balanced' | 'fast_loss' | 'streamer';
 
@@ -95,11 +113,34 @@ export default function AviatorControls() {
   const [initAdaptive, setInitAdaptive] = useState(true);
   const [savingEngine, setSavingEngine] = useState(false);
 
+  // PR-AVIATOR-PAYOUT-CAP — separate state + dirty tracking so the
+  // cap card behaves like the other cards (independent save, no
+  // half-edit clobbering).
+  const [capEnabled, setCapEnabled] = useState(true);
+  const [capMaxCoins, setCapMaxCoins] = useState(String(DEFAULT_CAP_COINS));
+  const [initCapEnabled, setInitCapEnabled] = useState(true);
+  const [initCapMaxCoins, setInitCapMaxCoins] = useState(
+    String(DEFAULT_CAP_COINS),
+  );
+  const [savingCap, setSavingCap] = useState(false);
+
   async function refresh() {
     try {
-      const [data, engine] = await Promise.all([
+      const [data, engine, cap] = await Promise.all([
         api.get<AviatorSettings>('/admin/aviator/settings'),
         api.get<CrashEngineSnapshot>('/admin/aviator/crash-engine'),
+        // PR-AVIATOR-PAYOUT-CAP — non-fatal if the endpoint is
+        // missing (e.g. a stale backend during a rolling deploy).
+        // We catch + default to the spec values so the UI never
+        // blocks the rest of the page on this one fetch.
+        api
+          .get<PayoutCapConfig>('/admin/aviator/payout-cap')
+          .catch(
+            (): PayoutCapConfig => ({
+              enabled: true,
+              maxCoins: DEFAULT_CAP_COINS,
+            }),
+          ),
       ]);
       const mp = data.maxPayout ?? '';
       const fp = data.forcedNextPayout ?? '';
@@ -121,6 +162,13 @@ export default function AviatorControls() {
       setInitEngineMode(mode);
       setInitEngineRtp(rtp);
       setInitAdaptive(engine.adaptiveEnabled);
+
+      // PR-AVIATOR-PAYOUT-CAP — hydrate cap card.
+      const capCoinsStr = String(cap.maxCoins);
+      setCapEnabled(cap.enabled);
+      setCapMaxCoins(capCoinsStr);
+      setInitCapEnabled(cap.enabled);
+      setInitCapMaxCoins(capCoinsStr);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'failed to load settings');
     } finally {
@@ -187,6 +235,70 @@ export default function AviatorControls() {
     }
   }
 
+  // PR-AVIATOR-PAYOUT-CAP — payout-cap save handler.
+  async function saveCap(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSaved(null);
+
+    // Validate maxCoins client-side so the user sees the issue
+    // immediately rather than waiting for a backend 400.
+    const trimmed = capMaxCoins.trim();
+    let coinsNum: number | null;
+    if (trimmed === '') {
+      // Empty = reset to default per the spec.
+      coinsNum = null;
+    } else {
+      coinsNum = Number(trimmed);
+      if (
+        !Number.isFinite(coinsNum) ||
+        !Number.isInteger(coinsNum) ||
+        coinsNum < 1
+      ) {
+        setError('Maximum payout must be a positive whole number (or empty to reset to 20 000).');
+        return;
+      }
+    }
+
+    // Explicit confirmation when DISABLING — spec verbatim. The
+    // OK gate ensures this is never one missed click away.
+    if (initCapEnabled && !capEnabled) {
+      const ok = window.confirm(DISABLE_CAP_WARNING);
+      if (!ok) {
+        // Snap the toggle back so the UI reflects what the server
+        // still has, not the unsaved intent.
+        setCapEnabled(true);
+        return;
+      }
+    }
+
+    setSavingCap(true);
+    try {
+      const body: { enabled?: boolean; maxCoins?: number | null } = {};
+      if (capEnabled !== initCapEnabled) body.enabled = capEnabled;
+      if (trimmed !== initCapMaxCoins) body.maxCoins = coinsNum;
+
+      // Defensive: if nothing actually changed (user clicked save
+      // by accident), bail before hitting the API.
+      if (Object.keys(body).length === 0) {
+        setSaved('No changes to save.');
+        return;
+      }
+
+      await api.patch<PayoutCapConfig>('/admin/aviator/payout-cap', body);
+      setSaved(
+        capEnabled
+          ? `Payout cap saved — max ${capMaxCoins || DEFAULT_CAP_COINS} coins per bet. Effective on the next round.`
+          : 'Payout cap DISABLED. Effective on the next round — monitor closely.',
+      );
+      await refresh();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'save failed');
+    } finally {
+      setSavingCap(false);
+    }
+  }
+
   async function saveForced(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -224,6 +336,13 @@ export default function AviatorControls() {
     engineMode !== initEngineMode ||
     engineRtp.trim() !== initEngineRtp.trim() ||
     adaptiveEnabled !== initAdaptive;
+  // PR-AVIATOR-PAYOUT-CAP — dirty when either field deviates from
+  // the saved snapshot. The toggle is a primitive bool comparison;
+  // the input is a trimmed-string compare so leading/trailing
+  // whitespace doesn't enable the save button on its own.
+  const capDirty =
+    capEnabled !== initCapEnabled ||
+    capMaxCoins.trim() !== initCapMaxCoins.trim();
 
   return (
     <div className="max-w-2xl">
@@ -431,6 +550,91 @@ export default function AviatorControls() {
             {savingMax ? 'Saving…' : 'Save max payout'}
           </button>
           {!savingMax && !maxDirty && (
+            <span className="text-xs text-slate-500">No changes to save.</span>
+          )}
+        </div>
+      </form>
+
+      {/* PR-AVIATOR-PAYOUT-CAP — per-bet settlement-side cap card.
+          Distinct from "Max payout" above (which clips the crash
+          multiplier itself, affecting the whole round). This card
+          caps each bet's payout independently; the plane keeps
+          flying for everyone else. */}
+      <form
+        onSubmit={saveCap}
+        className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 mb-4"
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-800">Payout cap (per bet)</h2>
+            <p className="text-[12px] text-slate-500 mt-0.5">
+              Caps each player&apos;s individual payout. Other players are
+              unaffected — the plane keeps flying. Settles automatically
+              when a player&apos;s live payout reaches the cap.
+            </p>
+          </div>
+          <label
+            className="flex items-center gap-2 select-none cursor-pointer"
+            title={capEnabled ? 'Cap is ENABLED' : 'Cap is DISABLED — high risk'}
+          >
+            <input
+              type="checkbox"
+              checked={capEnabled}
+              onChange={(e) => setCapEnabled(e.target.checked)}
+              className="h-4 w-4 accent-brand-indigo"
+              aria-label="Enable payout cap"
+            />
+            <span
+              className={`text-xs font-bold ${
+                capEnabled ? 'text-emerald-700' : 'text-rose-700'
+              }`}
+            >
+              {capEnabled ? 'ENABLED' : 'DISABLED'}
+            </span>
+          </label>
+        </div>
+
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">
+            Maximum payout per round (coins / INR)
+          </span>
+          <input
+            value={capMaxCoins}
+            onChange={(e) => setCapMaxCoins(e.target.value)}
+            placeholder={`leave empty to reset to ${DEFAULT_CAP_COINS.toLocaleString()}`}
+            inputMode="numeric"
+            pattern="\d*"
+            disabled={!capEnabled}
+            className="mt-1 w-full max-w-xs px-3 py-2 border border-slate-300 rounded disabled:bg-slate-50 disabled:text-slate-400"
+          />
+        </label>
+        <p className="text-[12px] text-slate-500 mt-2">
+          Default <strong>{DEFAULT_CAP_COINS.toLocaleString()} coins</strong>.
+          When a bet&apos;s payout would exceed this value, the player auto-
+          cashes out at exactly the cap line and sees &quot;MAX PAYOUT REACHED&quot;.
+          The cap is snapshotted at the start of each round — admin edits
+          take effect on the NEXT round (live bets keep the cap they
+          were placed under).
+        </p>
+
+        {!capEnabled && (
+          <div className="mt-3 text-[12px] text-rose-700 bg-rose-50 border border-rose-200 rounded p-3">
+            ⚠ Cap is currently DISABLED. Payouts are unbounded — a single
+            high-multiplier round on a large bet can expose the platform
+            to extreme loss. Re-enable above unless you have a specific
+            short-window reason to leave it off.
+          </div>
+        )}
+
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={savingCap || !capDirty}
+            className="px-4 py-2 bg-brand-indigo text-white rounded text-sm font-medium hover:bg-brand-indigo-dark transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {savingCap ? 'Saving…' : 'Save payout cap'}
+          </button>
+          {!savingCap && !capDirty && (
             <span className="text-xs text-slate-500">No changes to save.</span>
           )}
         </div>
