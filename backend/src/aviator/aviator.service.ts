@@ -22,6 +22,15 @@ import {
   CrashDistributionService,
   GenerateResult,
 } from './crash/crash-distribution.service';
+import { SettingsService } from '../foundation/settings.service';
+import {
+  applyPayoutCap,
+  capMultiplier,
+  isCapActive,
+  loadCapConfig,
+  type PayoutCapConfig,
+  type PayoutCapResult,
+} from './payout-cap';
 
 type Phase = 'BETTING' | 'RUNNING' | 'CRASHED';
 
@@ -57,6 +66,14 @@ interface CurrentRoundState {
    * into the `ExposureTracker` EMA.
    */
   engine: GenerateResult | null;
+  /**
+   * PR-AVIATOR-PAYOUT-CAP — snapshot of the cap config taken at
+   * `startBettingPhase`. Held constant for the whole round so an
+   * admin edit (which only takes effect once SettingsService's 60s
+   * TTL expires anyway) cannot move the cap line under a player who
+   * already placed a bet. Next round picks up the new value.
+   */
+  payoutCap: PayoutCapConfig;
 }
 
 interface RecentWinner {
@@ -92,6 +109,10 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly chat: AviatorChatService,
     private readonly betWallet: BetWalletService,
     private readonly crashEngine: CrashDistributionService,
+    // PR-AVIATOR-PAYOUT-CAP — used to load the per-round cap
+    // snapshot in `startBettingPhase`. Same SettingsService that
+    // backs the crash-engine config; no new infra.
+    private readonly settings: SettingsService,
   ) {}
 
   async onApplicationBootstrap() {
@@ -287,6 +308,13 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
     this.roundsUsedInCurrentSeed++;
     await this.fairness.markStartRound(seed.id, roundNumber);
 
+    // PR-AVIATOR-PAYOUT-CAP — read the cap config exactly once per
+    // round, BEFORE any bets are accepted. Snapshotting here gives
+    // every bet in this round the same cap (auditable, predictable);
+    // an admin lowering the cap mid-round can't yank rugs out from
+    // under live bets. New value takes effect on the next round.
+    const payoutCap = await loadCapConfig(this.settings);
+
     this.current = {
       roundId: row.id,
       roundNumber,
@@ -298,6 +326,7 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
       crashMultiplier,
       startedAt: 0,
       engine: engineResult,
+      payoutCap,
     };
     this.bettingClosesAt = Date.now() + BETTING_MS;
 
@@ -516,12 +545,42 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
     return this.cashoutInternal(bet, multiplier);
   }
 
-  private async cashoutInternal(bet: ActiveBet, multiplier: number) {
+  /**
+   * Internal settle path — single chokepoint for ALL cashouts (manual,
+   * auto-on-target, and PR-AVIATOR-PAYOUT-CAP's cap-triggered auto).
+   *
+   * `opts.reason` is currently informational only (logged + threaded
+   * through to the websocket flag) but reserved for future analytics —
+   * e.g. distinguishing manual vs auto cashouts in the recon job.
+   *
+   * Idempotency: the `bet.cashedOutAt !== null` early-return on the
+   * first line makes this safe to call from the tick loop AND the
+   * HTTP path simultaneously. NestJS is single-threaded so the
+   * `bet.cashedOutAt = multiplier` assignment is the critical
+   * section; once set, every subsequent invocation no-ops.
+   */
+  private async cashoutInternal(
+    bet: ActiveBet,
+    multiplier: number,
+    opts?: { reason?: 'manual' | 'auto' | 'cap' },
+  ) {
     if (bet.cashedOutAt !== null) return null;
     bet.cashedOutAt = multiplier;
-    const payout = Math.floor(
-      new Decimal(bet.amount).times(multiplier).toNumber(),
+
+    // PR-AVIATOR-PAYOUT-CAP — apply the per-bet cap. `applyPayoutCap`
+    // floors the raw payout with the same Math.floor convention the
+    // previous Decimal-based path used, so the un-capped result is
+    // byte-identical to legacy behaviour.
+    const capConfig: PayoutCapConfig = this.current?.payoutCap ?? {
+      enabled: false,
+      maxCoins: 0,
+    };
+    const capResult: PayoutCapResult = applyPayoutCap(
+      bet.amount,
+      multiplier,
+      capConfig,
     );
+    const payout = capResult.payout;
 
     // Credit through Bet first — that's the source of truth. If the
     // credit fails (network glitch), we still mark the bet `cashedOutAt`
@@ -542,6 +601,15 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
           aviatorBetId: bet.betId,
           multiplier: Number(multiplier.toFixed(2)),
           roundNumber: this.current?.roundNumber,
+          // Surface the cap details in the wallet ledger so a
+          // dispute can be answered without joining against
+          // AviatorBet — Bet's WalletTransaction.metadata is the
+          // first place support staff look.
+          payoutCapped: capResult.capped || undefined,
+          originalPayoutCoins: capResult.capped
+            ? capResult.originalPayout
+            : undefined,
+          payoutCapCoins: capResult.appliedCapCoins ?? undefined,
         },
       });
       betWalletOk = true;
@@ -557,14 +625,36 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
     // local audit row's `metadata` records whether Bet's credit
     // succeeded so the reconciliation log on AviatorBet can find any
     // stragglers (cashed-out client-side but never credited on Bet).
+    //
+    // PR-AVIATOR-PAYOUT-CAP — three new columns capture the cap
+    // audit trail. `payout` stores the actually-credited amount
+    // (capped); `originalPayoutCoins` stores the uncapped amount
+    // (only meaningful when the cap fired); `payoutCapCoins` stores
+    // the cap that was in force; `cappedByPayoutCap` is the
+    // boolean flag for fast filtering.
     await this.prisma.aviatorBet.update({
       where: { id: bet.betId },
       data: {
         cashedOutAt: new Date(),
         cashedOutMultiplier: multiplier.toFixed(2),
         payout: betWalletOk ? payout : 0,
+        originalPayoutCoins: capResult.originalPayout,
+        payoutCapCoins: capResult.appliedCapCoins,
+        cappedByPayoutCap: capResult.capped,
       },
     });
+
+    // Structured log for compliance / dispute review. One line per
+    // settlement, machine-parseable.
+    if (capResult.capped) {
+      this.logger.log(
+        `aviator-cashout reason=${opts?.reason ?? 'manual'} ` +
+          `bet=${bet.betId} user=${bet.userId} ` +
+          `stake=${bet.amount} multiplier=${multiplier.toFixed(2)} ` +
+          `originalPayout=${capResult.originalPayout} ` +
+          `cappedPayout=${payout} cap=${capResult.appliedCapCoins}`,
+      );
+    }
 
     const winner: RecentWinner = {
       username: bet.username,
@@ -577,9 +667,24 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
     if (this.recentWinners.length > RECENT_WINNERS_LIMIT) {
       this.recentWinners.length = RECENT_WINNERS_LIMIT;
     }
-    this.io.emit('PLAYER_CASHOUT', winner);
 
-    return { multiplier, payout };
+    // PR-AVIATOR-PAYOUT-CAP — emit the cap flags as OPTIONAL fields
+    // on PLAYER_CASHOUT so old clients (pre-cap) keep working and
+    // new clients can render "MAX PAYOUT REACHED". The bare
+    // `RecentWinner` shape is unchanged; the extra props ride along
+    // and are stripped by clients that don't know about them.
+    this.io.emit('PLAYER_CASHOUT', {
+      ...winner,
+      ...(capResult.capped
+        ? {
+            capped: true,
+            originalPayout: capResult.originalPayout,
+            payoutCapCoins: capResult.appliedCapCoins,
+          }
+        : {}),
+    });
+
+    return { multiplier, payout, capped: capResult.capped };
   }
 
   // ── public history & fairness ────────────────────────────────────────────
