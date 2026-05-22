@@ -195,6 +195,13 @@ export default function BetControls() {
   //   set        | true      | BETTING   → between  | WAIT FOR NEXT ROUND   (cashed out, round resetting)
   //   set        | true      | RUNNING   → waiting  | CASHED OUT — WAITING
   //   set        | true      | CRASHED   → waiting  | CASHED OUT — WAITING
+  // PR-AVIATOR-PAYOUT-CAP — surfaced via PLAYER_CASHOUT.capped which
+  // useAviator.ts patches onto `currentBet` for "this is me". The
+  // 'capped' state SUPERSEDES the normal 'waiting' state because the
+  // semantic intent is different ("you won the max, the cap fired"
+  // vs the generic "wait, your cashout already happened").
+  const cappedByPayoutCap = currentBet?.cappedByPayoutCap === true;
+
   const heroState: HeroState = (() => {
     // Branch 1: no live bet (either never placed, or already cashed
     // out so the bet ended successfully).
@@ -202,6 +209,12 @@ export default function BetControls() {
       if (phase === 'BETTING') {
         if (insufficient || (balance != null && balance < MIN_BET)) return 'topup';
         return 'place';
+      }
+      // PR-AVIATOR-PAYOUT-CAP — cap-triggered settlement gets its own
+      // chip so the player knows they got the maximum payout the cap
+      // allows. Distinct from generic "CASHED OUT — WAITING".
+      if (cappedByPayoutCap && (phase === 'RUNNING' || phase === 'CRASHED')) {
+        return 'capped';
       }
       // Cashed-out users get the existing "CASHED OUT — WAITING"
       // chip during RUNNING / CRASHED — different intent from
@@ -392,6 +405,24 @@ export default function BetControls() {
             tierColor={tier.color}
             currentBetAmount={currentBet?.amount ?? 0}
             cashedOut={cashedOut}
+            // PR-AVIATOR-PAYOUT-CAP — values for the 'capped' chip.
+            // cashedOutAt holds the multiplier at the time the cap
+            // fired; originalPayout (optional) lets us render the
+            // "could have won" line.
+            cappedPayout={
+              currentBet?.cappedByPayoutCap
+                ? Math.floor(
+                    currentBet.amount *
+                      (currentBet.cashedOutAt ?? 1),
+                  )
+                : null
+            }
+            cappedOriginalPayout={currentBet?.originalPayout ?? null}
+            cappedMultiplier={
+              currentBet?.cappedByPayoutCap
+                ? currentBet.cashedOutAt ?? null
+                : null
+            }
           />
 
           <FeedbackLine
@@ -429,7 +460,15 @@ type HeroState =
   | 'busted'
   | 'placed'
   | 'between'
-  | 'waiting';
+  | 'waiting'
+  /**
+   * `capped` — server's payout cap auto-cashed the bet at the cap
+   * line. UI shows "MAX PAYOUT REACHED" plus the actual payout +
+   * (optionally) the "could have won" figure. Distinct from
+   * `waiting` because the intent is "you won the maximum", not the
+   * neutral "your cashout is in flight".
+   */
+  | 'capped';
 
 function StepperBtn({
   label,
@@ -538,6 +577,9 @@ function HeroButton({
   tierColor,
   currentBetAmount,
   cashedOut,
+  cappedPayout,
+  cappedOriginalPayout,
+  cappedMultiplier,
 }: {
   state: HeroState;
   onClick: () => void;
@@ -548,6 +590,13 @@ function HeroButton({
   tierColor: string;
   currentBetAmount: number;
   cashedOut: boolean;
+  // PR-AVIATOR-PAYOUT-CAP — pre-computed values for the 'capped' chip.
+  // All three may be null when the cap didn't fire (e.g. when this
+  // button is rendered in any other state, or for old servers that
+  // don't send the cap flag).
+  cappedPayout: number | null;
+  cappedOriginalPayout: number | null;
+  cappedMultiplier: number | null;
 }) {
   const base =
     'relative w-full h-[68px] rounded-2xl font-extrabold text-white shadow-card overflow-hidden flex items-center justify-center transition select-none';
@@ -635,6 +684,36 @@ function HeroButton({
       );
       actionable = false;
       break;
+    case 'capped':
+      // PR-AVIATOR-PAYOUT-CAP — the server's cap auto-cashed this
+      // bet at the cap line. Visual: warm amber tone (positive but
+      // distinct from the live-cashout green), explicit primary
+      // label so there's no ambiguity, two sub-lines showing the
+      // actual capped payout + the multiplier the cap fired at.
+      // Plane continues flying for everyone else — the chip
+      // communicates "you're settled" without implying the round
+      // is over.
+      visualStyle =
+        'bg-gradient-to-br from-warning/30 to-warning/15 border border-warning/50 text-warning';
+      label = (
+        <span className="flex flex-col items-center leading-tight">
+          <span className="text-[10px] font-bold tracking-[0.18em] opacity-90">
+            MAX PAYOUT REACHED
+          </span>
+          <span className="font-mono text-lg font-black tabular-nums">
+            {cappedPayout != null
+              ? `+${formatCoins(cappedPayout)} coins`
+              : 'Auto cashed out'}
+          </span>
+          <span className="text-[10px] font-mono opacity-80 tabular-nums">
+            {cappedMultiplier != null
+              ? `Auto cashed out @ ${cappedMultiplier.toFixed(2)}×`
+              : 'Auto cashed out'}
+          </span>
+        </span>
+      );
+      actionable = false;
+      break;
     case 'waiting':
     default:
       visualStyle = 'bg-elevated/80 text-text-secondary';
@@ -646,6 +725,11 @@ function HeroButton({
       actionable = false;
       break;
   }
+
+  // Suppress unused-var warning if `cappedOriginalPayout` not
+  // referenced above — kept in the prop list for future "could
+  // have won X" expansion without re-plumbing the parent.
+  void cappedOriginalPayout;
 
   return (
     <button

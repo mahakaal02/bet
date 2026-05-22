@@ -82,7 +82,19 @@ export function useAviator() {
       const me = getUser()?.username;
       if (me && me === e.username) {
         if (state.currentBet) {
-          state.setCurrentBet({ ...state.currentBet, cashedOutAt: e.multiplier });
+          state.setCurrentBet({
+            ...state.currentBet,
+            cashedOutAt: e.multiplier,
+            // PR-AVIATOR-PAYOUT-CAP — propagate the server-side cap
+            // flag so BetControls can render "MAX PAYOUT REACHED"
+            // instead of the normal "CASHED OUT" chip. Old servers
+            // (pre-cap) won't send `e.capped`; we omit the field on
+            // the local bet rather than defaulting to false so
+            // round-trip-equality checks elsewhere stay clean.
+            ...(e.capped
+              ? { cappedByPayoutCap: true, originalPayout: e.originalPayout }
+              : {}),
+          });
         }
         // "Let it ride" — next round's default bet = this round's payout.
         state.setNextStake(e.payout);
