@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { getUser, getToken } from '@/lib/auth';
 import { useGame } from '@/lib/store';
 import WalletChip from './WalletChip';
+import StatsModal from './StatsModal';
 
 /**
  * Resolve the Kalki hub URL with the bearer token attached, so a logo
@@ -35,6 +36,7 @@ function hubUrl(): string {
  */
 export default function Navbar() {
   const [username, setUsername] = useState<string>('?');
+  const [statsOpen, setStatsOpen] = useState(false);
   useEffect(() => {
     setUsername(getUser()?.username ?? '?');
   }, []);
@@ -43,6 +45,7 @@ export default function Navbar() {
   const connected = useGame((s) => s.connected);
 
   return (
+    <>
     <header className="sticky top-0 z-30 backdrop-blur-xl bg-bg/70 border-b border-divider">
       <div className="mx-auto max-w-7xl flex items-center justify-between px-4 lg:px-6 py-2.5">
         <a
@@ -84,6 +87,29 @@ export default function Navbar() {
 
         <div className="flex items-center gap-2 text-sm">
           <WalletChip />
+          {/* My-stats button. Bar-chart icon, opens the StatsModal
+              with Day/Week/Month/All tabs. Sits next to Notifications
+              so the navbar still reads as "wallet · alerts · me". */}
+          <button
+            type="button"
+            onClick={() => setStatsOpen(true)}
+            aria-label="My stats"
+            title="My stats"
+            className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-elevated/60 text-text-secondary hover:bg-elevated hover:text-text-primary chip-press transition"
+          >
+            <svg
+              width="16" height="16"
+              viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round"
+              aria-hidden
+            >
+              <line x1="6" y1="20" x2="6" y2="14" />
+              <line x1="12" y1="20" x2="12" y2="8" />
+              <line x1="18" y1="20" x2="18" y2="11" />
+              <line x1="3" y1="20" x2="21" y2="20" />
+            </svg>
+          </button>
           <Link
             href="/notifications"
             aria-label="Notifications"
@@ -118,5 +144,7 @@ export default function Navbar() {
         </div>
       </div>
     </header>
+    <StatsModal open={statsOpen} onClose={() => setStatsOpen(false)} />
+    </>
   );
 }
