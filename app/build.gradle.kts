@@ -21,10 +21,23 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
 
-        buildConfigField("String", "API_BASE_URL", "\"https://api.uniquebid.local/\"")
-        buildConfigField("String", "WS_URL", "\"wss://api.uniquebid.local/ws\"")
-        buildConfigField("String", "AVIATOR_URL", "\"https://aviator.uniquebid.local/\"")
-        buildConfigField("String", "BET_URL", "\"https://bet.uniquebid.local/\"")
+        // Production endpoints. Hostnames match the Helm chart's
+        // `kalki-<svc>.cloud.podstack.ai` convention — same names the
+        // backend's CORS allowlist baked in (see helm/kalki/values.yaml
+        // `backend.corsAllowedOrigins`). The bare `uniquebid.local`
+        // values that shipped before were placeholders from the
+        // pre-cluster prototype phase and never resolved in DNS.
+        //
+        // Build variants override these:
+        //   • debug   → emulator-host alias (10.0.2.2) for local dev
+        //   • release → these values, served over HTTPS
+        //
+        // The release `network_security_config.xml` blocks cleartext
+        // entirely (PR-ANDROID-SECURITY), so HTTPS here isn't optional.
+        buildConfigField("String", "API_BASE_URL", "\"https://kalki-backend.cloud.podstack.ai/\"")
+        buildConfigField("String", "WS_URL", "\"wss://kalki-backend.cloud.podstack.ai/ws\"")
+        buildConfigField("String", "AVIATOR_URL", "\"https://kalki-aviator.cloud.podstack.ai/\"")
+        buildConfigField("String", "BET_URL", "\"https://kalki-bet.cloud.podstack.ai/\"")
         // Auctions are their own Next.js app on port 3200 — separate from
         // Bet (3100) and Aviator (3000). Three products, three ports,
         // one shared design system + shared backend.
@@ -33,7 +46,7 @@ android {
         // The Android shell already shows a native hub; landing the
         // WebView on the web hub would surface a redundant "pick a
         // product" view inside the "Live Auctions" tab.
-        buildConfigField("String", "AUCTIONS_URL", "\"https://auctions.uniquebid.local/auctions\"")
+        buildConfigField("String", "AUCTIONS_URL", "\"https://kalki-auctions.cloud.podstack.ai/auctions\"")
     }
 
     buildTypes {
@@ -51,6 +64,19 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Sign release builds with the local debug keystore. This is
+            // the standard "internal distribution" pattern — the APK is
+            // installable on any device without a Play-store upload key,
+            // but it's clearly not a Play-Store-publishable artifact
+            // (different signature). A proper release-key SigningConfig
+            // (KeystoreProperties) lands when we cut the first
+            // Play-Store-tracked build.
+            //
+            // Auto-resolution: signingConfigs.debug uses
+            // ~/.android/debug.keystore which Android Studio creates on
+            // first launch. If the file is missing, Gradle bootstraps
+            // it during the first build — no extra setup required.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
