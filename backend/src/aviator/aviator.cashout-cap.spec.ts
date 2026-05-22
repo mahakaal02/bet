@@ -1,4 +1,5 @@
 import { AviatorService } from './aviator.service';
+import { timeForMultiplier } from './fairness';
 
 /**
  * Integration-shaped tests for the `cashoutInternal` path with the
@@ -259,6 +260,167 @@ describe('AviatorService.cashoutInternal — payout-cap behaviour', () => {
       },
     });
     expect(result?.capped).toBe(true);
+  });
+});
+
+describe('AviatorService.tick — cap-triggered auto-cashout', () => {
+  function makeTickHarness(opts: {
+    cap: { enabled: boolean; maxCoins: number };
+    bets: MockBet[];
+    crashMultiplier: number;
+    /** Force the live multiplier `tick()` will compute for the test. */
+    currentMultiplier: number;
+  }) {
+    const harness = makeService({ cap: opts.cap });
+    // Populate `this.bets`. The service expects a Map keyed by userId.
+    const map = new Map<string, MockBet>();
+    for (const b of opts.bets) map.set(b.userId, b);
+    (harness.service as unknown as { bets: Map<string, MockBet> }).bets = map;
+
+    // The real `tick()` recomputes `currentMultiplier` from
+    // `multiplierAt(Date.now() - startedAt)`. Compute the `startedAt`
+    // that makes the curve sit at the target multiplier RIGHT NOW.
+    // This means we exercise the real curve formula instead of stubbing
+    // it — closer to the production path with no extra mocks.
+    const elapsedMs = timeForMultiplier(opts.currentMultiplier);
+    (harness.service as unknown as { current: unknown }).current = {
+      roundId: 'r-1',
+      roundNumber: 7,
+      payoutCap: opts.cap,
+      crashMultiplier: opts.crashMultiplier,
+      startedAt: Date.now() - elapsedMs,
+    };
+    (harness.service as unknown as { phase: string }).phase = 'RUNNING';
+    return harness;
+  }
+
+  it('fires at EXACTLY capMultiplier when current crosses the line', async () => {
+    // ₹100 stake, ₹20 000 cap → cap line at 200×.
+    // Tick current = 250× (overshoot). Should settle at exactly 200×.
+    const bet = makeBet({ amount: 100, userId: 'u-1' });
+    const harness = makeTickHarness({
+      cap: { enabled: true, maxCoins: 20_000 },
+      bets: [bet],
+      crashMultiplier: 1_000, // far above, doesn't crash this tick
+      currentMultiplier: 250,
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (harness.service as any).tick();
+
+    // Settled at 200×, not 250× — the audit shows the exact cap line.
+    expect(harness.aviatorBetUpdates).toHaveLength(1);
+    expect(harness.aviatorBetUpdates[0]).toMatchObject({
+      data: {
+        cashedOutMultiplier: '200.00',
+        payout: 20_000,
+        cappedByPayoutCap: true,
+      },
+    });
+    // PLAYER_CASHOUT emitted with capped: true.
+    expect(
+      harness.socketEmits.find((e) => e.event === 'PLAYER_CASHOUT')?.payload,
+    ).toMatchObject({ multiplier: 200, payout: 20_000, capped: true });
+  });
+
+  it('does NOT fire when current multiplier is below the cap line', async () => {
+    const bet = makeBet({ amount: 100 });
+    const harness = makeTickHarness({
+      cap: { enabled: true, maxCoins: 20_000 },
+      bets: [bet],
+      crashMultiplier: 1_000,
+      currentMultiplier: 150,
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (harness.service as any).tick();
+
+    // Bet stays alive; no settlement happened.
+    expect(harness.aviatorBetUpdates).toHaveLength(0);
+    expect(harness.walletCredits).toHaveLength(0);
+  });
+
+  it('cap-triggered auto-cashout takes precedence over autoCashoutAt', async () => {
+    // Player set autoCashoutAt=500. ₹100 stake, ₹20k cap → cap line 200×.
+    // At 250× current, cap fires first; autoCashoutAt branch sees the bet
+    // already cashed-out and no-ops.
+    const bet = makeBet({ amount: 100, autoCashoutAt: 500 });
+    const harness = makeTickHarness({
+      cap: { enabled: true, maxCoins: 20_000 },
+      bets: [bet],
+      crashMultiplier: 1_000,
+      currentMultiplier: 250,
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (harness.service as any).tick();
+
+    // Settled at the cap line (200×), not the player's autoCashoutAt (500×).
+    expect(harness.aviatorBetUpdates).toHaveLength(1);
+    expect(harness.aviatorBetUpdates[0]).toMatchObject({
+      data: { cashedOutMultiplier: '200.00', cappedByPayoutCap: true },
+    });
+  });
+
+  it('player whose autoCashoutAt < cap line cashes at autoCashoutAt (cap inactive)', async () => {
+    // ₹100 stake, ₹20k cap → cap line 200×. Player autoCashoutAt=50×.
+    // At 60× current, the cap branch is below threshold so does
+    // nothing; the autoCashoutAt branch fires at exactly 50.
+    const bet = makeBet({ amount: 100, autoCashoutAt: 50 });
+    const harness = makeTickHarness({
+      cap: { enabled: true, maxCoins: 20_000 },
+      bets: [bet],
+      crashMultiplier: 1_000,
+      currentMultiplier: 60,
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (harness.service as any).tick();
+
+    expect(harness.aviatorBetUpdates[0]).toMatchObject({
+      data: {
+        cashedOutMultiplier: '50.00',
+        payout: 5_000, // 100 × 50, well below 20k cap
+        cappedByPayoutCap: false,
+      },
+    });
+  });
+
+  it('cap disabled: tick never fires cap-triggered auto-cashout', async () => {
+    const bet = makeBet({ amount: 100 });
+    const harness = makeTickHarness({
+      cap: { enabled: false, maxCoins: 20_000 },
+      bets: [bet],
+      crashMultiplier: 1_000,
+      currentMultiplier: 500,
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (harness.service as any).tick();
+
+    expect(harness.aviatorBetUpdates).toHaveLength(0);
+  });
+
+  it('multi-bet: cap-triggered settlement is per-bet, independent', async () => {
+    // Two bets — A's cap line is 200× (₹100 stake), B's is 100× (₹200 stake).
+    // At current=150×: only B fires (150 ≥ 100), A stays alive (150 < 200).
+    const a = makeBet({ betId: 'b-A', userId: 'u-A', amount: 100 });
+    const b = makeBet({ betId: 'b-B', userId: 'u-B', amount: 200 });
+    const harness = makeTickHarness({
+      cap: { enabled: true, maxCoins: 20_000 },
+      bets: [a, b],
+      crashMultiplier: 1_000,
+      currentMultiplier: 150,
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (harness.service as any).tick();
+
+    expect(harness.aviatorBetUpdates).toHaveLength(1);
+    expect(harness.aviatorBetUpdates[0]).toMatchObject({
+      where: { id: 'b-B' },
+      data: { cashedOutMultiplier: '100.00', payout: 20_000, cappedByPayoutCap: true },
+    });
   });
 });
 

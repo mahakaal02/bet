@@ -364,13 +364,48 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
     const elapsed = Date.now() - this.current.startedAt;
     this.currentMultiplier = multiplierAt(elapsed);
 
+    // PR-AVIATOR-PAYOUT-CAP — cap-triggered auto-cashout.
+    //
+    // For each live bet, the moment the live multiplier crosses
+    // `capMultiplier(stake, capCoins)`, we settle the bet at EXACTLY
+    // that multiplier (not the current tick's value, which may have
+    // overshot by up to 100 ms / one tick of curve climb). Using the
+    // exact line means:
+    //   - The capped payout equals the configured cap to the coin.
+    //   - The audit log shows the player got the maximum the cap
+    //     allows — no "lost a few coins to tick granularity".
+    //   - Spectators see a consistent cashout multiplier in the
+    //     roster (`markRosterCashout` uses the same value).
+    //
+    // We run this BEFORE the autoCashoutAt loop so a player whose
+    // chosen autoCashoutAt is ABOVE their cap line still gets the
+    // cap-triggered settlement (e.g. ₹100 bet with autoCashoutAt=500
+    // and cap=₹20k — fires at 200×, not 500×). Putting it first also
+    // means a player whose autoCashoutAt is BELOW the cap fires
+    // normally on the next iteration (`bet.cashedOutAt !== null`
+    // makes the cap branch a no-op).
+    //
+    // The two loops are deliberately separate (not merged into one)
+    // so the order is explicit and a future reviewer can't
+    // accidentally re-order them.
+    if (this.current.payoutCap && isCapActive(this.current.payoutCap)) {
+      const cap = this.current.payoutCap.maxCoins;
+      for (const bet of this.bets.values()) {
+        if (bet.cashedOutAt !== null) continue;
+        const lineM = capMultiplier(bet.amount, cap);
+        if (this.currentMultiplier >= lineM) {
+          await this.cashoutInternal(bet, lineM, { reason: 'cap' });
+        }
+      }
+    }
+
     for (const bet of this.bets.values()) {
       if (
         bet.cashedOutAt === null &&
         bet.autoCashoutAt !== null &&
         this.currentMultiplier >= bet.autoCashoutAt
       ) {
-        await this.cashoutInternal(bet, bet.autoCashoutAt);
+        await this.cashoutInternal(bet, bet.autoCashoutAt, { reason: 'auto' });
       }
     }
 
@@ -542,7 +577,7 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
     if (bet.cashedOutAt !== null) throw new ConflictException('already cashed out');
 
     const multiplier = this.currentMultiplier;
-    return this.cashoutInternal(bet, multiplier);
+    return this.cashoutInternal(bet, multiplier, { reason: 'manual' });
   }
 
   /**
@@ -582,6 +617,18 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
     );
     const payout = capResult.payout;
 
+    // The tick-loop's cap-triggered path settles a bet at EXACTLY
+    // `capMultiplier(stake, cap)` — at that point the raw payout
+    // equals the cap to the coin, so `applyPayoutCap.capped` is
+    // technically false (raw is not > cap). But the cap is what
+    // caused the settlement; UX-wise the player MUST see "MAX
+    // PAYOUT REACHED", and the audit row MUST flag this for
+    // compliance. So we treat `reason: 'cap'` as conclusively
+    // capped regardless of the raw arithmetic.
+    const capped =
+      capResult.capped ||
+      (opts?.reason === 'cap' && isCapActive(capConfig));
+
     // Credit through Bet first — that's the source of truth. If the
     // credit fails (network glitch), we still mark the bet `cashedOutAt`
     // locally because the user's choice has happened; the Bet credit
@@ -605,10 +652,8 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
           // dispute can be answered without joining against
           // AviatorBet — Bet's WalletTransaction.metadata is the
           // first place support staff look.
-          payoutCapped: capResult.capped || undefined,
-          originalPayoutCoins: capResult.capped
-            ? capResult.originalPayout
-            : undefined,
+          payoutCapped: capped || undefined,
+          originalPayoutCoins: capped ? capResult.originalPayout : undefined,
           payoutCapCoins: capResult.appliedCapCoins ?? undefined,
         },
       });
@@ -640,13 +685,13 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
         payout: betWalletOk ? payout : 0,
         originalPayoutCoins: capResult.originalPayout,
         payoutCapCoins: capResult.appliedCapCoins,
-        cappedByPayoutCap: capResult.capped,
+        cappedByPayoutCap: capped,
       },
     });
 
     // Structured log for compliance / dispute review. One line per
     // settlement, machine-parseable.
-    if (capResult.capped) {
+    if (capped) {
       this.logger.log(
         `aviator-cashout reason=${opts?.reason ?? 'manual'} ` +
           `bet=${bet.betId} user=${bet.userId} ` +
@@ -675,7 +720,7 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
     // and are stripped by clients that don't know about them.
     this.io.emit('PLAYER_CASHOUT', {
       ...winner,
-      ...(capResult.capped
+      ...(capped
         ? {
             capped: true,
             originalPayout: capResult.originalPayout,
@@ -684,7 +729,7 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
         : {}),
     });
 
-    return { multiplier, payout, capped: capResult.capped };
+    return { multiplier, payout, capped };
   }
 
   // ── public history & fairness ────────────────────────────────────────────
