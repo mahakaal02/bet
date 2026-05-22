@@ -30,9 +30,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.uniquebid.app.ui.components.CoinChip
-import com.uniquebid.app.ui.theme.BrandGold
-import com.uniquebid.app.ui.theme.BrandIndigo
-import com.uniquebid.app.ui.theme.BrandIndigoDark
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,8 +75,17 @@ fun HubScreen(
             HubCard(
                 title = "Live Auctions",
                 subtitle = "Win real products by outsmarting other bidders.",
-                gradient = Brush.linearGradient(listOf(BrandIndigo, BrandIndigoDark)),
-                accent = BrandGold,
+                // Warm amber gradient — high-contrast against the dark
+                // navy background (`SurfaceDark = #0A0F1F`) and visually
+                // distinct from the red-orange Aviator tile and the
+                // blue Exchange tile below. The previous navy gradient
+                // (`BrandIndigo → BrandIndigoDark`) sat within 4 % of
+                // the page background lightness so the card was nearly
+                // invisible.
+                gradient = Brush.linearGradient(
+                    listOf(Color(0xFFD97706), Color(0xFF92400E)),
+                ),
+                accent = Color(0xFFFCD34D),
                 onClick = onLiveAuctions,
             )
 
