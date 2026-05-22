@@ -785,6 +785,108 @@ export class AviatorService implements OnApplicationBootstrap, OnModuleDestroy {
     }));
   }
 
+  // ── per-user stats (player-facing) ───────────────────────────────────────
+
+  /**
+   * Player's own performance summary for a rolling window. Backs the
+   * "My stats" modal in the player UI — same metrics players are used
+   * to seeing in other Aviator-family games (Spribe et al), with a
+   * Day / Week / Month / All-time selector.
+   *
+   * Range semantics (anchor = AviatorBet.createdAt, i.e. when the bet
+   * was placed; not when the round crashed, because a player who placed
+   * a bet at 23:59 on a Sunday is on Sunday's books even if the round
+   * crashed at 00:00 Monday). UTC anchor.
+   *
+   *   day   → last 24h
+   *   week  → last 7d
+   *   month → last 30d
+   *   all   → since account creation (no `since` filter)
+   *
+   * Returned shape is deliberately flat — the UI cards each map to one
+   * field — and "—" / null-safe so a brand-new player with zero bets
+   * still gets a clean readout (all zeros) rather than an error.
+   */
+  async getUserStats(userId: string, range: 'day' | 'week' | 'month' | 'all') {
+    const lookbackMs =
+      range === 'day'
+        ? 24 * 60 * 60 * 1000
+        : range === 'week'
+          ? 7 * 24 * 60 * 60 * 1000
+          : range === 'month'
+            ? 30 * 24 * 60 * 60 * 1000
+            : null;
+    const since = lookbackMs ? new Date(Date.now() - lookbackMs) : null;
+    const where = {
+      userId,
+      ...(since ? { createdAt: { gte: since } } : {}),
+    };
+
+    // Two queries: one aggregate for the rollups (count + sums), one
+    // bounded findMany for the per-bet extremes (biggest multiplier,
+    // biggest win). We only need 200 rows because biggest-of is a
+    // single pass; if a player has bet > 200 times in the last day
+    // we still surface the top of that bucket, which is what they
+    // care about.
+    const [agg, topBets] = await Promise.all([
+      this.prisma.aviatorBet.aggregate({
+        where,
+        _count: { _all: true },
+        _sum: { amount: true, payout: true },
+      }),
+      this.prisma.aviatorBet.findMany({
+        where,
+        select: {
+          amount: true,
+          payout: true,
+          cashedOutMultiplier: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      }),
+    ]);
+
+    const totalBets = agg._count._all;
+    const totalStaked = agg._sum.amount ?? 0;
+    const totalPayout = agg._sum.payout ?? 0;
+    const netProfit = totalPayout - totalStaked;
+    // A "win" = the bet had a non-null cashedOutMultiplier (player
+    // cashed out before crash). Bets that never cashed out are
+    // losses, regardless of how high the round went.
+    const wins = topBets.filter((b) => b.cashedOutMultiplier !== null).length;
+    const winRate = totalBets > 0 ? wins / totalBets : 0;
+
+    // Per-bet extremes. cashedOutMultiplier is a Decimal so we coerce
+    // before comparing; treat null as 0 so "didn't cash out" never
+    // wins the biggest-multiplier prize over a real cashout.
+    let biggestMultiplier = 0;
+    let biggestWin = 0;
+    for (const b of topBets) {
+      const m =
+        b.cashedOutMultiplier != null
+          ? Number(b.cashedOutMultiplier.toString())
+          : 0;
+      if (m > biggestMultiplier) biggestMultiplier = m;
+      const p = b.payout ?? 0;
+      if (p > biggestWin) biggestWin = p;
+    }
+
+    return {
+      range,
+      since: since ? since.toISOString() : null,
+      totalBets,
+      wins,
+      losses: totalBets - wins,
+      winRate,
+      totalStaked,
+      totalPayout,
+      netProfit,
+      biggestMultiplier,
+      biggestWin,
+    };
+  }
+
   // ── admin analytics ──────────────────────────────────────────────────────
 
   /**

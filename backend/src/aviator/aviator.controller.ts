@@ -44,6 +44,26 @@ export class AviatorController {
     return this.aviator.recentRounds(n);
   }
 
+  /**
+   * Player's own performance stats over a rolling window. Backs the
+   * "My stats" modal in the player UI — Day / Week / Month / All
+   * tabs each hit this endpoint with the corresponding range.
+   *
+   * Unknown / missing `range` falls back to "day" rather than 400ing,
+   * so a typo in the URL still produces a usable readout.
+   */
+  @Get('stats')
+  async stats(
+    @CurrentUser() user: AuthedUser,
+    @Query('range') range?: string,
+  ) {
+    const r =
+      range === 'week' || range === 'month' || range === 'all'
+        ? range
+        : 'day';
+    return this.aviator.getUserStats(user.id, r);
+  }
+
   @Get('fairness/current')
   async fairnessCurrent() {
     return this.fairness.currentPublic();
