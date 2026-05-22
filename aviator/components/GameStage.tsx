@@ -129,25 +129,16 @@ export default function GameStage() {
       drawHorizonGrid(ctx, cssW, cssH);
 
       if (phase === 'RUNNING' && state.startedAt) {
-        // Clamp negative to zero: when the client clock is behind the
-        // server clock (common on mobile devices that don't NTP-sync
-        // aggressively), `Date.now() - state.startedAt` is briefly
-        // negative for the first ~<skew> ms of a round. Without this
-        // guard the curve loop generates points with `t < 0`, x
-        // values DECREASE as i increases, and the mascot's tangent
-        // `atan2(dy, dx)` falls in the (π/2, π] half-plane — the
-        // sprite ends up rotated 180° and visibly faces BACKWARDS
-        // until the client's wall-clock catches up to startedAt.
-        //
-        // Observed on an Android tablet WebView (the host phone was
-        // ~800 ms behind the server). Symptom: plane spawns at the
-        // takeoff position, tail pointing right, "stuck" while the
-        // multiplier climbs, then suddenly snaps forward.
-        //
-        // Clamping to 0 keeps the curve at takeoff (single-point,
-        // multiplier 1.0) for those first frames — visually equal
-        // to the BETTING-phase idle pose, which is also what the
-        // server expects the player to see at that instant.
+        // `startedAt` is now anchored to the client's wall-clock at
+        // takeoff (PR-AVIATOR-CLOCK-SKEW-ANCHOR) and continuously
+        // re-snapped from server MULTIPLIER_UPDATE events, so it can
+        // never read as a future timestamp. We still defensively
+        // clamp negative→0 as a belt-and-braces against a frame that
+        // could fire between `onGameRunning` (which sets startedAt
+        // to receive time) and an unusually-early request-animation-
+        // frame callback — sub-millisecond, but the cost of the
+        // clamp is zero and it eliminates the original "plane faces
+        // backwards" failure mode entirely.
         const elapsed = Math.max(0, Date.now() - state.startedAt);
         const r = drawCurveAndMascot(
           ctx,
@@ -740,9 +731,12 @@ function drawAutoCashoutMarker(
   autoCashoutAt: number,
   currentMultiplier: number,
 ) {
-  // Same clock-skew guard as the curve-and-mascot path. Without it,
-  // a negative `elapsed` makes the marker dot land at a negative x
-  // (off-canvas-left) for the first ~<skew> ms of a round.
+  // Belt-and-braces non-negative clamp. startedAt is now anchored to
+  // the client's clock (PR-AVIATOR-CLOCK-SKEW-ANCHOR) so this is
+  // effectively a no-op, but we keep the clamp in case a future
+  // refactor reintroduces a server-clock startedAt path — the cost
+  // is zero and the failure mode (negative-x marker off-canvas)
+  // would be subtle and easy to miss.
   const elapsed = Math.max(0, Date.now() - startedAt);
   const targetT = timeForMultiplier(autoCashoutAt);
   if (targetT <= elapsed) return;

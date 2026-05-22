@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { timeForMultiplier } from './curve';
 import type {
   ActiveBet,
   ChatMessage,
@@ -100,17 +101,34 @@ export const useGame = create<GameState>((set) => ({
   setOnlineCount: (n) => set({ onlineCount: n }),
 
   applySnapshot: (s) =>
-    set({
-      phase: s.phase,
-      roundId: s.roundId ?? null,
-      roundNumber: s.roundNumber ?? null,
-      seedId: s.seedId ?? null,
-      serverSeedHash: s.serverSeedHash ?? null,
-      clientSeed: s.clientSeed ?? null,
-      nonce: s.nonce ?? null,
-      bettingEndsAt: s.bettingEndsAt,
-      startedAt: s.startedAt,
-      multiplier: s.multiplier ?? 1.0,
+    set(() => {
+      // PR-AVIATOR-CLOCK-SKEW-ANCHOR — when joining mid-round, snapshot
+      // includes both the server's `startedAt` and the server's
+      // current `multiplier`. Trusting `startedAt` raw means a client
+      // whose wall-clock differs from the server's will see the plane
+      // animation desynced from the multiplier display.
+      //
+      // Instead we back-derive startedAt from the authoritative
+      // multiplier reading: `Date.now() - timeForMultiplier(m)` is
+      // the value of startedAt that makes our local clock agree with
+      // the server's reported curve position. Plane lands exactly
+      // where it should the very first frame.
+      let startedAt = s.startedAt;
+      if (s.phase === 'RUNNING' && s.multiplier && s.multiplier > 1.0) {
+        startedAt = Date.now() - timeForMultiplier(s.multiplier);
+      }
+      return {
+        phase: s.phase,
+        roundId: s.roundId ?? null,
+        roundNumber: s.roundNumber ?? null,
+        seedId: s.seedId ?? null,
+        serverSeedHash: s.serverSeedHash ?? null,
+        clientSeed: s.clientSeed ?? null,
+        nonce: s.nonce ?? null,
+        bettingEndsAt: s.bettingEndsAt,
+        startedAt,
+        multiplier: s.multiplier ?? 1.0,
+      };
     }),
 
   onGameStart: (e) =>
@@ -131,9 +149,57 @@ export const useGame = create<GameState>((set) => ({
     }),
 
   onGameRunning: (e) =>
-    set({ phase: 'RUNNING', roundId: e.roundId, startedAt: e.startedAt, multiplier: 1.0 }),
+    set({
+      phase: 'RUNNING',
+      roundId: e.roundId,
+      // PR-AVIATOR-CLOCK-SKEW-ANCHOR — at takeoff the multiplier IS
+      // 1.0 (the round just started), so we treat receive-time as
+      // start-time on the local clock. There's a small ~50ms network
+      // hop the plane will visually lag the multiplier by during
+      // this window; the first MULTIPLIER_UPDATE event corrects it
+      // (see onMultiplier).
+      //
+      // Was: `startedAt: e.startedAt` (server's `Date.now()`). That
+      // works only when client and server clocks agree. On a
+      // skewed client (Android tablet, NTP-unsynced device) the
+      // difference manifested as the plane sitting at the takeoff
+      // position while the multiplier counted up — the plane was
+      // waiting for the client's wall-clock to catch up to the
+      // server's reported startedAt.
+      startedAt: Date.now(),
+      multiplier: 1.0,
+    }),
 
-  onMultiplier: (m) => set({ multiplier: m }),
+  onMultiplier: (m) =>
+    set((state) => {
+      if (state.phase !== 'RUNNING' || state.startedAt == null) {
+        return { multiplier: m };
+      }
+      // PR-AVIATOR-CLOCK-SKEW-ANCHOR — re-anchor startedAt to the
+      // value that makes our local clock agree with the server's
+      // authoritative multiplier. This runs on every MULTIPLIER_UPDATE
+      // event (~50-150 ms cadence) and is effectively a continuous
+      // clock-skew correction: if the two clocks agree, the re-anchor
+      // is a no-op; if they drift, we snap into alignment without the
+      // user noticing.
+      //
+      // Why this works: `timeForMultiplier(m)` inverts the shared
+      // exponential curve to give us "how long after takeoff would
+      // multiplier=m correspond to". `Date.now() - that` is the
+      // value of startedAt that puts the plane exactly where the
+      // server's reading says it should be on OUR clock.
+      //
+      // Skip the no-op case (multiplier=1.0 means takeoff just
+      // happened — keep the existing anchor from onGameRunning).
+      if (m <= 1.0) {
+        return { multiplier: m };
+      }
+      const serverElapsedMs = timeForMultiplier(m);
+      return {
+        multiplier: m,
+        startedAt: Date.now() - serverElapsedMs,
+      };
+    }),
 
   onCrash: (e) =>
     set((state) => ({
