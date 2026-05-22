@@ -52,11 +52,29 @@ android {
     buildTypes {
         debug {
             isMinifyEnabled = false
-            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:4000/\"")
-            buildConfigField("String", "WS_URL", "\"ws://10.0.2.2:4000/ws\"")
-            buildConfigField("String", "AVIATOR_URL", "\"http://10.0.2.2:3000/\"")
-            buildConfigField("String", "BET_URL", "\"http://10.0.2.2:3100/\"")
-            buildConfigField("String", "AUCTIONS_URL", "\"http://10.0.2.2:3200/auctions\"")
+            // PHYSICAL-DEVICE-SAFE: the previous emulator-only overrides
+            // (10.0.2.2 is an emulator-host alias and can't be resolved
+            // from a real phone) sent every debug-APK install on a
+            // physical device into a 15s connect timeout. We removed
+            // those overrides so debug now inherits the production URLs
+            // from `defaultConfig` — debug builds remain useful for
+            // sideloading + Logcat / R8-disabled debugging without
+            // sacrificing reachability.
+            //
+            // EMULATOR DEVS: when you need to test against a backend
+            // running on your host machine instead of prod, override
+            // each URL locally (do NOT commit the change):
+            //
+            //   buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:4000/\"")
+            //   buildConfigField("String", "WS_URL",       "\"ws://10.0.2.2:4000/ws\"")
+            //   buildConfigField("String", "AVIATOR_URL",  "\"http://10.0.2.2:3000/\"")
+            //   buildConfigField("String", "BET_URL",      "\"http://10.0.2.2:3100/\"")
+            //   buildConfigField("String", "AUCTIONS_URL", "\"http://10.0.2.2:3200/auctions\"")
+            //
+            // The debug-only network-security-config carve-out at
+            // app/src/debug/res/xml/network_security_config.xml
+            // already permits cleartext to 10.0.2.2 / localhost /
+            // 127.0.0.1 for this case.
         }
         release {
             isMinifyEnabled = true
