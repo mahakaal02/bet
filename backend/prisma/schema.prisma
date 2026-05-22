@@ -318,6 +318,15 @@ model AviatorBet {
   cashedOutAt         DateTime?
   cashedOutMultiplier Decimal? @db.Decimal(10, 2)
   payout              Int?
+  // PR-AVIATOR-PAYOUT-CAP — settlement-side per-bet ceiling.
+  //   originalPayoutCoins  — what `payout` would have been WITHOUT the cap
+  //   payoutCapCoins       — cap value in force when the bet settled (audit trail)
+  //   cappedByPayoutCap    — did the cap actually fire (`payout < originalPayoutCoins`)
+  // All three columns are nullable / default false so historical rows
+  // remain valid without backfill.
+  originalPayoutCoins Int?
+  payoutCapCoins      Int?
+  cappedByPayoutCap   Boolean  @default(false)
   createdAt           DateTime @default(now())
 
   user  User         @relation(fields: [userId], references: [id])
