@@ -18,6 +18,12 @@ import { AviatorService } from '../aviator/aviator.service';
 import { AviatorChatService } from '../aviator/chat.service';
 import { FairnessStore } from '../aviator/fairness-store';
 import { CrashDistributionService } from '../aviator/crash/crash-distribution.service';
+import {
+  DEFAULT_PAYOUT_CAP_COINS,
+  DEFAULT_PAYOUT_CAP_ENABLED,
+  PAYOUT_CAP_KEY_ENABLED,
+  PAYOUT_CAP_KEY_MAX_COINS,
+} from '../aviator/payout-cap';
 import { SettingType } from '@prisma/client';
 import { SettingsService } from '../foundation/settings.service';
 import { AuthedUser, CurrentUser } from '../auth/current-user.decorator';
@@ -231,6 +237,77 @@ export class AdminController {
 
     await this.crashEngine.refreshConfig();
     return this.crashEngine.snapshot();
+  }
+
+  // ── Payout-cap (PR-AVIATOR-PAYOUT-CAP) ────────────────────────────
+  // Per-bet settlement-side ceiling, distinct from
+  // `AviatorSettings.maxPayout` which clips the crash multiplier itself.
+  // Storage is SystemSetting (audit-logged via SettingsService.set)
+  // so admin edits show up in SystemSettingHistory like the crash-
+  // engine knobs.
+
+  @Get('aviator/payout-cap')
+  async getPayoutCap() {
+    const enabled = await this.settings.getBool(
+      PAYOUT_CAP_KEY_ENABLED,
+      DEFAULT_PAYOUT_CAP_ENABLED,
+    );
+    const maxCoins = await this.settings.getInt(
+      PAYOUT_CAP_KEY_MAX_COINS,
+      DEFAULT_PAYOUT_CAP_COINS,
+    );
+    return { enabled, maxCoins };
+  }
+
+  @Patch('aviator/payout-cap')
+  async updatePayoutCap(
+    @Body() dto: { enabled?: boolean; maxCoins?: number | null },
+    @CurrentUser() actor: AuthedUser,
+  ) {
+    // Validate up front so a misclicked admin can't write garbage
+    // into SystemSetting and then have loadCapConfig silently
+    // coerce it back to the default with no audit trail.
+    if (
+      dto.enabled !== undefined &&
+      typeof dto.enabled !== 'boolean'
+    ) {
+      throw new BadRequestException('enabled must be a boolean');
+    }
+    if (dto.maxCoins !== undefined && dto.maxCoins !== null) {
+      if (
+        !Number.isFinite(dto.maxCoins) ||
+        !Number.isInteger(dto.maxCoins) ||
+        dto.maxCoins < 1
+      ) {
+        throw new BadRequestException(
+          'maxCoins must be a positive integer (or null to reset to default)',
+        );
+      }
+    }
+
+    if (dto.enabled !== undefined) {
+      await this.settings.set(
+        PAYOUT_CAP_KEY_ENABLED,
+        dto.enabled,
+        SettingType.BOOL,
+        actor.id,
+      );
+    }
+    if (dto.maxCoins !== undefined) {
+      // null → reset to default. We write the default explicitly
+      // (rather than DELETE-ing the row) so the audit history
+      // shows the operator's intent + the next reader sees the
+      // canonical default rather than the env-var fallback.
+      const value =
+        dto.maxCoins === null ? DEFAULT_PAYOUT_CAP_COINS : dto.maxCoins;
+      await this.settings.set(
+        PAYOUT_CAP_KEY_MAX_COINS,
+        value,
+        SettingType.INT,
+        actor.id,
+      );
+    }
+    return this.getPayoutCap();
   }
 
   @Get('aviator/rounds')
