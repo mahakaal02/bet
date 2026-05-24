@@ -8,6 +8,7 @@ import {
   fmtDate,
 } from "@/components/admin/ui/primitives";
 import { IconAlert, IconShield } from "@/components/admin/ui/icons";
+import { FraudScanButton } from "./FraudScanButton";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,7 @@ export default async function FraudPage() {
         kicker="Trust & safety"
         title="Fraud & risk"
         description="Heuristic signals from the trade-stream scanner. Triage from oldest to newest; escalate critical patterns."
+        actions={<FraudScanButton />}
       />
 
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
@@ -55,8 +57,8 @@ export default async function FraudPage() {
         />
         <StatCard
           label="Scanner status"
-          value="Idle"
-          hint="Background worker not yet deployed"
+          value="Ready"
+          hint="Run manually here or via the 5-min cron"
           tone="info"
           icon={<IconShield size={18} />}
         />

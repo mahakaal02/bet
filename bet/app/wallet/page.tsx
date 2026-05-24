@@ -85,13 +85,19 @@ export default async function WalletPage() {
             packs={COIN_PACKS}
             user={{ username: me?.username ?? "", email: me?.email ?? "" }}
           />
+          {/* PR-BET-ADMIN-FOLLOWUPS — replaces the previous
+              "Payments are processed by Razorpay…" disclosure block.
+              Top-ups now route through the Secured Kalki Chat App; the
+              call-to-action with the super-admin-controlled download
+              link lives inside <BuyCoinsGrid> right under the pack
+              tiles, so the user sees one consistent message rather
+              than two redundant ones. The remaining copy here just
+              clarifies the unified-wallet promise. */}
           <div className="mt-3 flex items-start gap-2 rounded-md border border-slate-800 bg-slate-950/40 p-2 text-[11px] text-slate-400">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-400" />
             <span>
-              Payments are processed by Razorpay. Coins land in your wallet
-              the moment Razorpay confirms the payment — the server cross-
-              checks the signature so a tampered client can&apos;t fake a
-              top-up. One balance across Markets, Auctions and Aviator.
+              One balance across Markets, Auctions and Aviator. Every
+              top-up is logged in your transaction history.
             </span>
           </div>
         </Card>

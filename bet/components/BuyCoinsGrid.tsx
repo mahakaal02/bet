@@ -21,6 +21,9 @@ interface TopupConfig {
   razorpayConfigured: boolean;
   razorpayKeyId: string | null;
   instantTopupEnabled: boolean;
+  /** PR-BET-ADMIN-FOLLOWUPS — super-admin-controlled link to the
+   *  Secured Chat App APK. Empty string when unset. */
+  chatAppDownloadUrl?: string;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -159,8 +162,13 @@ export function BuyCoinsGrid({ packs, user }: Props) {
       } else if (config?.instantTopupEnabled) {
         await buyViaInstant(pack);
       } else {
+        // PR-BET-ADMIN-FOLLOWUPS — user-facing copy. The platform now
+        // routes payment-arrangement through the Secured Kalki Chat
+        // App (where admins handle UPI/bank transfers personally).
+        // The old "payments aren't configured" copy leaked the
+        // developer reality.
         toast(
-          "Payments aren't configured on this environment. Ask an admin.",
+          "Ask an Admin on Secure Kalki Chat for payments",
           "err",
         );
       }
@@ -226,13 +234,36 @@ export function BuyCoinsGrid({ packs, user }: Props) {
           );
         })}
       </div>
-      {config && !config.razorpayConfigured && (
-        <p className="mt-3 text-[11px] text-amber-300">
-          Razorpay is not configured.
-          {config.instantTopupEnabled
-            ? " Running in dev instant-credit mode — coins credit immediately without payment."
-            : " Set RAZORPAY_KEY_ID + RAZORPAY_KEY_SECRET in the env to enable real top-ups."}
-        </p>
+      {/* PR-BET-ADMIN-FOLLOWUPS — payments now route through the
+          Secured Kalki Chat App. Old banners exposed Razorpay env-var
+          names + "instant credit" dev terminology to end users, both
+          of which are private platform details. New copy points the
+          user at the chat-app download (URL controlled by super admin
+          via /admin/settings → wallet.chat_app_download_url). */}
+      {config && !config.razorpayConfigured && !config.instantTopupEnabled && (
+        <div className="mt-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-xs">
+          {config.chatAppDownloadUrl ? (
+            <p className="text-cyan-200">
+              For coin top-ups, message an Admin on Secured Kalki Chat.{" "}
+              <a
+                href={config.chatAppDownloadUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-cyan-300 underline decoration-cyan-500/40 underline-offset-2 hover:text-cyan-200 hover:decoration-cyan-300"
+              >
+                Download Secured Chat App now ↓
+              </a>
+            </p>
+          ) : (
+            <p className="text-cyan-200">
+              For coin top-ups, message an Admin on Secured Kalki Chat.
+              <span className="ml-1 text-[10px] text-cyan-400/70">
+                (Download link not configured — ask the super admin to set it
+                in /admin/settings.)
+              </span>
+            </p>
+          )}
+        </div>
       )}
     </>
   );
