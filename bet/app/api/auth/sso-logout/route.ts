@@ -48,5 +48,16 @@ export async function GET(req: Request) {
       maxAge: 0,
     });
   }
+  // PR-WEB-LOGOUT-FIX — set the just-logged-out guard cookie on bet's
+  // origin. bet's middleware checks for this and refuses to re-sign-in
+  // a user from a `?token=` URL param within 60s of logout. Stops the
+  // "I logged out but a tile click signs me right back in" loop.
+  res.cookies.set("kalki_logged_out", "1", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: isSecure,
+    path: "/",
+    maxAge: 60,
+  });
   return res;
 }

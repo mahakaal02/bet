@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAviator } from '@/lib/useAviator';
 import { useGame } from '@/lib/store';
-import { getToken, getUser, setToken, setUser } from '@/lib/auth';
+import { getToken, getUser, setToken, setUser, wasJustLoggedOut } from '@/lib/auth';
 import type { AuthUser } from '@/lib/types';
 import Navbar from '@/components/Navbar';
 import Stage from '@/components/Stage';
@@ -60,6 +60,18 @@ function AuthGate() {
   useEffect(() => {
     const t = params.get('token');
     if (t) {
+      // PR-WEB-LOGOUT-FIX — if the user just explicitly signed out
+      // (within the last 60s), DO NOT silently re-establish the
+      // session from a `?token=…` URL param. Strip the token, bounce
+      // to the auctions /login. Was the leading cause of the "I
+      // signed out and revisiting auto-logs me in" complaint — a
+      // hub tile / bookmark / stale page render still carried the
+      // token in the URL.
+      if (wasJustLoggedOut()) {
+        window.history.replaceState({}, '', '/');
+        window.location.replace(auctionsLoginUrl());
+        return;
+      }
       setToken(t);
       hydrateUserFromToken(t);
       window.history.replaceState({}, '', '/');

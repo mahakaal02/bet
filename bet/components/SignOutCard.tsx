@@ -25,10 +25,27 @@ import { Card } from "@/components/ui/Card";
  * bounced right back to the Kalki hub instead of seeing /login —
  * symptom users reported as "logout returns to the hub".
  */
-const AVIATOR_BASE =
-  process.env.NEXT_PUBLIC_AVIATOR_URL ?? "http://localhost:3000";
-const AUCTIONS_BASE =
-  process.env.NEXT_PUBLIC_AUCTIONS_URL ?? "http://localhost:3200";
+const AVIATOR_BASE_ENV = process.env.NEXT_PUBLIC_AVIATOR_URL;
+const AUCTIONS_BASE_ENV = process.env.NEXT_PUBLIC_AUCTIONS_URL;
+
+/**
+ * PR-WEB-LOGOUT-FIX — defensive base-URL resolver. Falls back to
+ * deriving the host from `window.location` if the build-time env
+ * var is missing or accidentally bundled as localhost (which would
+ * cause a hard 404 from a production page on the logout chain).
+ */
+function resolveBase(fromEnv: string | undefined, svcPrefix: string, devFallback: string): string {
+  if (fromEnv && !/localhost|127\.0\.0\.1/.test(fromEnv)) {
+    return fromEnv.replace(/\/$/, "");
+  }
+  if (typeof window !== "undefined") {
+    const m = /^([a-z]+)-([a-z]+)\.(.+)$/.exec(window.location.hostname);
+    if (m && m[1] === "kalki") {
+      return `${window.location.protocol}//kalki-${svcPrefix}.${m[3]}`;
+    }
+  }
+  return devFallback;
+}
 
 export function SignOutCard() {
   const [busy, setBusy] = useState(false);
@@ -40,9 +57,11 @@ export function SignOutCard() {
     });
     // Build the chain bottom-up so each hop encodes the next:
     //   Aviator /logout → Auctions sso-logout → Auctions /login
-    const finalUrl = `${AUCTIONS_BASE.replace(/\/$/, "")}/login`;
-    const auctionsStep = `${AUCTIONS_BASE.replace(/\/$/, "")}/api/auth/sso-logout?next=${encodeURIComponent(finalUrl)}`;
-    const aviatorStep = `${AVIATOR_BASE.replace(/\/$/, "")}/logout?next=${encodeURIComponent(auctionsStep)}`;
+    const aviatorBase = resolveBase(AVIATOR_BASE_ENV, "aviator", "http://localhost:3000");
+    const auctionsBase = resolveBase(AUCTIONS_BASE_ENV, "auctions", "http://localhost:3200");
+    const finalUrl = `${auctionsBase}/login`;
+    const auctionsStep = `${auctionsBase}/api/auth/sso-logout?next=${encodeURIComponent(finalUrl)}`;
+    const aviatorStep = `${aviatorBase}/logout?next=${encodeURIComponent(auctionsStep)}`;
     window.location.replace(aviatorStep);
   }
 

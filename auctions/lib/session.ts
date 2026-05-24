@@ -52,6 +52,39 @@ export async function clearSessionToken(): Promise<void> {
   jar.delete(SESSION_COOKIE);
 }
 
+// ─── Just-logged-out flag (PR-WEB-LOGOUT-FIX) ─────────────────────
+//
+// Short-lived HttpOnly cookie set by every logout endpoint. While
+// it's present the middleware refuses to silently re-establish a
+// session from a `?token=` URL param.
+//
+// The bug it solves: a logged-out user revisits the site (via a
+// hub tile, a bookmark, or even a deep link from the Android shell
+// during a forgotten background tab) carrying `?token=<theirJWT>`
+// in the URL. The middleware blindly consumed that token and set
+// the session cookie again — symptom: "I signed out but next visit
+// auto-logs me back in".
+//
+// 60s TTL is enough to cover the cross-origin logout chain hops +
+// any user clicks during the immediate "I just signed out" window.
+// It's NOT a JWT revocation list — a determined attacker with a
+// leaked URL token still gets in after 60 seconds. For full
+// revocation we'd need a Redis revocation list shared with the
+// backend; that's a bigger change, intentionally deferred.
+export const LOGGED_OUT_COOKIE = "kalki_logged_out";
+export const LOGGED_OUT_MAX_AGE_SECONDS = 60;
+
+export async function setLoggedOutFlag(): Promise<void> {
+  const jar = await cookies();
+  jar.set(LOGGED_OUT_COOKIE, "1", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: LOGGED_OUT_MAX_AGE_SECONDS,
+  });
+}
+
 // ─── Trusted-device cookie (PR-2FA-2) ─────────────────────────────
 // Opaque 32-byte hex token. The backend stores only its sha256 hash
 // (see TrustedDeviceService). Long-lived (90 days) and httpOnly, so
