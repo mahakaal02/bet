@@ -1,22 +1,121 @@
-import { ComingSoon } from "@/components/admin/ComingSoon";
+import { db } from "@/lib/db";
+import {
+  Badge,
+  Card,
+  PageHeader,
+  fmtDate,
+} from "@/components/admin/ui/primitives";
+import { IconSettings } from "@/components/admin/ui/icons";
+import { SettingsClient } from "./SettingsClient";
 
 export const dynamic = "force-dynamic";
 
-export default function SettingsPage() {
+/**
+ * System settings (PR-BET-ADMIN-REDESIGN).
+ *
+ * Key/value config surface backed by the new AdminSetting table.
+ * The catalogue (declared in code below) defines which keys exist
+ * + their types; any keys not in the catalogue are still readable
+ * from the DB but not exposed as editable here (defence in depth
+ * against silent setting drift).
+ */
+const CATALOGUE = [
+  {
+    key: "trading.fee_pct",
+    label: "Trading fee (%)",
+    type: "number" as const,
+    category: "Fees",
+    defaultValue: 2,
+    description:
+      "Commission skimmed from every trade. Applied at fill time; see lib/commission.ts.",
+  },
+  {
+    key: "trading.min_bet_coins",
+    label: "Minimum bet (coins)",
+    type: "number" as const,
+    category: "Limits",
+    defaultValue: 100,
+    description: "Smallest stake any user can place on a single order.",
+  },
+  {
+    key: "trading.max_exposure_coins",
+    label: "Per-user exposure cap (coins)",
+    type: "number" as const,
+    category: "Limits",
+    defaultValue: 1000000,
+    description: "Maximum locked-in-orders any one user can carry. Hard rejects further orders.",
+  },
+  {
+    key: "settlement.dispute_window_hours",
+    label: "Dispute window (hours)",
+    type: "number" as const,
+    category: "Settlement",
+    defaultValue: 24,
+    description: "Time after resolution during which users can dispute the outcome.",
+  },
+  {
+    key: "settlement.auto_settle_enabled",
+    label: "Auto-settle on oracle confirm",
+    type: "boolean" as const,
+    category: "Settlement",
+    defaultValue: false,
+    description: "When the resolution source returns a confidence ≥ threshold, auto-resolve without admin click.",
+  },
+  {
+    key: "kyc.required_for_withdrawal",
+    label: "Require KYC for withdrawal",
+    type: "boolean" as const,
+    category: "KYC",
+    defaultValue: false,
+    description: "Withdrawals over the threshold reject when the user is not KYC-approved.",
+  },
+  {
+    key: "kyc.required_threshold_coins",
+    label: "KYC withdrawal threshold (coins)",
+    type: "number" as const,
+    category: "KYC",
+    defaultValue: 10000,
+    description: "Withdrawals at or above this amount require approved KYC.",
+  },
+];
+
+export default async function SettingsPage() {
+  const rows = await db.adminSetting.findMany();
+  const byKey = new Map(rows.map((r) => [r.key, r]));
+  const settings = CATALOGUE.map((c) => ({
+    ...c,
+    value: byKey.get(c.key)?.value ?? c.defaultValue,
+    updatedAt: byKey.get(c.key)?.updatedAt.toISOString() ?? null,
+  }));
+
   return (
-    <ComingSoon
-      kicker="Platform"
-      title="System settings"
-      description="Trading fees, settlement delays, currencies, KYC providers, oracle integrations, API keys."
-      intent="Global configuration surface. Every setting is a key/value pair with type metadata (number / string / bool / json) and live-edit audit trail. Changes apply on save without a redeploy — the SettingsService TTL'd cache on the bet side picks up updates within 60s. Sensitive secrets (oracle API keys, payment provider credentials) live in a separate vault-backed view with masked display and reveal-on-click."
-      needs={[
-        "Existing backend SettingsService already supports key-value config with audit (PR-FEATURE-FLAGS-2). Bet would need its own Setting model OR sync the relevant keys via the cross-service shared-secret API.",
-        "GET /api/admin/settings — list of settings + current values + last edited.",
-        "PATCH /api/admin/settings/[key] — updates one value, logs to AdminLog.",
-        "GET /api/admin/settings/[key]/history — change log per key.",
-        "Settings catalogue declared in code (TS const) so new keys are typed: { key, label, type, defaultValue, description, sensitive }[].",
-        "Secret values rendered as ••••XYZ with a 'reveal' button gated behind a re-auth prompt.",
-      ]}
-    />
+    <>
+      <PageHeader
+        kicker="Platform"
+        title="System settings"
+        description="Platform-wide configuration. Changes apply within 60s via the SettingsService cache; every edit is audited."
+        actions={<Badge tone="info" dot>{settings.length} keys</Badge>}
+      />
+
+      <SettingsClient settings={settings} />
+
+      <Card className="mt-5 p-4">
+        <div className="flex items-start gap-3">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[var(--admin-elevated)] text-[var(--admin-text-secondary)]">
+            <IconSettings size={16} />
+          </div>
+          <div className="text-xs text-[var(--admin-text-secondary)]">
+            <strong className="text-[var(--admin-text-primary)]">How it works:</strong> the
+            catalogue above is declared in code (
+            <code className="font-mono">bet/app/admin/settings/page.tsx</code>) so new
+            setting kinds can't accidentally appear in the editor without a
+            deploy. Values are stored in the <code>AdminSetting</code> table
+            with full edit history via <code>AdminLog</code>; the readers
+            (e.g. <code>lib/commission.ts</code>) consume via a thin cached
+            wrapper.
+          </div>
+        </div>
+      </Card>
+    </>
   );
 }

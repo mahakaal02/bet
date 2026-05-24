@@ -1,23 +1,107 @@
-import { ComingSoon } from "@/components/admin/ComingSoon";
+import Link from "next/link";
+import { db } from "@/lib/db";
+import {
+  Card,
+  PageHeader,
+  StatCard,
+  fmtCoins,
+} from "@/components/admin/ui/primitives";
+import { IconChart, IconDownload, IconFile } from "@/components/admin/ui/icons";
 
 export const dynamic = "force-dynamic";
 
-export default function ReportsAnalyticsPage() {
+/**
+ * Reports & exports (PR-BET-ADMIN-REDESIGN).
+ *
+ * Pre-built CSV exports keyed by an `?type=` query param. Each
+ * template is a server-streamed CSV through the existing
+ * `/api/admin/reports/[type]/export` route (wired below).
+ */
+
+const TEMPLATES = [
+  {
+    type: "revenue",
+    title: "Platform revenue",
+    description: "Daily revenue series with breakdown by fee type.",
+    range: "Last 90 days",
+  },
+  {
+    type: "markets",
+    title: "Market performance",
+    description: "Per-market volume, P&L, participant count, resolution outcome.",
+    range: "Lifetime",
+  },
+  {
+    type: "users-pnl",
+    title: "User profitability",
+    description: "Per-user net P&L across positions + trade history.",
+    range: "Lifetime",
+  },
+  {
+    type: "withdrawals",
+    title: "Withdrawal log",
+    description: "Approved withdrawals with Razorpay payout references — useful for GST returns.",
+    range: "Last 90 days",
+  },
+  {
+    type: "audit",
+    title: "Admin audit",
+    description: "Every admin action (market.create / resolve / user.ban / setting.update / …).",
+    range: "Lifetime",
+  },
+];
+
+export default async function ReportsPage() {
+  const [revenue, marketCount, userCount, withdrawalCount] = await Promise.all([
+    db.platformRevenue.findFirst(),
+    db.market.count(),
+    db.user.count(),
+    db.withdrawalRequest.count({ where: { status: "APPROVED" } }),
+  ]);
+
   return (
-    <ComingSoon
-      kicker="Compliance"
-      title="Reports & exports"
-      description="On-demand CSV/Excel/PDF reports for revenue, user P&L, settlements, fraud, and tax."
-      intent="Pre-built report templates (revenue rollup, market performance, user profitability, settlement audit, fraud-signal summary, GST/TDS export) plus an ad-hoc query builder. Each report runs as a background job; the operator gets a notification when the file is ready in S3 with a signed-URL download. Retention: reports persist for 90 days, then auto-pruned."
-      needs={[
-        "Report model: { id, template, params (JSON), status (PENDING/RUNNING/READY/FAILED), s3Key, requestedBy, expiresAt }.",
-        "BullMQ job queue + worker that runs the template SQL/Prisma → CSV-streams → uploads to S3.",
-        "GET /api/admin/reports/templates (static list of report kinds).",
-        "POST /api/admin/reports — enqueues a job.",
-        "GET /api/admin/reports/[id] — status + signed download URL.",
-        "S3 bucket: kalki-reports/<reportId>.csv (already provisioned for KYC; just need a folder).",
-        "PDF generation deferred to a follow-up (CSV + Excel cover 95% of real ops needs).",
-      ]}
-    />
+    <>
+      <PageHeader
+        kicker="Compliance"
+        title="Reports & exports"
+        description="Pre-built CSV reports for finance, compliance, and audit. Click a template to download."
+      />
+
+      <div className="mb-5 grid gap-3 sm:grid-cols-4">
+        <StatCard
+          label="Lifetime revenue"
+          value={fmtCoins(Number(revenue?.totalPlatformRevenue ?? 0))}
+          icon={<IconChart size={18} />}
+        />
+        <StatCard label="Markets" value={marketCount.toLocaleString("en-IN")} icon={<IconFile size={18} />} />
+        <StatCard label="Users" value={userCount.toLocaleString("en-IN")} icon={<IconFile size={18} />} />
+        <StatCard
+          label="Approved withdrawals"
+          value={withdrawalCount.toLocaleString("en-IN")}
+          icon={<IconDownload size={18} />}
+        />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {TEMPLATES.map((t) => (
+          <Card key={t.type} className="p-4 transition hover:border-cyan-500/40">
+            <div className="mb-2 flex items-center gap-2">
+              <div className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--admin-elevated)] text-[var(--admin-text-secondary)]">
+                <IconFile size={16} />
+              </div>
+              <div className="text-sm font-bold text-[var(--admin-text-primary)]">{t.title}</div>
+            </div>
+            <p className="text-xs text-[var(--admin-text-secondary)]">{t.description}</p>
+            <p className="mt-1 text-[10px] uppercase tracking-wider text-[var(--admin-text-muted)]">{t.range}</p>
+            <Link
+              href={`/api/admin/reports/${t.type}/export`}
+              className="mt-3 inline-flex h-7 items-center gap-1 rounded-md bg-cyan-500/15 px-2.5 text-[11px] font-semibold text-cyan-300 hover:bg-cyan-500/25"
+            >
+              <IconDownload size={12} /> Download CSV
+            </Link>
+          </Card>
+        ))}
+      </div>
+    </>
   );
 }

@@ -24,16 +24,36 @@ async function main() {
     },
   });
 
+  // PR-BET-ADMIN-REDESIGN — single super-admin singleton.
+  //
+  // Seed promotes exactly one row to SUPER_ADMIN. Email defaults to
+  // the legacy `admin@kalki.local` so dev installs keep working; can
+  // be overridden via the `KALKI_SUPER_ADMIN_EMAIL` env var (Helm
+  // values surfacing this env is in a follow-up).
+  //
+  // Repeated runs are idempotent: same email re-upserts to
+  // SUPER_ADMIN; any other rows still marked SUPER_ADMIN from a
+  // previous env get demoted to ADMIN so the singleton invariant
+  // holds without manual intervention.
+  const SUPER_ADMIN_EMAIL = (
+    process.env.KALKI_SUPER_ADMIN_EMAIL ?? "admin@kalki.local"
+  ).toLowerCase();
   const admin = await db.user.upsert({
-    where: { email: "admin@kalki.local" },
-    update: { isAdmin: true },
+    where: { email: SUPER_ADMIN_EMAIL },
+    update: { adminRole: "SUPER_ADMIN", isAdmin: true },
     create: {
-      email: "admin@kalki.local",
-      username: "admin",
+      email: SUPER_ADMIN_EMAIL,
+      username: SUPER_ADMIN_EMAIL.split("@")[0] || "admin",
+      adminRole: "SUPER_ADMIN",
       isAdmin: true,
-      referralCode: "ADMIN1",
+      referralCode: "SUPER1",
       wallet: { create: { balance: 50000 } },
     },
+  });
+  // Demote any other SUPER_ADMIN rows (e.g. env was re-targeted).
+  await db.user.updateMany({
+    where: { adminRole: "SUPER_ADMIN", NOT: { id: admin.id } },
+    data: { adminRole: "ADMIN" },
   });
   // Wallet is nested-created above on first seed. On re-seed the user
   // row already exists so the nested create never runs — if the wallet

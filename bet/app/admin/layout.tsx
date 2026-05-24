@@ -33,7 +33,13 @@ export default async function AdminLayout({
 }) {
   const u = await getAuthedUser();
   if (!u) redirect("/login?next=/admin");
-  if (!u.isAdmin) redirect("/");
+  // PR-BET-ADMIN-REDESIGN — accept either the new `adminRole` (the
+  // authoritative source post-migration) OR the legacy `isAdmin`
+  // boolean. The migration backfills `adminRole` for every existing
+  // `isAdmin=true` row, so this dual check is belt-and-braces during
+  // rollout. Once the seed runs in prod everything reads through
+  // `adminRole`; the `isAdmin` branch can be retired in a follow-up.
+  if (!u.adminRole && !u.isAdmin) redirect("/");
 
   return <AdminShell username={u.username}>{children}</AdminShell>;
 }
