@@ -19,10 +19,13 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Markets",
     items: [
+      // Exact-match `/admin/markets` so the per-market deep links
+      // (`/admin/markets/<id>/…`) don't keep this row highlighted; we want
+      // the New-market row to win there. The index page itself still
+      // highlights because of the exact-equality branch in the active
+      // check below.
+      { href: "/admin/markets", label: "All markets" },
       { href: "/admin/markets/new", label: "New market" },
-      // The market list lives on /admin (recent markets table). A
-      // dedicated /admin/markets index would duplicate that for now;
-      // surface the moderation-adjacent deep links instead.
     ],
   },
   {

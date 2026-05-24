@@ -415,12 +415,34 @@ export async function POST(req: Request) {
   }
 }
 
-/** List the user's recent orders (open + closed). */
-export async function GET() {
+/**
+ * List the user's recent orders (open + closed). When `?marketId=…` is
+ * supplied, scopes to that market only — the per-market "Your orders"
+ * panel needs this so an OPEN order on market A doesn't bleed into the
+ * panel on market B's page (where it could be cancelled by the user
+ * against the wrong market). Accepts either the market's id or its slug,
+ * matching the rest of the public surface.
+ */
+export async function GET(req: Request) {
   const u = await getAuthedUser();
   if (!u) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const url = new URL(req.url);
+  const marketIdOrSlug = url.searchParams.get("marketId");
+
+  let marketId: string | undefined;
+  if (marketIdOrSlug) {
+    const m = await db.market.findFirst({
+      where: { OR: [{ id: marketIdOrSlug }, { slug: marketIdOrSlug }] },
+      select: { id: true },
+    });
+    // Unknown market → empty list rather than 404; the panel is best-effort
+    // and a stale slug from a deleted market shouldn't break the page.
+    if (!m) return NextResponse.json({ orders: [] });
+    marketId = m.id;
+  }
+
   const orders = await db.order.findMany({
-    where: { userId: u.id },
+    where: { userId: u.id, ...(marketId && { marketId }) },
     orderBy: { createdAt: "desc" },
     take: 50,
     include: { market: { select: { slug: true, title: true } } },
