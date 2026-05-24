@@ -10,13 +10,56 @@ datasource db {
 
 // ───── Users & wallet ──────────────────────────────────────────────────────
 
+/// Admin role hierarchy (PR-BET-ADMIN-REDESIGN).
+///
+/// Two tiers — by design, not five. The product spec wants a single
+/// human (the founder / ops lead) to bootstrap operations end-to-end,
+/// and grow the team by hiring more operators who share the operator
+/// surface. A heavier 5-role matrix (separate finance / compliance /
+/// support tiers) would be premature here — every new role boundary
+/// is a permission set to maintain, a UI permission gate to audit,
+/// and a per-role test surface.
+///
+///   SUPER_ADMIN  Singleton. Only one row in the database carries this
+///                tier. Can create / revoke other admins. Cannot be
+///                deleted from the UI — only via direct DB / migration.
+///                Seeded from `KALKI_SUPER_ADMIN_EMAIL` env at boot.
+///                If multiple rows somehow exist (shouldn't happen via
+///                supported paths), the application logic treats the
+///                lowest-`createdAt` as authoritative; a partial-unique
+///                index on the column enforces the singleton invariant.
+///
+///   ADMIN        Variable count. Same operational permissions as the
+///                super admin EXCEPT can't manage other admins. New
+///                admins are invited by the super admin from the
+///                Roles surface (`/admin/roles`).
+///
+/// The existing `User.isAdmin` boolean is kept for backwards compat
+/// during the rollout — `getAuthedUser()` returns true for it on any
+/// non-null `adminRole`. New code should read `adminRole`; legacy
+/// callers continue to work.
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+}
+
 model User {
   id            String   @id @default(cuid())
   email         String   @unique
   username      String   @unique
   passwordHash  String?
   image         String?
+  /// Legacy admin flag. Kept for back-compat with existing code paths
+  /// that read `isAdmin`. The new `adminRole` column is authoritative;
+  /// `isAdmin` is derived (`adminRole != null`) and the migration
+  /// backfills it accordingly. New auth checks should prefer
+  /// `adminRole != null` directly, but `isAdmin` continues to work.
   isAdmin       Boolean  @default(false)
+  /// Tier in the admin hierarchy. NULL = regular user.
+  /// See [AdminRole] for semantics. Backfilled from `isAdmin` so any
+  /// row that was admin pre-migration becomes an ADMIN; the
+  /// super-admin seed promotes one row to SUPER_ADMIN at deploy time.
+  adminRole     AdminRole?
   banned        Boolean  @default(false)
   suspendedUntil DateTime? @db.Timestamptz(6)
   // Cached XP / level / streak so leaderboards & profile don't recompute.
@@ -608,4 +651,161 @@ model WithdrawalRequest {
 
   @@index([status, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
+}
+
+// ───── Admin operations (PR-BET-ADMIN-REDESIGN) ────────────────────────────
+//
+// Six small models that back the new admin console modules. Every one
+// is additive — no existing column changed, no constraint added that
+// could break a running query — so the migration can roll forward and
+// back without coordination.
+//
+// Design philosophy: when in doubt, defer detail to JSON. The columns
+// here are the ones we'll filter / index on; everything else lives in
+// the `metadata` / `payload` JSON blob. Schema churn during the
+// admin-console buildout is much cheaper that way.
+
+/// Admin invite (RBAC).
+///
+/// Super-admin-only flow. Super admin enters an email + chosen username
+/// + role on `/admin/roles`, server inserts a row here with a random
+/// `token`. The invitee receives a one-time link they redeem to
+/// finish account creation (set password). On redemption, the invite
+/// row is consumed (`acceptedAt` set) and the user's `adminRole` is
+/// promoted.
+///
+/// `expiresAt` defaults to 7d after `createdAt`; expired invites are
+/// rejected at redemption and surfaced as "expired" in the UI so the
+/// super admin can re-issue.
+model AdminInvite {
+  id          String   @id @default(cuid())
+  email       String
+  username    String
+  role        AdminRole @default(ADMIN)
+  token       String   @unique
+  invitedById String
+  expiresAt   DateTime @db.Timestamptz(6)
+  acceptedAt  DateTime? @db.Timestamptz(6)
+  acceptedById String?
+  revokedAt   DateTime? @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([email])
+  @@index([invitedById])
+}
+
+/// Generic key-value setting with audit trail (system settings page).
+///
+/// Strongly typed via the `type` column so the UI can render the right
+/// editor (toggle vs number-input vs JSON textarea). `value` is JSON
+/// to avoid table churn when new setting kinds appear; the loader
+/// validates against an in-code catalogue.
+model AdminSetting {
+  key         String   @id
+  value       Json
+  type        String   // "string" | "number" | "boolean" | "json"
+  category    String   // "fees" | "limits" | "kyc" | "oracle" | ...
+  sensitive   Boolean  @default(false)
+  description String?
+  updatedById String?
+  updatedAt   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([category])
+}
+
+/// Heuristic fraud signal (fraud & risk page).
+///
+/// Inserted by the fraud-detection worker (separate PR) or by an
+/// operator manually flagging. `evidence` carries kind-specific
+/// supporting data so the triage UI can render rich proof without a
+/// schema change per detector.
+model FraudSignal {
+  id          String   @id @default(cuid())
+  kind        String   // "wash_trade" | "multi_account" | "spike" | "bot_rhythm"
+  severity    String   // "low" | "medium" | "high" | "critical"
+  userId      String?
+  marketId    String?
+  summary     String   // one-line description for the queue
+  evidence    Json     @default("{}")
+  status      String   @default("OPEN") // "OPEN" | "REVIEWED" | "DISMISSED" | "ESCALATED"
+  reviewedById String?
+  reviewedAt  DateTime? @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([userId])
+  @@index([marketId])
+}
+
+/// KYC submission (bet-side).
+///
+/// Mirrors the auctions KycSubmission shape — same status lifecycle
+/// and rejection-code enum — so a future consolidated KYC service can
+/// merge both into one table without UI churn. Document refs are
+/// opaque S3 keys; the actual bytes never live in this DB.
+model KycSubmission {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  // Document refs as JSON: { pan: "s3://...", aadhaar: "s3://...", selfie: "s3://..." }
+  documents   Json
+  status      String   @default("PENDING") // PENDING | APPROVED | REJECTED | REQUEST_MORE
+  rejectionCode String?
+  reviewedById String?
+  reviewedAt  DateTime? @db.Timestamptz(6)
+  notes       String?
+  // Optional face-match score from the auto-OCR pipeline (0..1).
+  faceMatchScore Float?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([status, createdAt(sort: Desc)])
+}
+
+/// Settlement record (payout management).
+///
+/// One row per market resolution. The existing in-line
+/// `/api/admin/markets/[id]/resolve` route can populate this on
+/// success without changing its return shape — the row exists for
+/// observability + retry orchestration, not as a state machine.
+/// `attempts` lets a follow-up worker re-credit users whose wallet
+/// update raced and lost.
+model Settlement {
+  id             String   @id @default(cuid())
+  marketId       String   @unique
+  outcome        String   // YES | NO | CANCELLED
+  totalPayout    Int      // coins
+  totalFees      Int      // coins
+  winnerCount    Int
+  loserCount     Int
+  status         String   @default("EXECUTED") // PENDING | EXECUTED | FAILED
+  executedById   String
+  attempts       Int      @default(1)
+  lastError      String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([status, createdAt(sort: Desc)])
+}
+
+/// API call log (API & webhook monitoring page).
+///
+/// Lightweight — every API route inserts one row via a Next.js
+/// middleware. 30-day retention via a scheduled cleanup, so the table
+/// stays small enough for ad-hoc queries. Indexed by status code so
+/// "show me all 5xx in the last hour" is fast.
+model ApiLog {
+  id          BigInt   @id @default(autoincrement())
+  method      String
+  path        String
+  status      Int
+  durationMs  Int
+  userId      String?
+  ip          String?
+  userAgent   String?
+  errorCode   String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([path, createdAt(sort: Desc)])
 }
