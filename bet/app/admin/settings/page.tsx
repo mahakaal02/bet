@@ -77,6 +77,22 @@ const CATALOGUE = [
     defaultValue: 10000,
     description: "Withdrawals at or above this amount require approved KYC.",
   },
+  // PR-BET-ADMIN-FOLLOWUPS — Secured Kalki Chat App download URL.
+  // Surfaced on the user-facing wallet page as the "Download Secured
+  // Chat App now" link under the coin-pack tiles. Empty string means
+  // no link is shown (the page degrades to "ask the super admin to
+  // set this in /admin/settings"). Super admin pastes a signed APK
+  // URL (Cloudflare R2 / S3 / direct download); whatever URL is here
+  // is what users tap.
+  {
+    key: "wallet.chat_app_download_url",
+    label: "Secured Chat App APK URL",
+    type: "string" as const,
+    category: "Wallet",
+    defaultValue: "",
+    description:
+      "User-facing wallet shows 'Download Secured Chat App now' linking here. Paste a direct .apk URL (e.g. an S3 signed URL or your hosted download).",
+  },
 ];
 
 export default async function SettingsPage() {

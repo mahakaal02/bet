@@ -8,6 +8,7 @@ import { logger } from "@/lib/logger";
 import { splitSettlement } from "@/lib/commission";
 import { collectFee } from "@/lib/house";
 import { cancelOpenOrdersForMarket } from "@/lib/order-refund";
+import { logApiCall, getIp } from "@/lib/api-log";
 
 const Body = z.object({
   outcome: z.enum(["YES", "NO", "CANCELLED"]),
@@ -24,13 +25,42 @@ export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  // PR-BET-ADMIN-FOLLOWUPS — request timing for the ApiLog writer.
+  // Recorded at the end of the handler regardless of success/failure.
+  const t0 = Date.now();
+  let responseStatus = 200;
+  let errorCode: string | null = null;
   const u = await getAuthedUser();
   if (!u?.isAdmin) {
+    responseStatus = 403;
+    errorCode = "forbidden";
+    void logApiCall({
+      method: "POST",
+      path: "/api/admin/markets/[id]/resolve",
+      status: responseStatus,
+      durationMs: Date.now() - t0,
+      userId: u?.id ?? null,
+      ip: getIp(req),
+      userAgent: req.headers.get("user-agent"),
+      errorCode,
+    });
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
   const { id } = await ctx.params;
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
+    responseStatus = 400;
+    errorCode = "invalid_input";
+    void logApiCall({
+      method: "POST",
+      path: "/api/admin/markets/[id]/resolve",
+      status: responseStatus,
+      durationMs: Date.now() - t0,
+      userId: u.id,
+      ip: getIp(req),
+      userAgent: req.headers.get("user-agent"),
+      errorCode,
+    });
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
 
@@ -189,6 +219,43 @@ export async function POST(
           },
         });
 
+        // PR-BET-ADMIN-FOLLOWUPS — Settlement audit row.
+        //
+        // Idempotent upsert keyed on marketId so the same resolution
+        // never writes two audit rows even if the route is retried.
+        // Populates the /admin/settlements + /admin/payouts surfaces
+        // with the canonical "what was paid, to how many users, by
+        // whom" summary — distinct from AdminLog (which is "who did
+        // what action") because the Settlement row also carries
+        // retry state for the payout queue worker.
+        const loserCount = positions.length - payoutCount;
+        await tx.settlement.upsert({
+          where: { marketId: id },
+          create: {
+            marketId: id,
+            outcome: parsed.data.outcome,
+            totalPayout: paidOut,
+            totalFees: totalSettlementFee,
+            winnerCount: payoutCount,
+            loserCount: Math.max(0, loserCount),
+            status: "EXECUTED",
+            executedById: u.id,
+            attempts: 1,
+          },
+          update: {
+            // Retry path — the resolution already ran; re-asserting
+            // totals + bumping the attempt counter is enough.
+            outcome: parsed.data.outcome,
+            totalPayout: paidOut,
+            totalFees: totalSettlementFee,
+            winnerCount: payoutCount,
+            loserCount: Math.max(0, loserCount),
+            status: "EXECUTED",
+            attempts: { increment: 1 },
+            lastError: null,
+          },
+        });
+
         await tx.adminLog.create({
           data: {
             adminId: u.id,
@@ -244,6 +311,15 @@ export async function POST(
       });
     }
 
+    void logApiCall({
+      method: "POST",
+      path: "/api/admin/markets/[id]/resolve",
+      status: responseStatus,
+      durationMs: Date.now() - t0,
+      userId: u.id,
+      ip: getIp(req),
+      userAgent: req.headers.get("user-agent"),
+    });
     return NextResponse.json({
       ok: true,
       payoutCount: result.payoutCount,
@@ -254,9 +330,33 @@ export async function POST(
     });
   } catch (e) {
     if (e instanceof HttpError) {
+      responseStatus = e.status;
+      errorCode = e.message;
+      void logApiCall({
+        method: "POST",
+        path: "/api/admin/markets/[id]/resolve",
+        status: responseStatus,
+        durationMs: Date.now() - t0,
+        userId: u.id,
+        ip: getIp(req),
+        userAgent: req.headers.get("user-agent"),
+        errorCode,
+      });
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
+    responseStatus = 500;
+    errorCode = "internal";
     logger.error(e, { route: "/api/admin/markets/[id]/resolve", adminId: u.id, marketId: id });
+    void logApiCall({
+      method: "POST",
+      path: "/api/admin/markets/[id]/resolve",
+      status: responseStatus,
+      durationMs: Date.now() - t0,
+      userId: u.id,
+      ip: getIp(req),
+      userAgent: req.headers.get("user-agent"),
+      errorCode,
+    });
     return NextResponse.json({ error: "internal" }, { status: 500 });
   }
 }
