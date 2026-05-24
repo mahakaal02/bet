@@ -104,3 +104,96 @@ button {
 .fade-up {
   animation: fade-up 220ms ease-out both;
 }
+
+/* ============================================================
+   Admin design-system tokens (PR-BET-ADMIN-REDESIGN)
+
+   Tokens are scoped to `[data-admin-theme]` so they only apply
+   under the admin layout (the user-facing Kalki Exchange keeps
+   its existing palette unchanged). Theme is toggled by setting
+   the attribute to "dark" or "light" on <html> — see the
+   ThemeToggle component.
+
+   Why CSS vars instead of Tailwind config: theme switch is a
+   single attribute flip, no React re-render and no rebuild.
+   Tailwind v4 doesn't have a baked-in "dark mode class" story,
+   so this keeps the implementation portable.
+   ============================================================ */
+
+[data-admin-theme="dark"] {
+  --admin-bg: #07090e;
+  --admin-bg-deep: #050709;
+  --admin-surface: #0d1117;
+  --admin-elevated: #161c26;
+  --admin-elevated-hi: #1e2532;
+  --admin-border: rgba(148, 163, 184, 0.10);
+  --admin-border-strong: rgba(148, 163, 184, 0.20);
+  --admin-divider: rgba(148, 163, 184, 0.08);
+  --admin-text-primary: #e5edf5;
+  --admin-text-secondary: #9aa5c0;
+  --admin-text-muted: #64748b;
+  --admin-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7),
+                  0 8px 16px -8px rgba(0, 0, 0, 0.55);
+  --admin-glow: 0 0 24px rgba(34, 211, 238, 0.18);
+}
+
+[data-admin-theme="light"] {
+  --admin-bg: #f6f7fb;
+  --admin-bg-deep: #eef0f5;
+  --admin-surface: #ffffff;
+  --admin-elevated: #f3f5fa;
+  --admin-elevated-hi: #e8ebf3;
+  --admin-border: rgba(15, 23, 42, 0.08);
+  --admin-border-strong: rgba(15, 23, 42, 0.16);
+  --admin-divider: rgba(15, 23, 42, 0.06);
+  --admin-text-primary: #0f172a;
+  --admin-text-secondary: #475569;
+  --admin-text-muted: #94a3b8;
+  --admin-shadow: 0 8px 24px -12px rgba(15, 23, 42, 0.12),
+                  0 2px 6px -2px rgba(15, 23, 42, 0.08);
+  --admin-glow: 0 0 24px rgba(34, 211, 238, 0.12);
+}
+
+/* Default to dark when unset, so any /admin route renders something
+   sensible while the theme cookie is hydrating. */
+:root {
+  --admin-bg: #07090e;
+  --admin-bg-deep: #050709;
+  --admin-surface: #0d1117;
+  --admin-elevated: #161c26;
+  --admin-elevated-hi: #1e2532;
+  --admin-border: rgba(148, 163, 184, 0.10);
+  --admin-border-strong: rgba(148, 163, 184, 0.20);
+  --admin-divider: rgba(148, 163, 184, 0.08);
+  --admin-text-primary: #e5edf5;
+  --admin-text-secondary: #9aa5c0;
+  --admin-text-muted: #64748b;
+  --admin-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7),
+                  0 8px 16px -8px rgba(0, 0, 0, 0.55);
+}
+
+/* Admin-page body background overrides the global bet bg so the
+   admin can have its own neutral surface in light mode without
+   bleeding through. Scoped to `.admin-root` so user-facing pages
+   stay untouched. */
+.admin-root {
+  background: var(--admin-bg);
+  color: var(--admin-text-primary);
+  min-height: 100vh;
+}
+
+/* Hide global body scrollbar when an admin modal is open so the
+   sticky topbar doesn't shift. */
+body[data-modal-open="1"] {
+  overflow: hidden;
+}
+
+/* Grid pattern overlay for the dashboard hero — purely decorative,
+   GPU-cheap. */
+.admin-grid-bg {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: -1px -1px;
+}
