@@ -10,9 +10,16 @@ export const dynamic = "force-dynamic";
 /**
  * Overview tab for a single market admin surface. Layout owns the
  * header + tab strip; this page just renders the Resolve / Edit
- * panels. The Resolve panel only renders for OPEN markets; the Edit
- * panel hides once a market is RESOLVED (we don't allow re-edits, the
- * resolution route gates that).
+ * panels.
+ *
+ * The Resolve panel renders for both OPEN and CLOSED markets — admins
+ * usually post the outcome AFTER the market expires (`endsAt` past →
+ * scheduler flips status to CLOSED), so gating on OPEN alone hides the
+ * controls exactly when they're needed. The resolve route itself only
+ * rejects RESOLVED / CANCELLED states.
+ *
+ * The Edit panel hides once a market is RESOLVED / CANCELLED — the
+ * resolve route already gates re-edits server-side, the UI just mirrors.
  */
 export default async function MarketOverviewPage({
   params,
@@ -23,13 +30,25 @@ export default async function MarketOverviewPage({
   const market = await db.market.findUnique({ where: { id } });
   if (!market) notFound();
 
+  const canResolve = market.status === "OPEN" || market.status === "CLOSED";
+  const isFinal = market.status === "RESOLVED" || market.status === "CANCELLED";
+
   return (
     <div className="max-w-3xl">
-      {market.status === "OPEN" && (
+      {canResolve && (
         <Card className="mt-4">
           <CardHeader>
-            <CardTitle>Resolve</CardTitle>
+            <CardTitle>
+              {market.status === "CLOSED" ? "Post resolution" : "Resolve"}
+            </CardTitle>
           </CardHeader>
+          {market.status === "CLOSED" && (
+            <p className="mb-3 text-xs text-slate-400">
+              Trading on this market ended at{" "}
+              {market.endsAt.toLocaleString()}. Post the outcome below to pay
+              winning positions and close it out.
+            </p>
+          )}
           <ResolveMarketPanel marketId={market.id} />
         </Card>
       )}
@@ -52,7 +71,22 @@ export default async function MarketOverviewPage({
         </Card>
       )}
 
-      {market.status !== "RESOLVED" && (
+      {market.status === "CANCELLED" && (
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle>Cancelled</CardTitle>
+          </CardHeader>
+          <p className="text-sm text-slate-300">
+            Cancelled on {market.resolvedAt?.toLocaleString()}. All positions
+            were refunded their cost basis.
+          </p>
+          {market.resolutionNote && (
+            <p className="mt-2 text-sm text-slate-400">{market.resolutionNote}</p>
+          )}
+        </Card>
+      )}
+
+      {!isFinal && (
         <Card className="mt-4">
           <CardHeader>
             <CardTitle>Edit details</CardTitle>

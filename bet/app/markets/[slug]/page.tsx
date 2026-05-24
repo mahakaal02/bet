@@ -251,7 +251,7 @@ export default async function MarketPage({
               positions.find((p) => p.outcome === "NO") ?? undefined
             }
           />
-          {me && <OpenOrdersPanel marketId={market.slug} />}
+          {me && <OpenOrdersPanel marketId={market.id} />}
           <Card>
             <CardTitle className="mb-2">Market stats</CardTitle>
             <Stat label="Volume" value={`${fmtCoins(market.volumeCoins)} coins`} />

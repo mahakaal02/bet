@@ -10,6 +10,7 @@
  */
 import { db } from "@/lib/db";
 import { publish, Channels } from "@/lib/pubsub";
+import { cancelOpenOrdersForMarket } from "@/lib/order-refund";
 
 const globalForScheduler = globalThis as unknown as {
   __betScheduler?: NodeJS.Timeout;
@@ -26,20 +27,47 @@ async function tick() {
     // Close any OPEN markets whose endsAt has passed. Trading was already
     // refused by the trade route since endsAt < now, but the status flag is
     // what every list view filters on — flipping it here keeps the UI honest.
-    const expired = await db.market.updateMany({
+    //
+    // Per-market transaction (not a bulk updateMany) so we can atomically
+    // cancel any still-open orders on that market and refund the BUY-side
+    // coin locks / release SELL-side share locks. Without this, a limit
+    // order placed before `endsAt` would leave the user's coins debited
+    // from their wallet forever — see `cancelOpenOrdersForMarket`.
+    const expiring = await db.market.findMany({
       where: { status: "OPEN", endsAt: { lte: now } },
-      data: { status: "CLOSED" },
+      select: { id: true },
+      take: 100,
     });
-    if (expired.count > 0) {
-      console.log(`[scheduler] closed ${expired.count} expired market(s)`);
-      // Each affected market gets a SSE ping so live viewers refresh state.
-      const ids = await db.market.findMany({
-        where: { status: "CLOSED", endsAt: { lte: now } },
-        select: { id: true },
-        take: 100,
+    for (const { id } of expiring) {
+      const result = await db.$transaction(async (tx) => {
+        // Re-read inside the tx in case another tick raced us to the close.
+        const m = await tx.market.findUnique({
+          where: { id },
+          select: { status: true },
+        });
+        if (!m || m.status !== "OPEN") return null;
+        const refunds = await cancelOpenOrdersForMarket(tx, id);
+        await tx.market.update({ where: { id }, data: { status: "CLOSED" } });
+        return refunds;
       });
-      for (const { id } of ids) {
+      if (result) {
+        console.log(
+          `[scheduler] closed market ${id} — cancelled ${result.cancelledCount} order(s), refunded ${result.refundedCoins} coins, released ${result.releasedShares.toFixed(2)} shares`,
+        );
         publish(Channels.market(id), { type: "closed", at: Date.now() });
+        if (result.cancelledCount > 0) {
+          publish(Channels.market(id), { type: "book", at: Date.now() });
+          // type: "wallet" tells the user's SSE client to refetch their
+          // balance — same event the topup/verify routes use. Matches the
+          // existing client subscription surface so we don't need to teach
+          // it about a new event kind.
+          for (const userId of result.affectedUserIds) {
+            publish(Channels.user(userId), {
+              type: "wallet",
+              at: Date.now(),
+            });
+          }
+        }
       }
     }
 

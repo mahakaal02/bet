@@ -7,6 +7,7 @@ import { publish, Channels } from "@/lib/pubsub";
 import { logger } from "@/lib/logger";
 import { splitSettlement } from "@/lib/commission";
 import { collectFee } from "@/lib/house";
+import { cancelOpenOrdersForMarket } from "@/lib/order-refund";
 
 const Body = z.object({
   outcome: z.enum(["YES", "NO", "CANCELLED"]),
@@ -41,6 +42,13 @@ export async function POST(
         if (market.status === "RESOLVED" || market.status === "CANCELLED") {
           throw new HttpError(409, "already_resolved");
         }
+
+        // Cancel any still-open orders and refund their locked side BEFORE
+        // we iterate positions. If the admin resolves an OPEN market (no
+        // scheduler tick yet), this is the one place locked BUY coins get
+        // returned to the wallet. Idempotent — re-runs on CLOSED markets
+        // whose orders the scheduler already cancelled do nothing.
+        const orderRefunds = await cancelOpenOrdersForMarket(tx, id);
 
         const positions = await tx.position.findMany({
           where: { marketId: id, shares: { gt: 0 } },
@@ -194,6 +202,8 @@ export async function POST(
               payoutCount,
               paidOut,
               settlementFee: totalSettlementFee,
+              ordersCancelled: orderRefunds.cancelledCount,
+              ordersRefundedCoins: orderRefunds.refundedCoins,
             },
           },
         });
@@ -203,6 +213,7 @@ export async function POST(
           paidOut,
           settlementFee: totalSettlementFee,
           unlocksByUser,
+          orderRefunds,
           market,
         };
       },
@@ -238,6 +249,8 @@ export async function POST(
       payoutCount: result.payoutCount,
       paidOut: result.paidOut,
       settlementFee: result.settlementFee,
+      ordersCancelled: result.orderRefunds.cancelledCount,
+      ordersRefundedCoins: result.orderRefunds.refundedCoins,
     });
   } catch (e) {
     if (e instanceof HttpError) {

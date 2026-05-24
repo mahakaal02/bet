@@ -31,7 +31,13 @@ export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
   const [, startTransition] = useTransition();
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const { data, mutate } = useSWR<{ orders: Order[] }>("/api/orders", fetcher, {
+  // When a marketId is supplied, scope the list to that market — without
+  // this, an OPEN order from a different market would render here and the
+  // user could cancel the wrong market's order from this page.
+  const url = marketId
+    ? `/api/orders?marketId=${encodeURIComponent(marketId)}`
+    : "/api/orders";
+  const { data, mutate } = useSWR<{ orders: Order[] }>(url, fetcher, {
     refreshInterval: 0,
     revalidateOnFocus: true,
   });

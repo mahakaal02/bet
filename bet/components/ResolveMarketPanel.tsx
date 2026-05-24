@@ -23,10 +23,14 @@ export function ResolveMarketPanel({ marketId }: { marketId: string }) {
     setBusy(false);
     if (res.ok) {
       const body = await res.json();
+      const orderTail =
+        body.ordersCancelled > 0
+          ? ` Released ${body.ordersCancelled} open order${body.ordersCancelled === 1 ? "" : "s"} (refunded ${body.ordersRefundedCoins} coins).`
+          : "";
       toast(
         as === "CANCELLED"
-          ? "Cancelled. Refunds issued."
-          : `Resolved ${as}. Paid out ${body.paidOut} coins to ${body.payoutCount} positions.`,
+          ? `Cancelled. Refunds issued.${orderTail}`
+          : `Resolved ${as}. Paid out ${body.paidOut} coins to ${body.payoutCount} positions.${orderTail}`,
         "ok",
       );
       router.refresh();

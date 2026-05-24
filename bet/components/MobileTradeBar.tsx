@@ -142,7 +142,7 @@ export function MobileTradeBar({
             yesPosition={positions.find((p) => p.outcome === "YES")}
             noPosition={positions.find((p) => p.outcome === "NO")}
           />
-          {authed && <OpenOrdersPanel marketId={slug} />}
+          {authed && <OpenOrdersPanel marketId={marketId} />}
         </div>
       </BottomSheet>
     </>
