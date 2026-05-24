@@ -29,10 +29,34 @@ import { useGame } from '@/lib/store';
  * back to the Kalki hub (= "logout doesn't work" from the user's
  * perspective).
  */
-const EXCHANGE_BASE =
-  process.env.NEXT_PUBLIC_EXCHANGE_URL ?? 'http://localhost:3100';
-const AUCTIONS_BASE =
-  process.env.NEXT_PUBLIC_AUCTIONS_URL ?? 'http://localhost:3200';
+const EXCHANGE_BASE_ENV = process.env.NEXT_PUBLIC_EXCHANGE_URL;
+const AUCTIONS_BASE_ENV = process.env.NEXT_PUBLIC_AUCTIONS_URL;
+
+/**
+ * PR-WEB-LOGOUT-FIX — resolve a base URL preferring the build-time
+ * NEXT_PUBLIC_* env var, but falling back to a host derived from the
+ * current `window.location` if the env var is missing OR looks like
+ * the localhost dev default (which would 404 from a production page).
+ *
+ * The build pipeline normally sets these vars correctly
+ * (.github/workflows/build-and-push.yml), but if a build ever ships
+ * without them the previous code silently emitted localhost URLs in
+ * the bundle — visible to users as a hard "site can't be reached"
+ * error on the logout chain. Now the chain self-heals from the
+ * request host pattern (`kalki-aviator.<rest>` → `kalki-<svc>.<rest>`).
+ */
+function resolveBase(fromEnv: string | undefined, svcPrefix: string, devFallback: string): string {
+  if (fromEnv && !/localhost|127\.0\.0\.1/.test(fromEnv)) {
+    return fromEnv.replace(/\/$/, '');
+  }
+  if (typeof window !== 'undefined') {
+    const m = /^([a-z]+)-([a-z]+)\.(.+)$/.exec(window.location.hostname);
+    if (m && m[1] === 'kalki') {
+      return `${window.location.protocol}//kalki-${svcPrefix}.${m[3]}`;
+    }
+  }
+  return devFallback;
+}
 
 export default function AviatorProfilePage() {
   const router = useRouter();
@@ -47,7 +71,8 @@ export default function AviatorProfilePage() {
     if (!u || !getToken()) {
       // Aviator no longer has a standalone login page — bounce out to
       // the canonical login on the auctions host.
-      window.location.replace(`${AUCTIONS_BASE.replace(/\/$/, '')}/login`);
+      const auctionsBase = resolveBase(AUCTIONS_BASE_ENV, 'auctions', 'http://localhost:3200');
+      window.location.replace(`${auctionsBase}/login`);
       return;
     }
     setMe({ username: u.username, email: u.email ?? null });
@@ -57,7 +82,10 @@ export default function AviatorProfilePage() {
     setBusy(true);
     // 1. Clear Aviator's local storage *here* before kicking off the
     //    chain — if the user mashes back-button before the chain
-    //    completes, at least Aviator is signed out locally.
+    //    completes, at least Aviator is signed out locally. This
+    //    also stamps the just-logged-out flag (see lib/auth.ts) so
+    //    the page-level AuthGate refuses a stale `?token=` URL
+    //    param if the user revisits via a bookmark/tile soon after.
     clearAuth();
     // 2. Build the chain BOTTOM-UP so each hop encodes the next:
     //      Bet sso-logout → Auctions sso-logout → Auctions /login
@@ -66,9 +94,11 @@ export default function AviatorProfilePage() {
     //    /login sees the live `kalki_token` cookie and bounces to
     //    `/` (the Kalki hub) — the symptom users reported as
     //    "clicking logout returns to the hub".
-    const finalUrl = `${AUCTIONS_BASE.replace(/\/$/, '')}/login`;
-    const auctionsStep = `${AUCTIONS_BASE.replace(/\/$/, '')}/api/auth/sso-logout?next=${encodeURIComponent(finalUrl)}`;
-    const betStep = `${EXCHANGE_BASE.replace(/\/$/, '')}/api/auth/sso-logout?next=${encodeURIComponent(auctionsStep)}`;
+    const exchangeBase = resolveBase(EXCHANGE_BASE_ENV, 'bet', 'http://localhost:3100');
+    const auctionsBase = resolveBase(AUCTIONS_BASE_ENV, 'auctions', 'http://localhost:3200');
+    const finalUrl = `${auctionsBase}/login`;
+    const auctionsStep = `${auctionsBase}/api/auth/sso-logout?next=${encodeURIComponent(finalUrl)}`;
+    const betStep = `${exchangeBase}/api/auth/sso-logout?next=${encodeURIComponent(auctionsStep)}`;
     window.location.replace(betStep);
   }
 

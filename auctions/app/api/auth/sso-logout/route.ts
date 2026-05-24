@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { SESSION_COOKIE, clearSessionToken } from "@/lib/session";
+import {
+  LOGGED_OUT_COOKIE,
+  LOGGED_OUT_MAX_AGE_SECONDS,
+  SESSION_COOKIE,
+  clearSessionToken,
+  setLoggedOutFlag,
+} from "@/lib/session";
 
 /**
  * GET /api/auth/sso-logout?next=<url>
@@ -55,6 +61,10 @@ export async function GET(req: Request) {
   // already uses the same options the cookie was set with, so the
   // browser actually drops it (vs leaving a zombie).
   await clearSessionToken();
+  // PR-WEB-LOGOUT-FIX — set the just-logged-out guard cookie so a
+  // subsequent visit carrying `?token=…` in the URL doesn't auto-
+  // re-establish the session. 60s window.
+  await setLoggedOutFlag();
 
   const res = NextResponse.redirect(next, { status: 303 });
   // Belt-and-braces — explicit Set-Cookie with maxAge=0 in case the
@@ -66,6 +76,15 @@ export async function GET(req: Request) {
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 0,
+  });
+  // Same explicit-set for the logged-out flag — bypasses any worker-
+  // affinity issue with the `cookies()` API.
+  res.cookies.set(LOGGED_OUT_COOKIE, "1", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: LOGGED_OUT_MAX_AGE_SECONDS,
   });
   return res;
 }

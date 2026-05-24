@@ -29,6 +29,19 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // PR-WEB-LOGOUT-FIX — refuse to re-establish a NextAuth session from
+  // a `?token=…` URL param if the user just signed out (within the
+  // last 60s, see bet/app/api/auth/sso-logout/route.ts). Symptom we
+  // fix: "I signed out, clicked a Kalki hub tile that carries
+  // `?token=` from a stale page render, and got silently signed back
+  // in." Token stripped from URL, no session minted.
+  const justLoggedOut = req.cookies.get("kalki_logged_out")?.value === "1";
+  if (justLoggedOut) {
+    const cleanUrl = req.nextUrl.clone();
+    cleanUrl.searchParams.delete("token");
+    return NextResponse.redirect(cleanUrl);
+  }
+
   const cleanUrl = req.nextUrl.clone();
   cleanUrl.searchParams.delete("token");
 
