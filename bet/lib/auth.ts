@@ -329,16 +329,31 @@ export async function getAuthedUser() {
   // to wait for the next refresh. A single SELECT per authed
   // request is cheap; if it ever shows up in profiling we can cache
   // for a few seconds.
+  // PR-BET-HOTFIX-SCHEMA-RESYNC — use a raw query instead of the
+  // generated Prisma client so this code path NEVER 500s the page
+  // even if the `adminRole` column is missing from the deployed
+  // database (e.g. migration didn't fully apply yet). The previous
+  // version used `db.user.findUnique({ select: { adminRole: true }})`
+  // which throws a `PrismaClientKnownRequestError` when the column
+  // doesn't exist — wrapping in try/catch swallows the error, but
+  // OTHER call sites that read the User table without try/catch
+  // (e.g. the landing page's leaderboard query) still crash on the
+  // same missing column. The repair migration in this PR fixes the
+  // root cause; this raw query is belt-and-braces so we don't depend
+  // on the migration succeeding to keep the auth gate working.
   let adminRole: "SUPER_ADMIN" | "ADMIN" | null = null;
   try {
-    const row = await db.user.findUnique({
-      where: { id: u.id as string },
-      select: { adminRole: true },
-    });
-    adminRole = (row?.adminRole as "SUPER_ADMIN" | "ADMIN" | null) ?? null;
+    const rows = await db.$queryRaw<Array<{ adminRole: string | null }>>`
+      SELECT "adminRole" FROM "User" WHERE "id" = ${u.id as string} LIMIT 1
+    `;
+    const value = rows[0]?.adminRole;
+    if (value === "SUPER_ADMIN" || value === "ADMIN") {
+      adminRole = value;
+    }
   } catch {
-    /* DB blip — fall through with adminRole=null, isAdmin stays as
-       whatever the session JWT said. Safe default: read-only access. */
+    /* Column missing / DB blip — fall through with adminRole=null.
+       isAdmin then derives from the JWT's u.isAdmin flag (read-only
+       fallback while ops fixes the schema). */
   }
 
   return {
