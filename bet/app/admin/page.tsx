@@ -9,8 +9,8 @@ import {
   PageHeader,
   SectionTitle,
   StatCard,
-  fmtRelative,
 } from "@/components/admin/ui/primitives";
+import { fmtRelative } from "@/components/admin/ui/format";
 import {
   IconActivity,
   IconAlert,

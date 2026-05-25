@@ -898,36 +898,11 @@ export function Pagination({
 
 /* ============================================================
    Money / number formatters (UI-shared)
-   ============================================================ */
+   ============================================================
+   PR-BET-HOTFIX-LOCAL — these moved to `./format.ts` (a non-client
+   module) so server components can import them. We re-export here
+   for back-compat with code that already imports them from the
+   primitives module. New code should prefer `import … from
+   "@/components/admin/ui/format"` for clarity. */
 
-export function fmtCoins(n: number | null | undefined): string {
-  if (n == null) return "—";
-  return n.toLocaleString("en-IN");
-}
-
-export function fmtPct(n: number, decimals = 1): string {
-  return `${(n * 100).toFixed(decimals)}%`;
-}
-
-export function fmtDate(d: Date | string | null | undefined): string {
-  if (!d) return "—";
-  const date = typeof d === "string" ? new Date(d) : d;
-  return date.toLocaleString("en-IN", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-export function fmtRelative(d: Date | string | null | undefined): string {
-  if (!d) return "—";
-  const date = typeof d === "string" ? new Date(d) : d;
-  const diff = (Date.now() - date.getTime()) / 1000;
-  if (diff < 60) return `${Math.floor(diff)}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
-  return date.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
-}
+export { fmtCoins, fmtPct, fmtDate, fmtRelative } from "./format";

@@ -1,12 +1,13 @@
-import { db } from "@/lib/db";
+import {
+  db } from "@/lib/db";
 import {
   Badge,
   Card,
   EmptyState,
   PageHeader,
   StatCard,
-  fmtDate,
 } from "@/components/admin/ui/primitives";
+import { fmtDate } from "@/components/admin/ui/format";
 import { IconAlert, IconShield } from "@/components/admin/ui/icons";
 import { FraudScanButton } from "./FraudScanButton";
 

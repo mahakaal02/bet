@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { db } from "@/lib/db";
+import {
+  db } from "@/lib/db";
 import {
   Card,
   PageHeader,
   StatCard,
-  fmtCoins,
 } from "@/components/admin/ui/primitives";
+import { fmtCoins } from "@/components/admin/ui/format";
 import { IconChart, IconDownload, IconFile } from "@/components/admin/ui/icons";
 
 export const dynamic = "force-dynamic";
@@ -94,7 +95,7 @@ export default async function ReportsPage() {
             <p className="text-xs text-[var(--admin-text-secondary)]">{t.description}</p>
             <p className="mt-1 text-[10px] uppercase tracking-wider text-[var(--admin-text-muted)]">{t.range}</p>
             <Link
-              href={`/api/admin/reports/${t.type}/export`}
+              href={`/api/admin/exports/${t.type}`}
               className="mt-3 inline-flex h-7 items-center gap-1 rounded-md bg-cyan-500/15 px-2.5 text-[11px] font-semibold text-cyan-300 hover:bg-cyan-500/25"
             >
               <IconDownload size={12} /> Download CSV

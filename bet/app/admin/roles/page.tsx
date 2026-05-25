@@ -1,4 +1,5 @@
-import { db } from "@/lib/db";
+import {
+  db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import {
@@ -6,8 +7,8 @@ import {
   Card,
   EmptyState,
   PageHeader,
-  fmtDate,
 } from "@/components/admin/ui/primitives";
+import { fmtDate } from "@/components/admin/ui/format";
 import { IconRoles, IconShield } from "@/components/admin/ui/icons";
 import { RolesClient } from "./RolesClient";
 

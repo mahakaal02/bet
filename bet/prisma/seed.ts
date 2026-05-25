@@ -56,17 +56,57 @@ async function main() {
   // both `create` and `update` — a missing column made the entire
   // upsert throw, which exits the seed init container with a
   // non-zero code, which keeps the pod stuck in Init forever.
-  const admin = await db.user.upsert({
-    where: { email: SUPER_ADMIN_EMAIL },
-    update: { isAdmin: true },
-    create: {
-      email: SUPER_ADMIN_EMAIL,
-      username: SUPER_ADMIN_EMAIL.split("@")[0] || "admin",
-      isAdmin: true,
-      referralCode: "SUPER1",
-      wallet: { create: { balance: 50000 } },
+  // PR-BET-HOTFIX-3 — Username-collision-safe upsert.
+  //
+  // The naive upsert-by-email failed in production because the bet
+  // DB carried a legacy row with `username='admin'` (auto-generated
+  // from a migration import — email `<cuid>@legacy.local`). The new
+  // upsert's CREATE branch tried to insert another row with
+  // `username='admin'`, hit the User_username_key unique constraint,
+  // and crashed the seed init container — taking the entire bet pod
+  // down (Init: CrashLoopBackOff).
+  //
+  // New logic:
+  //   1. Look up the desired user by EITHER email OR username.
+  //   2. If found, UPDATE in place — promoting their email + admin
+  //      flag without creating a duplicate row.
+  //   3. If NOT found, create fresh.
+  //
+  // Result: any combination of pre-existing legacy admin rows is
+  // handled without the unique-constraint crash.
+  const desiredUsername = SUPER_ADMIN_EMAIL.split("@")[0] || "admin";
+  const existingAdmin = await db.user.findFirst({
+    where: {
+      OR: [
+        { email: SUPER_ADMIN_EMAIL },
+        { username: desiredUsername },
+      ],
     },
   });
+  let admin;
+  if (existingAdmin) {
+    admin = await db.user.update({
+      where: { id: existingAdmin.id },
+      data: {
+        email: SUPER_ADMIN_EMAIL,
+        username: desiredUsername,
+        isAdmin: true,
+      },
+    });
+  } else {
+    admin = await db.user.create({
+      data: {
+        email: SUPER_ADMIN_EMAIL,
+        username: desiredUsername,
+        isAdmin: true,
+        referralCode: "SUPER1",
+        wallet: { create: { balance: 50000 } },
+      },
+    });
+  }
+  // Promote to SUPER_ADMIN via raw SQL — safe even if the column is
+  // missing (caught + logged). Demotes any stale SUPER_ADMIN rows
+  // from a previous env re-target.
   try {
     await db.$executeRaw`UPDATE "User" SET "adminRole" = 'SUPER_ADMIN'::"AdminRole" WHERE "id" = ${admin.id}`;
     await db.$executeRaw`UPDATE "User" SET "adminRole" = 'ADMIN'::"AdminRole" WHERE "adminRole" = 'SUPER_ADMIN'::"AdminRole" AND "id" <> ${admin.id}`;

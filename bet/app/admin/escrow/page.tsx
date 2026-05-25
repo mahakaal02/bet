@@ -1,13 +1,13 @@
 import Link from "next/link";
-import { db } from "@/lib/db";
+import {
+  db } from "@/lib/db";
 import {
   Card,
   EmptyState,
   PageHeader,
   StatCard,
-  fmtCoins,
-  fmtDate,
 } from "@/components/admin/ui/primitives";
+import { fmtCoins, fmtDate } from "@/components/admin/ui/format";
 import { IconScale, IconWallet } from "@/components/admin/ui/icons";
 
 export const dynamic = "force-dynamic";
