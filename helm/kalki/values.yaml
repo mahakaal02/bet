@@ -32,6 +32,27 @@ sharedSecret:
   razorpayKeyId: ""
   razorpayKeySecret: ""
   razorpayWebhookSecret: ""
+  # PR-BET-NOWPAYMENTS-SECRETS — crypto top-up integration. The
+  # bet/lib/nowpayments.ts client reads these from env (mounted via
+  # `envFrom: kalki-shared` on the bet pod). Until both are set,
+  # `isFullyConfigured()` returns false and the integration silently
+  # disables itself — the wallet UI falls back to the "Ask an Admin
+  # on Secure Kalki Chat" CTA, no breakage.
+  #
+  # Override in the `kalki-helm-values` in-cluster Secret rather
+  # than committing real values to this file. Pattern matches the
+  # postgres password runbook above. To rotate:
+  #
+  #   kubectl -n kalki get secret kalki-helm-values \
+  #     -o jsonpath='{.data.values\.yaml}' | base64 -d > /tmp/v.yaml
+  #   # edit /tmp/v.yaml under sharedSecret: to add the two keys
+  #   kubectl -n kalki create secret generic kalki-helm-values \
+  #     --from-file=values.yaml=/tmp/v.yaml \
+  #     --dry-run=client -o yaml | kubectl -n kalki apply -f -
+  #   # Flux reconciles within ~1 min; restart bet to pick up secrets
+  #   kubectl -n kalki rollout restart deploy/kalki-bet
+  nowpaymentsApiKey: ""
+  nowpaymentsIpnSecret: ""
 postgres:
   enabled: true
   image: postgres:16-alpine
