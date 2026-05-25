@@ -95,6 +95,14 @@ spec:
               value: {{ include "kalki.databaseUrl" (dict "dbname" "bet" "override" .Values.bet.databaseUrl "ctx" .) | quote }}
             - name: NEXTAUTH_URL
               value: "https://{{ include "kalki.host" (dict "svc" "bet" "ctx" .) }}"
+            # PR-BET-NOWPAYMENTS — crypto top-up integration.
+            # NOWPAYMENTS_API_KEY + NOWPAYMENTS_IPN_SECRET ride in via
+            # `envFrom: kalki-shared` below (both are secrets). The
+            # sandbox flag is a plain env so ops can flip between the
+            # sandbox + prod NOWPayments instances by editing helm
+            # values without touching the secret.
+            - name: NOWPAYMENTS_SANDBOX
+              value: {{ .Values.bet.nowpayments.sandbox | default "false" | quote }}
             {{- include "kalki.redisEnv" . | nindent 12 }}
             {{- include "kalki.publicUrlEnv" . | nindent 12 }}
           envFrom:

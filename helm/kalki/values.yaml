@@ -170,6 +170,24 @@ bet:
   prismaSeed: true
   databaseUrl: ""
   env: {}
+  # PR-BET-NOWPAYMENTS — crypto top-ups via NOWPayments.
+  #
+  # Two secrets MUST live in the `kalki-shared` Secret for the
+  # integration to fire (the bet pod loads them via `envFrom`):
+  #
+  #   NOWPAYMENTS_API_KEY     — server-side API key (Dashboard →
+  #                              Settings → Payments API). Required.
+  #   NOWPAYMENTS_IPN_SECRET  — HMAC-SHA512 callback verification
+  #                              secret (Dashboard → Settings →
+  #                              Payments API → IPN). REQUIRED — the
+  #                              webhook handler refuses to credit
+  #                              wallets when missing.
+  #
+  # The sandbox toggle below is plain config (not a secret) so ops
+  # can cut between sandbox + prod from a values bump alone without
+  # rotating the secrets.
+  nowpayments:
+    sandbox: "false"
   resources:
     requests: {cpu: 100m, memory: 256Mi}
     limits: {cpu: 1000m, memory: 1Gi}

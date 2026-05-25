@@ -90,6 +90,7 @@ model User {
   reportsFiled   Report[] @relation("Reporter")
   reportsResolved Report[] @relation("Resolver")
   payments        PaymentOrder[]
+  cryptoPayments  CryptoPaymentOrder[]
   withdrawals     WithdrawalRequest[]
   withdrawalsDecided WithdrawalRequest[] @relation("WithdrawalDecider")
   emailVerified Boolean   @default(false)
@@ -808,4 +809,49 @@ model ApiLog {
   @@index([createdAt(sort: Desc)])
   @@index([status, createdAt(sort: Desc)])
   @@index([path, createdAt(sort: Desc)])
+}
+
+// ───── NOWPayments crypto top-ups (PR-BET-NOWPAYMENTS) ─────────────────────
+//
+// Parallel to PaymentOrder (which is Razorpay-only). Crypto needs a
+// different shape: invoices instead of orders, IPN callbacks instead
+// of client-side signature verification, status machine with
+// "confirming" + "partially_paid" states. Keeping them separate avoids
+// dropping the Razorpay flow (still wired, just unused in prod) and
+// keeps the foreign-key story clean — no NULL razorpay* columns when
+// a row is actually crypto.
+//
+// A `Transaction(kind='deposit', reference='nowpayments:<paymentId>')`
+// row is written on IPN-finished — same idempotency guarantee the
+// Razorpay path uses, so duplicate IPN deliveries are harmless.
+
+model CryptoPaymentOrder {
+  id               String   @id @default(cuid())
+  userId           String
+  packId           String   // matches lib/coin-packs.ts
+  amountInr        Int      // INR-equivalent at order time (for receipts)
+  coins            Int      // coins to credit on finished
+  // NOWPayments references. `invoiceId` is set immediately on create;
+  // `paymentId` only after the user picks a coin in the hosted UI.
+  invoiceId        String?  @unique // np invoice id (numeric or string)
+  paymentId        String?  @unique // np payment id once the user commits
+  payCurrency      String?  // "btc" / "eth" / "usdttrc20" / ...
+  payAmount        String?  // crypto units (string to avoid Float drift)
+  payAddress       String?  // deposit address shown to the user
+  hostedInvoiceUrl String?  // https://nowpayments.io/payment/?iid=...
+  // Status mirrors the NOWPayments payment_status field plus our own
+  // PENDING bookend. See lib/nowpayments.ts for the state machine.
+  status           String   @default("PENDING")
+  // Last IPN payload — useful for the admin payouts view when a
+  // payment gets stuck in confirming / partially_paid and ops needs
+  // to investigate.
+  rawWebhook       Json?
+  failureReason    String?
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+  capturedAt       DateTime? @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
 }

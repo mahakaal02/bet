@@ -21,6 +21,9 @@ interface TopupConfig {
   razorpayConfigured: boolean;
   razorpayKeyId: string | null;
   instantTopupEnabled: boolean;
+  /** PR-BET-NOWPAYMENTS — true when NOWPAYMENTS_API_KEY is set in
+   *  the bet pod's env. Lights up the "Pay with crypto" CTA. */
+  cryptoConfigured?: boolean;
   /** PR-BET-ADMIN-FOLLOWUPS — super-admin-controlled link to the
    *  Secured Chat App APK. Empty string when unset. */
   chatAppDownloadUrl?: string;
@@ -154,19 +157,55 @@ export function BuyCoinsGrid({ packs, user }: Props) {
     startTransition(() => router.refresh());
   }
 
+  /**
+   * PR-BET-NOWPAYMENTS — hosted crypto checkout.
+   *
+   * POST /api/wallet/topup/crypto/order returns a NOWPayments invoice
+   * URL. We do a hard navigation rather than open in a popup because
+   * the hosted UI handles the full coin-picker + QR-code + payment
+   * flow itself, and a popup can be blocked.
+   *
+   * No client-side success path needed — the IPN webhook credits the
+   * wallet asynchronously. The user is sent to `/wallet/topup/return`
+   * after they finish, where their order status renders live.
+   */
+  async function buyViaCrypto(pack: CoinPack) {
+    const res = await fetch("/api/wallet/topup/crypto/order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ packId: pack.id }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.redirectUrl) {
+      toast(
+        body?.error === "rate_limited"
+          ? "Too many attempts — slow down a moment."
+          : prettyError(body?.error) ?? "Couldn't open crypto checkout.",
+        "err",
+      );
+      return;
+    }
+    // Hard navigation to the hosted invoice. The user lands back on
+    // /wallet/topup/return when they finish (or cancel).
+    window.location.assign(body.redirectUrl);
+  }
+
   async function buy(pack: CoinPack) {
     setBusy(pack.id);
     try {
-      if (config?.razorpayConfigured) {
+      // PR-BET-NOWPAYMENTS — prefer crypto when configured. Razorpay
+      // remains the alt path (currently disabled in prod helm) so
+      // when we re-enable fiat, both branches coexist gracefully.
+      if (config?.cryptoConfigured) {
+        await buyViaCrypto(pack);
+      } else if (config?.razorpayConfigured) {
         await buyViaRazorpay(pack);
       } else if (config?.instantTopupEnabled) {
         await buyViaInstant(pack);
       } else {
-        // PR-BET-ADMIN-FOLLOWUPS — user-facing copy. The platform now
-        // routes payment-arrangement through the Secured Kalki Chat
-        // App (where admins handle UPI/bank transfers personally).
-        // The old "payments aren't configured" copy leaked the
-        // developer reality.
+        // No payment path configured. Fall through to the Secured
+        // Kalki Chat App path (super-admin sets the URL in
+        // /admin/settings). Copy added in PR-BET-ADMIN-FOLLOWUPS.
         toast(
           "Ask an Admin on Secure Kalki Chat for payments",
           "err",
@@ -234,13 +273,24 @@ export function BuyCoinsGrid({ packs, user }: Props) {
           );
         })}
       </div>
+      {/* PR-BET-NOWPAYMENTS — when crypto is on, show a small reassurance
+          strip under the pack tiles instead of the chat-app fallback. */}
+      {config?.cryptoConfigured && (
+        <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200">
+          <p>
+            <span className="font-semibold">Pay with crypto</span> — BTC,
+            ETH, USDT, USDC and 200+ more. Your coins land in your wallet
+            automatically once the payment confirms on-chain.
+          </p>
+        </div>
+      )}
       {/* PR-BET-ADMIN-FOLLOWUPS — payments now route through the
           Secured Kalki Chat App. Old banners exposed Razorpay env-var
           names + "instant credit" dev terminology to end users, both
           of which are private platform details. New copy points the
           user at the chat-app download (URL controlled by super admin
           via /admin/settings → wallet.chat_app_download_url). */}
-      {config && !config.razorpayConfigured && !config.instantTopupEnabled && (
+      {config && !config.cryptoConfigured && !config.razorpayConfigured && !config.instantTopupEnabled && (
         <div className="mt-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-xs">
           {config.chatAppDownloadUrl ? (
             <p className="text-cyan-200">
