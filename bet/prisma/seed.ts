@@ -38,23 +38,42 @@ async function main() {
   const SUPER_ADMIN_EMAIL = (
     process.env.KALKI_SUPER_ADMIN_EMAIL ?? "admin@kalki.local"
   ).toLowerCase();
+
+  // PR-BET-HOTFIX-2 — Two-step upsert so the seed can NEVER crash
+  // the init container if the `adminRole` column is missing.
+  //
+  // Step 1: upsert WITHOUT the new column. This always works
+  // regardless of migration state. Establishes the admin user row +
+  // wallet.
+  //
+  // Step 2: try to set adminRole via raw SQL. Wrapped in try/catch
+  // because the column may not exist yet on a half-migrated DB. If
+  // this fails, the user still exists with `isAdmin=true` (legacy
+  // path) and operates fine — they just can't access RBAC-gated
+  // surfaces until the schema catches up.
+  //
+  // Previous version called `db.user.upsert` with `adminRole` in
+  // both `create` and `update` — a missing column made the entire
+  // upsert throw, which exits the seed init container with a
+  // non-zero code, which keeps the pod stuck in Init forever.
   const admin = await db.user.upsert({
     where: { email: SUPER_ADMIN_EMAIL },
-    update: { adminRole: "SUPER_ADMIN", isAdmin: true },
+    update: { isAdmin: true },
     create: {
       email: SUPER_ADMIN_EMAIL,
       username: SUPER_ADMIN_EMAIL.split("@")[0] || "admin",
-      adminRole: "SUPER_ADMIN",
       isAdmin: true,
       referralCode: "SUPER1",
       wallet: { create: { balance: 50000 } },
     },
   });
-  // Demote any other SUPER_ADMIN rows (e.g. env was re-targeted).
-  await db.user.updateMany({
-    where: { adminRole: "SUPER_ADMIN", NOT: { id: admin.id } },
-    data: { adminRole: "ADMIN" },
-  });
+  try {
+    await db.$executeRaw`UPDATE "User" SET "adminRole" = 'SUPER_ADMIN'::"AdminRole" WHERE "id" = ${admin.id}`;
+    await db.$executeRaw`UPDATE "User" SET "adminRole" = 'ADMIN'::"AdminRole" WHERE "adminRole" = 'SUPER_ADMIN'::"AdminRole" AND "id" <> ${admin.id}`;
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn("[seed] adminRole promotion skipped (column not present yet):", (e as Error).message);
+  }
   // Wallet is nested-created above on first seed. On re-seed the user
   // row already exists so the nested create never runs — if the wallet
   // was manually cleared, the user would be wallet-less. Re-asserting
