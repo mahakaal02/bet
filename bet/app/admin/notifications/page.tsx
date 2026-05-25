@@ -1,12 +1,13 @@
-import { db } from "@/lib/db";
+import {
+  db } from "@/lib/db";
 import {
   Card,
   EmptyState,
   PageHeader,
   StatCard,
   Badge,
-  fmtDate,
 } from "@/components/admin/ui/primitives";
+import { fmtDate } from "@/components/admin/ui/format";
 import { IconBell, IconLightning } from "@/components/admin/ui/icons";
 
 export const dynamic = "force-dynamic";

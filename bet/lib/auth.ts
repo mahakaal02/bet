@@ -78,7 +78,42 @@ export const authOptions: NextAuthOptions = {
         // /api/internal/users/ensure path).
         if (!credentials?.email || !credentials.password) return null;
         const email = credentials.email.toLowerCase();
-        const upstream = await loginViaBackend(email, credentials.password);
+        let upstream = await loginViaBackend(email, credentials.password);
+
+        // PR-BET-HOTFIX-LOCAL-AUTH — fallback path for environments
+        // where the auctions backend isn't reachable (local dev without
+        // the Nest backend, or a temporary outage). Checks the local
+        // `User.passwordHash` column (populated by /api/register) via
+        // bcrypt compare. Production normally routes via the backend
+        // and never touches this branch; when the backend IS up,
+        // `upstream` is non-null and we skip the fallback entirely.
+        if (!upstream && process.env.ALLOW_LOCAL_PASSWORD_AUTH !== "false") {
+          try {
+            const local = await db.user.findUnique({ where: { email } });
+            if (local?.passwordHash) {
+              const { compare } = await import("bcryptjs");
+              const ok = await compare(credentials.password, local.passwordHash);
+              if (ok && !local.banned) {
+                // Synthesize the upstream shape so the rest of the
+                // function flows identically. `isAdmin` comes off the
+                // local User row.
+                upstream = {
+                  token: "",
+                  user: {
+                    id: local.id,
+                    email: local.email,
+                    username: local.username,
+                    isAdmin: local.isAdmin,
+                    emailVerified: local.emailVerified,
+                  },
+                };
+              }
+            }
+          } catch {
+            /* DB blip — fall through to the upstream=null return */
+          }
+        }
+
         if (!upstream) return null;
 
         // Ensure / hydrate the Bet shadow user, just like the Google

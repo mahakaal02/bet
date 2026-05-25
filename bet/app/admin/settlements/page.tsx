@@ -5,10 +5,8 @@ import {
   Card,
   EmptyState,
   PageHeader,
-  fmtCoins,
-  fmtDate,
-  fmtRelative,
 } from "@/components/admin/ui/primitives";
+import { fmtCoins, fmtDate, fmtRelative } from "@/components/admin/ui/format";
 import { IconScale } from "@/components/admin/ui/icons";
 
 export const dynamic = "force-dynamic";

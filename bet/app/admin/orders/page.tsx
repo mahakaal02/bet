@@ -1,14 +1,14 @@
 import Link from "next/link";
-import { db } from "@/lib/db";
+import {
+  db } from "@/lib/db";
 import {
   Badge,
   Card,
   EmptyState,
   PageHeader,
   SectionTitle,
-  fmtCoins,
-  fmtDate,
 } from "@/components/admin/ui/primitives";
+import { fmtCoins, fmtDate } from "@/components/admin/ui/format";
 import { IconOrderBook } from "@/components/admin/ui/icons";
 
 export const dynamic = "force-dynamic";

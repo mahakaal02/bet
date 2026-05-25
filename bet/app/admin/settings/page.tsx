@@ -1,10 +1,11 @@
-import { db } from "@/lib/db";
+import {
+  db } from "@/lib/db";
 import {
   Badge,
   Card,
   PageHeader,
-  fmtDate,
 } from "@/components/admin/ui/primitives";
+import { fmtDate } from "@/components/admin/ui/format";
 import { IconSettings } from "@/components/admin/ui/icons";
 import { SettingsClient } from "./SettingsClient";
 
