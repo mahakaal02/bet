@@ -2,13 +2,20 @@
 
 import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toaster";
+import {
+  DEFAULT_LOCALE,
+  isLocale,
+  localizedPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 export default function ResetPage() {
   return (
@@ -21,6 +28,13 @@ export default function ResetPage() {
 function ResetForm() {
   const router = useRouter();
   const params = useSearchParams();
+  const routeParams = useParams<{ locale: string }>();
+  const locale: Locale = isLocale(routeParams.locale)
+    ? routeParams.locale
+    : DEFAULT_LOCALE;
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
+  const lp = (h: string) => localizedPath(h, locale);
   const token = params.get("token") ?? "";
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -29,11 +43,11 @@ function ResetForm() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (password.length < 8) {
-      toast("Password must be at least 8 characters.", "err");
+      toast(tr("validation.passwordMinLength"), "err");
       return;
     }
     if (password !== confirm) {
-      toast("Passwords don't match.", "err");
+      toast(tr("validation.passwordsDontMatch"), "err");
       return;
     }
     setBusy(true);
@@ -47,8 +61,8 @@ function ResetForm() {
       const body = await res.json().catch(() => ({}));
       toast(
         body.error === "invalid_or_expired"
-          ? "This link is invalid or has expired."
-          : "Could not reset password.",
+          ? tr("auth.invalidOrExpiredLink")
+          : tr("auth.couldntResetPassword"),
         "err",
       );
       return;
@@ -66,8 +80,8 @@ function ResetForm() {
       });
       setBusy(false);
       if (signedIn?.ok) {
-        toast("Password updated. You're now signed in.", "ok");
-        router.replace("/markets");
+        toast(tr("auth.passwordUpdatedSignedIn"), "ok");
+        router.replace(lp("/markets"));
         return;
       }
       // Sign-in shouldn't fail (we just set the password), but if NextAuth
@@ -75,8 +89,8 @@ function ResetForm() {
       // to /login so the user can retry manually.
     }
     setBusy(false);
-    toast("Password updated. Please sign in.", "ok");
-    router.replace("/login");
+    toast(tr("auth.passwordUpdatedSignIn"), "ok");
+    router.replace(lp("/login"));
   }
 
   if (!token) {
@@ -84,12 +98,12 @@ function ResetForm() {
       <main className="min-h-screen">
         <div className="mx-auto max-w-md px-4 py-12">
           <Card>
-            <p className="text-sm text-rose-300">Missing reset token.</p>
+            <p className="text-sm text-rose-300">{tr("auth.missingResetToken")}</p>
             <Link
-              href="/forgot"
+              href={lp("/forgot")}
               className="mt-3 inline-block text-sm text-cyan-300"
             >
-              Request a new link →
+              {tr("auth.requestNewLink")}
             </Link>
           </Card>
         </div>
@@ -100,14 +114,14 @@ function ResetForm() {
   return (
     <main className="min-h-screen">
       <div className="mx-auto max-w-md px-4 py-12">
-        <Badge tone="info" className="mb-3">Kalki Exchange</Badge>
-        <h1 className="text-2xl font-black">Choose a new password</h1>
+        <Badge tone="info" className="mb-3">{tr("meta.siteName")}</Badge>
+        <h1 className="text-2xl font-black">{tr("auth.chooseNewPasswordHeading")}</h1>
 
         <Card className="mt-4">
           <form onSubmit={submit} className="flex flex-col gap-3">
             <div>
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-                New password
+                {tr("auth.newPasswordLabel")}
               </label>
               <Input
                 type="password"
@@ -119,7 +133,7 @@ function ResetForm() {
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Confirm password
+                {tr("auth.confirmPasswordLabel")}
               </label>
               <Input
                 type="password"
@@ -130,7 +144,7 @@ function ResetForm() {
               />
             </div>
             <Button type="submit" disabled={busy}>
-              {busy ? "Updating…" : "Update password"}
+              {busy ? tr("auth.updatingPasswordButton") : tr("auth.updatePasswordButton")}
             </Button>
           </form>
         </Card>
@@ -138,4 +152,3 @@ function ResetForm() {
     </main>
   );
 }
-

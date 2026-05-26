@@ -1,13 +1,51 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { db } from "@/lib/db";
 import { fmtCoins } from "@/lib/utils";
 import { Trophy } from "lucide-react";
+import {
+  DEFAULT_LOCALE,
+  alternatesFor,
+  isLocale,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
-export default async function LeaderboardPage() {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale: raw } = await params;
+  const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  const origin =
+    process.env.NEXTAUTH_URL?.replace(/\/$/, "") ?? "http://localhost:3100";
+  return {
+    title: t("leaderboard.heading", locale),
+    description: t("leaderboard.subtext", locale),
+    alternates: {
+      canonical: `${origin}/${locale}/leaderboard`,
+      languages: alternatesFor(origin, "/leaderboard"),
+    },
+  };
+}
+
+export default async function LeaderboardPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale: raw } = await params;
+  if (!isLocale(raw)) notFound();
+  const locale: Locale = raw;
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
+
   const users = await db.user.findMany({
     orderBy: { xp: "desc" },
     take: 50,
@@ -27,17 +65,15 @@ export default async function LeaderboardPage() {
       <div className="mx-auto max-w-3xl px-4 py-6">
         <div className="mb-4 flex items-center gap-2">
           <Trophy className="h-6 w-6 text-amber-400" />
-          <h1 className="text-2xl font-black">Leaderboard</h1>
+          <h1 className="text-2xl font-black">{tr("leaderboard.heading")}</h1>
         </div>
-        <p className="text-sm text-slate-400">
-          Top traders by total XP. Earn XP by trading — 1 XP per 20 coins spent.
-        </p>
+        <p className="text-sm text-slate-400">{tr("leaderboard.subtext")}</p>
 
         <Card className="mt-4">
           <ol className="divide-y divide-slate-800">
             {users.length === 0 ? (
               <li className="py-6 text-center text-sm text-slate-500">
-                No traders yet.
+                {tr("leaderboard.emptyState")}
               </li>
             ) : (
               users.map((u, i) => (

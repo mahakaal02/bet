@@ -16,6 +16,12 @@ import { LimitOrderForm } from "@/components/LimitOrderForm";
 import { OpenOrdersPanel } from "@/components/OpenOrdersPanel";
 import { MobileTradeBar } from "@/components/MobileTradeBar";
 import { getAuthedUser } from "@/lib/auth";
+import {
+  alternatesFor,
+  isLocale,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +29,21 @@ export const dynamic = "force-dynamic";
  * Per-market metadata. Title flows into the browser tab + share preview;
  * the OG image is supplied by the sibling `opengraph-image.tsx` file
  * convention so we don't need to set `openGraph.images` explicitly.
+ *
+ * Market titles are user-generated and stay in their authoring language —
+ * no translation pass. Surrounding chrome (tab fallback, price tag) is
+ * localized.
  */
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ locale: string; slug: string }>;
 }): Promise<Metadata> {
-  const { slug } = await params;
+  const { locale: raw, slug } = await params;
+  const locale: Locale = isLocale(raw) ? raw : "en";
+  const origin = (
+    process.env.NEXTAUTH_URL ?? "http://localhost:3100"
+  ).replace(/\/$/, "");
   const m = await db.market.findUnique({
     where: { slug },
     select: {
@@ -41,7 +55,15 @@ export async function generateMetadata({
       resolvedAs: true,
     },
   });
-  if (!m) return { title: "Market not found" };
+  if (!m) {
+    return {
+      title: t("market.notFound", locale),
+      alternates: {
+        canonical: `${origin}/${locale}/markets/${slug}`,
+        languages: alternatesFor(origin, `/markets/${slug}`),
+      },
+    };
+  }
 
   const yes =
     m.status === "RESOLVED"
@@ -49,13 +71,20 @@ export async function generateMetadata({
         ? 1
         : 0
       : priceYes({ yesShares: m.yesShares, noShares: m.noShares });
-  const priceTag = `YES ${yes.toFixed(2)} · NO ${(1 - yes).toFixed(2)}`;
+  const priceTag = `${t("market.yes", locale)} ${yes.toFixed(2)} · ${t(
+    "market.no",
+    locale,
+  )} ${(1 - yes).toFixed(2)}`;
   // First line of the description, capped for nice-looking previews.
   const teaser = m.description.split("\n")[0].slice(0, 180);
 
   return {
     title: m.title,
     description: `${priceTag} — ${teaser}`,
+    alternates: {
+      canonical: `${origin}/${locale}/markets/${slug}`,
+      languages: alternatesFor(origin, `/markets/${slug}`),
+    },
     openGraph: {
       title: m.title,
       description: priceTag,
@@ -71,9 +100,14 @@ export async function generateMetadata({
 export default async function MarketPage({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ locale: string; slug: string }>;
 }) {
-  const { slug } = await params;
+  const { locale: raw, slug } = await params;
+  if (!isLocale(raw)) notFound();
+  const locale: Locale = raw;
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
+
   const market = await db.market.findUnique({
     where: { slug },
     include: {
@@ -119,16 +153,26 @@ export default async function MarketPage({
         <div>
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Badge>{market.category}</Badge>
-            {market.featured && <Badge tone="info">Featured</Badge>}
+            {market.featured && <Badge tone="info">{tr("market.featured")}</Badge>}
             {resolved ? (
-              <Badge tone={market.resolvedAs === "YES" ? "yes" : market.resolvedAs === "NO" ? "no" : "warn"}>
+              <Badge
+                tone={
+                  market.resolvedAs === "YES"
+                    ? "yes"
+                    : market.resolvedAs === "NO"
+                      ? "no"
+                      : "warn"
+                }
+              >
                 {market.status === "CANCELLED"
-                  ? "Cancelled"
-                  : `Resolved ${market.resolvedAs}`}
+                  ? tr("market.cancelled")
+                  : tr("market.resolvedOutcome", {
+                      outcome: market.resolvedAs ?? "",
+                    })}
               </Badge>
             ) : (
               <Badge tone="default">
-                Ends {endsAt.toLocaleString()}
+                {tr("market.endsDate", { date: endsAt.toLocaleString(locale) })}
               </Badge>
             )}
             {me && (
@@ -139,7 +183,7 @@ export default async function MarketPage({
             )}
             <ShareButton
               title={market.title}
-              text={`YES ${(market.noShares / (market.yesShares + market.noShares)).toFixed(2)} · NO ${(market.yesShares / (market.yesShares + market.noShares)).toFixed(2)} on Kalki Exchange`}
+              text={`${tr("market.yes")} ${(market.noShares / (market.yesShares + market.noShares)).toFixed(2)} · ${tr("market.no")} ${(market.yesShares / (market.yesShares + market.noShares)).toFixed(2)} on Kalki Exchange`}
             />
           </div>
           <h1 className="text-2xl font-black md:text-3xl">{market.title}</h1>
@@ -148,25 +192,29 @@ export default async function MarketPage({
           </p>
           {market.resolutionSource && (
             <p className="mt-3 text-xs text-slate-500">
-              <span className="font-semibold text-slate-400">Resolution source:</span>{" "}
+              <span className="font-semibold text-slate-400">
+                {tr("market.resolutionSource")}
+              </span>{" "}
               {market.resolutionSource}
             </p>
           )}
           {resolved && market.resolutionNote && (
             <p className="mt-3 rounded-lg border border-slate-800 bg-slate-900/50 p-3 text-sm text-slate-300">
-              <span className="font-semibold text-slate-100">Resolution: </span>
+              <span className="font-semibold text-slate-100">
+                {tr("market.resolution")}{" "}
+              </span>
               {market.resolutionNote}
             </p>
           )}
 
           <Card className="mt-6">
             <CardHeader>
-              <CardTitle>Price history</CardTitle>
+              <CardTitle>{tr("market.priceHistory")}</CardTitle>
               <div className="flex items-baseline gap-3">
                 <div className="text-3xl font-black text-emerald-300">
                   {fmtPrice(yesPrice)}
                 </div>
-                <div className="text-sm text-slate-500">YES</div>
+                <div className="text-sm text-slate-500">{tr("market.yes")}</div>
               </div>
             </CardHeader>
             <PriceChart
@@ -180,14 +228,16 @@ export default async function MarketPage({
 
           <Card className="mt-4">
             <CardHeader>
-              <CardTitle>Recent trades</CardTitle>
+              <CardTitle>{tr("market.recentTrades")}</CardTitle>
               <span className="text-xs text-slate-500">
-                {market._count.trades} total
+                {tr("market.totalTrades", { count: market._count.trades })}
               </span>
             </CardHeader>
             <ul className="divide-y divide-slate-800">
               {recentTrades.length === 0 ? (
-                <li className="py-3 text-sm text-slate-500">No trades yet.</li>
+                <li className="py-3 text-sm text-slate-500">
+                  {tr("market.noTrades")}
+                </li>
               ) : (
                 recentTrades.map((t) => (
                   <li
@@ -198,11 +248,16 @@ export default async function MarketPage({
                       <Badge tone={t.outcome === "YES" ? "yes" : "no"}>
                         {t.outcome}
                       </Badge>
-                      <span className="font-mono text-slate-400">{t.user.username}</span>
+                      <span className="font-mono text-slate-400">
+                        {t.user.username}
+                      </span>
                     </div>
                     <div className="text-right">
                       <div className="font-mono">
-                        {fmtCoins(t.cost)} <span className="text-slate-500">coins</span>
+                        {fmtCoins(t.cost)}{" "}
+                        <span className="text-slate-500">
+                          {tr("toast.coins")}
+                        </span>
                       </div>
                       <div className="text-[10px] text-slate-500">
                         {timeAgo(t.createdAt)}
@@ -216,9 +271,9 @@ export default async function MarketPage({
 
           <Card className="mt-4">
             <CardHeader>
-              <CardTitle>Discussion</CardTitle>
+              <CardTitle>{tr("market.discussion")}</CardTitle>
               <span className="text-xs text-slate-500">
-                {market._count.comments} comments
+                {tr("market.commentsCount", { count: market._count.comments })}
               </span>
             </CardHeader>
             <Comments marketId={market.id} canPost={!!me} />
@@ -253,17 +308,20 @@ export default async function MarketPage({
           />
           {me && <OpenOrdersPanel marketId={market.id} />}
           <Card>
-            <CardTitle className="mb-2">Market stats</CardTitle>
-            <Stat label="Volume" value={`${fmtCoins(market.volumeCoins)} coins`} />
+            <CardTitle className="mb-2">{tr("market.marketStats")}</CardTitle>
             <Stat
-              label="Liquidity"
-              value={`${fmtCoins(Math.round(market.yesShares + market.noShares))} shares`}
+              label={tr("market.volume")}
+              value={`${fmtCoins(market.volumeCoins)} ${tr("toast.coins")}`}
             />
             <Stat
-              label="Mid price"
-              value={`${fmtPrice(yesPrice)} YES · ${fmtPrice(1 - yesPrice)} NO`}
+              label={tr("market.liquidity")}
+              value={`${fmtCoins(Math.round(market.yesShares + market.noShares))} ${tr("market.shares")}`}
             />
-            <Stat label="Created" value={timeAgo(market.createdAt)} />
+            <Stat
+              label={tr("market.midPrice")}
+              value={`${fmtPrice(yesPrice)} ${tr("market.yes")} · ${fmtPrice(1 - yesPrice)} ${tr("market.no")}`}
+            />
+            <Stat label={tr("market.created")} value={timeAgo(market.createdAt)} />
           </Card>
         </div>
       </div>

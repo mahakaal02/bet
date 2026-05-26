@@ -1,4 +1,5 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/Card";
@@ -7,12 +8,48 @@ import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { timeAgo } from "@/lib/utils";
 import { Bell } from "lucide-react";
+import {
+  DEFAULT_LOCALE,
+  alternatesFor,
+  isLocale,
+  localizedPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
-export default async function NotificationsPage() {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale: raw } = await params;
+  const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  const origin =
+    process.env.NEXTAUTH_URL?.replace(/\/$/, "") ?? "http://localhost:3100";
+  return {
+    title: t("notifications.heading", locale),
+    alternates: {
+      canonical: `${origin}/${locale}/notifications`,
+      languages: alternatesFor(origin, "/notifications"),
+    },
+  };
+}
+
+export default async function NotificationsPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale: raw } = await params;
+  if (!isLocale(raw)) notFound();
+  const locale: Locale = raw;
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
+
   const u = await getAuthedUser();
-  if (!u) redirect("/login?next=/notifications");
+  if (!u) redirect(localizedPath("/login?next=/notifications", locale));
 
   const [items, unread] = await Promise.all([
     db.notification.findMany({
@@ -30,19 +67,20 @@ export default async function NotificationsPage() {
         <div className="mb-4 flex items-center justify-between">
           <h1 className="flex items-center gap-2 text-2xl font-black">
             <Bell className="h-6 w-6 text-cyan-400" />
-            Notifications
+            {tr("notifications.heading")}
           </h1>
           {unread > 0 && <MarkAllReadButton />}
         </div>
         <p className="mb-4 text-sm text-slate-400">
-          {unread > 0 ? `${unread} unread.` : "All read."}
+          {unread > 0
+            ? tr("notifications.unreadCount", { count: unread })
+            : tr("notifications.allRead")}
         </p>
 
         <Card>
           {items.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-500">
-              You&apos;re all caught up. Trade something to get notifications
-              flowing.
+              {tr("notifications.emptyState")}
             </p>
           ) : (
             <ul className="divide-y divide-slate-800">

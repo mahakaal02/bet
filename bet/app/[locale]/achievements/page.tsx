@@ -1,12 +1,41 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { fmtCoins, timeAgo, cn } from "@/lib/utils";
+import {
+  DEFAULT_LOCALE,
+  alternatesFor,
+  isLocale,
+  localizedPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale: raw } = await params;
+  const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  const origin =
+    process.env.NEXTAUTH_URL?.replace(/\/$/, "") ?? "http://localhost:3100";
+  return {
+    title: t("achievements.heading", locale),
+    description: t("achievements.subtext", locale),
+    alternates: {
+      canonical: `${origin}/${locale}/achievements`,
+      languages: alternatesFor(origin, "/achievements"),
+    },
+  };
+}
 
 /**
  * Achievements catalog. Server-renders the same data the `/profile` grid
@@ -14,7 +43,17 @@ export const dynamic = "force-dynamic";
  * "recently unlocked" rail. Anonymous visitors see the catalog with all
  * tiles locked (turns into a "what can I earn?" preview).
  */
-export default async function AchievementsPage() {
+export default async function AchievementsPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale: raw } = await params;
+  if (!isLocale(raw)) notFound();
+  const locale: Locale = raw;
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
+
   const u = await getAuthedUser();
   const [catalog, mine, totalUnlocked] = await Promise.all([
     db.achievement.findMany({ orderBy: { sortOrder: "asc" } }),
@@ -65,19 +104,24 @@ export default async function AchievementsPage() {
       <div className="mx-auto max-w-5xl px-4 py-6">
         <div className="mb-4 flex items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-black">Achievements</h1>
+            <h1 className="text-2xl font-black">{tr("achievements.heading")}</h1>
             <p className="text-sm text-slate-400">
-              Earn badges by trading, inviting friends, and hitting milestones.
-              XP for every unlock.
+              {tr("achievements.subtext")}
             </p>
           </div>
           {u && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-2 text-right">
+            <div
+              className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-2 text-right"
+              aria-label={tr("achievements.unlockedCount", {
+                count: myCount,
+                total: catalog.length,
+              })}
+            >
               <div className="text-2xl font-black text-cyan-300">
                 {myCount}/{catalog.length}
               </div>
               <div className="text-[10px] uppercase tracking-wider text-slate-500">
-                Unlocked
+                {tr("achievements.badge")}
               </div>
             </div>
           )}
@@ -86,7 +130,7 @@ export default async function AchievementsPage() {
         {u && recent.length > 0 && (
           <Card className="mb-4">
             <CardHeader>
-              <CardTitle>Recently unlocked</CardTitle>
+              <CardTitle>{tr("achievements.recentlyUnlocked")}</CardTitle>
               <span className="text-xs text-slate-500">{recent.length}</span>
             </CardHeader>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
@@ -110,9 +154,11 @@ export default async function AchievementsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>All achievements</CardTitle>
+            <CardTitle>{tr("achievements.allAchievements")}</CardTitle>
             <span className="text-xs text-slate-500">
-              {fmtCoins(totalUnlocked)} unlocks across all users
+              {tr("achievements.unlocksAcrossUsers", {
+                count: fmtCoins(totalUnlocked),
+              })}
             </span>
           </CardHeader>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -146,9 +192,9 @@ export default async function AchievementsPage() {
                           {a.title}
                         </h3>
                         {unlocked ? (
-                          <Badge tone="yes">Unlocked</Badge>
+                          <Badge tone="yes">{tr("achievements.badge")}</Badge>
                         ) : (
-                          <Badge>Locked</Badge>
+                          <Badge>{tr("achievements.locked")}</Badge>
                         )}
                       </div>
                       <p className="mt-1 text-xs leading-snug text-slate-400">
@@ -156,17 +202,24 @@ export default async function AchievementsPage() {
                       </p>
                       <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
                         <span className="font-mono">
-                          +{fmtCoins(a.rewardCoins)} 🪙 · +{a.rewardXp} XP
+                          {tr("achievements.reward", {
+                            coins: fmtCoins(a.rewardCoins),
+                            xp: a.rewardXp,
+                          })}
                         </span>
                         <span>
                           {rarity > 0
-                            ? `${fmtCoins(rarity)} earned`
-                            : "Be the first"}
+                            ? tr("achievements.earned", {
+                                count: fmtCoins(rarity),
+                              })
+                            : tr("achievements.beFirst")}
                         </span>
                       </div>
                       {unlocked && a.unlockedAt && (
                         <div className="mt-1 text-[10px] text-cyan-300">
-                          Unlocked {timeAgo(a.unlockedAt)}
+                          {tr("achievements.unlockedTime", {
+                            time: timeAgo(a.unlockedAt),
+                          })}
                         </div>
                       )}
                     </div>
@@ -180,13 +233,13 @@ export default async function AchievementsPage() {
         {!u && (
           <Card className="mt-4 text-center">
             <p className="text-sm text-slate-300">
-              Sign in to start earning achievements.
+              {tr("achievements.signInNote")}
             </p>
             <Link
-              href="/register"
+              href={localizedPath("/register", locale)}
               className="mt-2 inline-block rounded-lg bg-gradient-to-br from-cyan-400 to-indigo-500 px-4 py-2 text-sm font-bold text-slate-950"
             >
-              Create account
+              {tr("achievements.createAccount")}
             </Link>
           </Card>
         )}

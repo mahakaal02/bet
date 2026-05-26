@@ -1,4 +1,5 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { Coins, Sparkles, ShieldCheck, ArrowDownToLine } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
@@ -10,8 +11,22 @@ import { getAuthedUser } from "@/lib/auth";
 import { COIN_PACKS } from "@/lib/coin-packs";
 import { MIN_WITHDRAW_COINS } from "@/lib/coins";
 import { fmtCoins, timeAgo } from "@/lib/utils";
+import { isLocale, localizedPath, t, type Locale } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale: raw } = await params;
+  const locale: Locale = isLocale(raw) ? raw : "en";
+  return {
+    title: t("wallet.heading", locale),
+    description: t("wallet.subtext", locale),
+  };
+}
 
 /**
  * Wallet page. Hub for everything balance-related — view current balance,
@@ -19,9 +34,26 @@ export const dynamic = "force-dynamic";
  * rendered so the prices are trustable; the buy action posts to /api/wallet
  * /topup which is the only path that credits the wallet.
  */
-export default async function WalletPage() {
+export default async function WalletPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale: raw } = await params;
+  if (!isLocale(raw)) notFound();
+  const locale: Locale = raw;
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
+  const lp = (h: string) => localizedPath(h, locale);
+
   const u = await getAuthedUser();
-  if (!u) redirect("/login?next=/wallet");
+  if (!u) {
+    redirect(
+      localizedPath("/login", locale) +
+        "?next=" +
+        encodeURIComponent(localizedPath("/wallet", locale)),
+    );
+  }
 
   const [wallet, recent, me, pendingWithdrawals] = await Promise.all([
     db.wallet.findUnique({ where: { userId: u.id }, select: { balance: true } }),
@@ -47,43 +79,42 @@ export default async function WalletPage() {
         <div className="mb-4">
           <h1 className="flex items-center gap-2 text-2xl font-black">
             <Coins className="h-6 w-6 text-cyan-300" />
-            Wallet
+            {tr("wallet.heading")}
           </h1>
-          <p className="text-sm text-slate-400">
-            One balance across markets, auctions and Aviator.
-          </p>
+          <p className="text-sm text-slate-400">{tr("wallet.subtext")}</p>
         </div>
 
         <Card className="mb-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-xs uppercase tracking-wider text-slate-500">
-                Current balance
+                {tr("wallet.currentBalance")}
               </div>
               <div className="flex items-center gap-2 text-4xl font-black text-cyan-300">
                 {fmtCoins(wallet?.balance ?? 0)}
                 <span className="text-base font-semibold text-slate-500">
-                  coins
+                  {tr("wallet.coins")}
                 </span>
               </div>
             </div>
             <div className="hidden sm:flex flex-col items-end gap-1 text-xs text-slate-400">
               <Badge tone="info">
-                <Sparkles className="h-3 w-3" /> Unified
+                <Sparkles className="h-3 w-3" /> {tr("wallet.unified")}
               </Badge>
-              <span>Same wallet across all Kalki Bet games.</span>
+              <span>{tr("wallet.unifiedNote")}</span>
             </div>
           </div>
         </Card>
 
         <Card className="mb-4">
           <CardHeader>
-            <CardTitle>Buy coins</CardTitle>
-            <span className="text-xs text-slate-500">1 coin = ₹1</span>
+            <CardTitle>{tr("wallet.buyCoins")}</CardTitle>
+            <span className="text-xs text-slate-500">{tr("wallet.coinRate")}</span>
           </CardHeader>
           <BuyCoinsGrid
             packs={COIN_PACKS}
             user={{ username: me?.username ?? "", email: me?.email ?? "" }}
+            locale={locale}
           />
           {/* PR-BET-ADMIN-FOLLOWUPS — replaces the previous
               "Payments are processed by Razorpay…" disclosure block.
@@ -95,51 +126,44 @@ export default async function WalletPage() {
               clarifies the unified-wallet promise. */}
           <div className="mt-3 flex items-start gap-2 rounded-md border border-slate-800 bg-slate-950/40 p-2 text-[11px] text-slate-400">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-400" />
-            <span>
-              One balance across Markets, Auctions and Aviator. Every
-              top-up is logged in your transaction history.
-            </span>
+            <span>{tr("wallet.unifiedPromise")}</span>
           </div>
         </Card>
 
         <Card className="mb-4">
           <CardHeader>
-            <CardTitle>Withdraw</CardTitle>
+            <CardTitle>{tr("wallet.withdraw")}</CardTitle>
             <span className="text-xs text-slate-500">
-              min {fmtCoins(MIN_WITHDRAW_COINS)} coins
+              {tr("wallet.minWithdraw", { amount: fmtCoins(MIN_WITHDRAW_COINS) })}
             </span>
           </CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm text-slate-300">
-              Cash out coins to your UPI or bank account. Each request
-              goes to an admin for review before payout.
-            </div>
+            <div className="text-sm text-slate-300">{tr("wallet.withdrawSubtext")}</div>
             <Link
-              href="/wallet/withdraw"
+              href={lp("/wallet/withdraw")}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm font-bold text-slate-200 hover:bg-slate-800"
             >
               <ArrowDownToLine className="h-4 w-4" />
-              Request withdrawal
+              {tr("wallet.requestWithdrawal")}
             </Link>
           </div>
 
           {!me?.emailVerified && (
             <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-200">
-              Verify your email before requesting a withdrawal. Open the
+              {tr("wallet.verifyEmailNote")}{" "}
               <Link
-                href="/profile"
+                href={lp("/profile")}
                 className="ml-1 underline hover:text-amber-100"
               >
-                profile page
-              </Link>{" "}
-              and click "Send link".
+                {tr("profile.heading")}
+              </Link>
             </div>
           )}
 
           {pendingWithdrawals.length > 0 && (
             <div className="mt-3 space-y-1.5">
               <div className="text-[10px] uppercase tracking-wider text-slate-500">
-                In review
+                {tr("wallet.inReview")}
               </div>
               {pendingWithdrawals.map((w) => (
                 <div
@@ -165,38 +189,38 @@ export default async function WalletPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Recent activity</CardTitle>
+            <CardTitle>{tr("wallet.recentActivity")}</CardTitle>
             <Link
-              href="/profile"
+              href={lp("/profile")}
               className="text-xs text-cyan-300 hover:text-cyan-200"
             >
-              Full ledger →
+              {tr("wallet.fullLedger")}
             </Link>
           </CardHeader>
           {recent.length === 0 ? (
             <p className="py-6 text-center text-sm text-slate-500">
-              No activity yet.
+              {tr("wallet.noActivity")}
             </p>
           ) : (
             <ul className="divide-y divide-slate-800">
-              {recent.map((t) => (
+              {recent.map((tx) => (
                 <li
-                  key={t.id}
+                  key={tx.id}
                   className="flex items-center justify-between py-2 text-sm"
                 >
                   <div>
-                    <div className="text-slate-300">{prettyKind(t.kind)}</div>
+                    <div className="text-slate-300">{prettyKind(tx.kind, locale)}</div>
                     <div className="text-[10px] text-slate-500">
-                      {timeAgo(t.createdAt)}
+                      {timeAgo(tx.createdAt)}
                     </div>
                   </div>
                   <div
                     className={`font-mono ${
-                      t.delta >= 0 ? "ticker-up" : "ticker-down"
+                      tx.delta >= 0 ? "ticker-up" : "ticker-down"
                     }`}
                   >
-                    {t.delta >= 0 ? "+" : ""}
-                    {fmtCoins(t.delta)}
+                    {tx.delta >= 0 ? "+" : ""}
+                    {fmtCoins(tx.delta)}
                   </div>
                 </li>
               ))}
@@ -208,38 +232,38 @@ export default async function WalletPage() {
   );
 }
 
-function prettyKind(kind: string): string {
+function prettyKind(kind: string, locale: Locale): string {
   switch (kind) {
     case "signup_bonus":
-      return "Signup bonus";
+      return t("transaction.signupBonus", locale);
     case "daily_claim":
-      return "Daily reward";
+      return t("transaction.dailyReward", locale);
     case "trade_buy":
-      return "Bought shares";
+      return t("transaction.boughtShares", locale);
     case "smart_buy_book":
-      return "Bought shares · book leg";
+      return t("transaction.boughtSharesBook", locale);
     case "smart_buy_amm":
-      return "Bought shares · AMM leg";
+      return t("transaction.boughtSharesAmm", locale);
     case "smart_sell_book":
-      return "Sold shares · book leg";
+      return t("transaction.soldSharesBook", locale);
     case "smart_sell_amm":
-      return "Sold shares · AMM leg";
+      return t("transaction.soldSharesAmm", locale);
     case "order_buy_fill":
-      return "Limit order filled";
+      return t("transaction.limitOrderFilled", locale);
     case "order_sell_fill":
-      return "Sell order filled";
+      return t("transaction.sellOrderFilled", locale);
     case "resolution_payout":
-      return "Market payout";
+      return t("transaction.marketPayout", locale);
     case "resolution_refund":
-      return "Market cancelled — refunded";
+      return t("transaction.marketRefund", locale);
     case "admin_grant":
-      return "Admin grant";
+      return t("transaction.adminGrant", locale);
     case "referral_bonus":
-      return "Referral bonus";
+      return t("transaction.referralBonus", locale);
     case "achievement_reward":
-      return "Achievement reward";
+      return t("transaction.achievementReward", locale);
     case "wallet_topup":
-      return "Wallet top-up";
+      return t("transaction.topUp", locale);
     default:
       return kind;
   }

@@ -1,4 +1,5 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -7,12 +8,43 @@ import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { priceYes } from "@/lib/amm";
 import { fmtCoins, fmtPrice, timeAgo } from "@/lib/utils";
+import { isLocale, localizedPath, t, type Locale } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
-export default async function PortfolioPage() {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale: raw } = await params;
+  const locale: Locale = isLocale(raw) ? raw : "en";
+  return {
+    title: t("portfolio.heading", locale),
+    description: t("portfolio.subtext", locale),
+  };
+}
+
+export default async function PortfolioPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale: raw } = await params;
+  if (!isLocale(raw)) notFound();
+  const locale: Locale = raw;
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
+  const lp = (h: string) => localizedPath(h, locale);
+
   const u = await getAuthedUser();
-  if (!u) redirect("/login?next=/portfolio");
+  if (!u) {
+    redirect(
+      localizedPath("/login", locale) +
+        "?next=" +
+        encodeURIComponent(localizedPath("/portfolio", locale)),
+    );
+  }
 
   const [positions, recentTrades, wallet] = await Promise.all([
     db.position.findMany({
@@ -57,17 +89,15 @@ export default async function PortfolioPage() {
     <main className="min-h-screen pb-20">
       <Navbar />
       <div className="mx-auto max-w-6xl px-4 py-6">
-        <h1 className="mb-1 text-2xl font-black">Portfolio</h1>
-        <p className="text-sm text-slate-400">
-          Mark-to-market valuation of your open positions.
-        </p>
+        <h1 className="mb-1 text-2xl font-black">{tr("portfolio.heading")}</h1>
+        <p className="text-sm text-slate-400">{tr("portfolio.subtext")}</p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-4">
-          <Stat label="Wallet" value={`${fmtCoins(wallet?.balance ?? 0)} 🪙`} />
-          <Stat label="At cost" value={`${fmtCoins(totalCost)}`} />
-          <Stat label="Value now" value={`${fmtCoins(totalValue)}`} />
+          <Stat label={tr("portfolio.wallet")} value={`${fmtCoins(wallet?.balance ?? 0)} 🪙`} />
+          <Stat label={tr("portfolio.atCost")} value={`${fmtCoins(totalCost)}`} />
+          <Stat label={tr("portfolio.valueNow")} value={`${fmtCoins(totalValue)}`} />
           <Stat
-            label="P/L"
+            label={tr("portfolio.pl")}
             value={`${unrealized >= 0 ? "+" : ""}${fmtCoins(unrealized)}`}
             tone={unrealized >= 0 ? "yes" : "no"}
           />
@@ -75,14 +105,13 @@ export default async function PortfolioPage() {
 
         <Card className="mt-4">
           <CardHeader>
-            <CardTitle>Open positions</CardTitle>
+            <CardTitle>{tr("portfolio.openPositions")}</CardTitle>
             <span className="text-xs text-slate-500">{enriched.length}</span>
           </CardHeader>
           {enriched.length === 0 ? (
             <p className="py-6 text-center text-sm text-slate-500">
-              No positions yet.{" "}
-              <Link href="/markets" className="text-cyan-300 hover:text-cyan-200">
-                Browse markets →
+              <Link href={lp("/markets")} className="text-cyan-300 hover:text-cyan-200">
+                {tr("portfolio.noPositions")}
               </Link>
             </p>
           ) : (
@@ -90,7 +119,7 @@ export default async function PortfolioPage() {
               {enriched.map((p) => (
                 <Link
                   key={p.id}
-                  href={`/markets/${p.market.slug}`}
+                  href={lp(`/markets/${p.market.slug}`)}
                   className="grid grid-cols-[1fr_auto] gap-2 py-3 hover:bg-slate-900/40"
                 >
                   <div>
@@ -126,37 +155,37 @@ export default async function PortfolioPage() {
 
         <Card className="mt-4">
           <CardHeader>
-            <CardTitle>Recent trades</CardTitle>
+            <CardTitle>{tr("portfolio.recentTrades")}</CardTitle>
           </CardHeader>
           {recentTrades.length === 0 ? (
             <p className="py-6 text-center text-sm text-slate-500">
-              No trades yet.
+              {tr("portfolio.noTrades")}
             </p>
           ) : (
             <ul className="divide-y divide-slate-800">
-              {recentTrades.map((t) => (
+              {recentTrades.map((tx) => (
                 <li
-                  key={t.id}
+                  key={tx.id}
                   className="flex items-center justify-between py-2 text-sm"
                 >
                   <div className="flex items-center gap-2">
-                    <Badge tone={t.outcome === "YES" ? "yes" : "no"}>
-                      {t.outcome}
+                    <Badge tone={tx.outcome === "YES" ? "yes" : "no"}>
+                      {tx.outcome}
                     </Badge>
                     <Link
-                      href={`/markets/${t.market.slug}`}
+                      href={lp(`/markets/${tx.market.slug}`)}
                       className="line-clamp-1 text-slate-300 hover:text-slate-100"
                     >
-                      {t.market.title}
+                      {tx.market.title}
                     </Link>
                   </div>
                   <div className="text-right">
                     <div className="font-mono">
-                      −{fmtCoins(t.cost)}{" "}
-                      <span className="text-slate-500">@ {fmtPrice(t.pricePerShare)}</span>
+                      −{fmtCoins(tx.cost)}{" "}
+                      <span className="text-slate-500">@ {fmtPrice(tx.pricePerShare)}</span>
                     </div>
                     <div className="text-[10px] text-slate-500">
-                      {timeAgo(t.createdAt)}
+                      {timeAgo(tx.createdAt)}
                     </div>
                   </div>
                 </li>

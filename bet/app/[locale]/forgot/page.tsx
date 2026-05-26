@@ -2,13 +2,28 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toaster";
+import {
+  DEFAULT_LOCALE,
+  isLocale,
+  localizedPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 export default function ForgotPage() {
+  const routeParams = useParams<{ locale: string }>();
+  const locale: Locale = isLocale(routeParams.locale)
+    ? routeParams.locale
+    : DEFAULT_LOCALE;
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
+  const lp = (h: string) => localizedPath(h, locale);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
@@ -26,30 +41,33 @@ export default function ForgotPage() {
       setSent(true);
     } else {
       const body = await res.json().catch(() => ({}));
-      toast(body.error === "rate_limited" ? "Too many requests — wait a bit." : "Couldn't send link.", "err");
+      toast(
+        body.error === "rate_limited"
+          ? tr("auth.tooManyRequests")
+          : tr("auth.couldntSendLink"),
+        "err",
+      );
     }
   }
 
   return (
     <main className="min-h-screen">
       <div className="mx-auto max-w-md px-4 py-12">
-        <Link href="/login" className="mb-6 inline-block text-sm text-slate-400 hover:text-slate-200">
-          ← Back to sign in
+        <Link href={lp("/login")} className="mb-6 inline-block text-sm text-slate-400 hover:text-slate-200">
+          {tr("auth.backToSignIn")}
         </Link>
-        <Badge tone="info" className="mb-3">Kalki Exchange</Badge>
-        <h1 className="text-2xl font-black">Forgot password</h1>
+        <Badge tone="info" className="mb-3">{tr("meta.siteName")}</Badge>
+        <h1 className="text-2xl font-black">{tr("auth.forgotPasswordHeading")}</h1>
         <p className="mt-1 text-sm text-slate-400">
-          Enter your email; we&apos;ll send a reset link if there&apos;s a matching
-          account.
+          {tr("auth.forgotPasswordSubtext")}
         </p>
 
         <Card className="mt-4">
           {sent ? (
             <p className="text-sm text-emerald-300">
-              ✅ If <strong>{email}</strong> is registered, you&apos;ll receive a
-              reset link shortly. The link expires in 1 hour.
+              {tr("auth.forgotSuccess", { email })}
               <span className="mt-2 block text-xs text-slate-500">
-                Dev: check the Next.js server console for the link.
+                {tr("auth.forgotDevNote")}
               </span>
             </p>
           ) : (
@@ -60,10 +78,10 @@ export default function ForgotPage() {
                 autoFocus
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
+                placeholder={tr("auth.forgotEmailPlaceholder")}
               />
               <Button type="submit" disabled={busy}>
-                {busy ? "Sending…" : "Send reset link"}
+                {busy ? tr("auth.forgotSendingButton") : tr("auth.forgotSendButton")}
               </Button>
             </form>
           )}

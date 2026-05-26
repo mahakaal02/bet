@@ -1,10 +1,38 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { notFound, redirect } from "next/navigation";
 import { getAuthedUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Card } from "@/components/ui/Card";
 import { KycForm } from "./KycForm";
+import {
+  DEFAULT_LOCALE,
+  alternatesFor,
+  isLocale,
+  localizedPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale: raw } = await params;
+  const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  const origin =
+    process.env.NEXTAUTH_URL?.replace(/\/$/, "") ?? "http://localhost:3100";
+  return {
+    title: t("kyc.heading", locale),
+    description: t("kyc.subtext", locale),
+    alternates: {
+      canonical: `${origin}/${locale}/kyc`,
+      languages: alternatesFor(origin, "/kyc"),
+    },
+  };
+}
 
 /**
  * User-side KYC submission (PR-BET-ADMIN-FOLLOWUPS).
@@ -27,9 +55,19 @@ export const dynamic = "force-dynamic";
  * filesystem; the admin reviewer fetches them through the same
  * KYCObjectStore on demand.
  */
-export default async function KycPage() {
+export default async function KycPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale: raw } = await params;
+  if (!isLocale(raw)) notFound();
+  const locale: Locale = raw;
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
+
   const me = await getAuthedUser();
-  if (!me) redirect("/login?next=/kyc");
+  if (!me) redirect(localizedPath("/login?next=/kyc", locale));
 
   const submission = await db.kycSubmission.findUnique({
     where: { userId: me.id },
@@ -38,20 +76,21 @@ export default async function KycPage() {
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
       <h1 className="mb-1 text-2xl font-black tracking-tight text-slate-100">
-        Identity verification
+        {tr("kyc.heading")}
       </h1>
-      <p className="mb-6 text-sm text-slate-400">
-        Required for withdrawals above the platform limit. Submitted
-        documents are encrypted at rest and only visible to a single
-        compliance reviewer.
-      </p>
+      <p className="mb-6 text-sm text-slate-400">{tr("kyc.subtext")}</p>
 
       {submission && (
         <Card className="mb-4 p-4">
           <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-            Current status
+            {tr("kyc.statusLabel")}
           </div>
-          <StatusBlock status={submission.status} rejectionCode={submission.rejectionCode} notes={submission.notes} />
+          <StatusBlock
+            status={submission.status}
+            rejectionCode={submission.rejectionCode}
+            notes={submission.notes}
+            tr={tr}
+          />
         </Card>
       )}
 
@@ -66,52 +105,53 @@ function StatusBlock({
   status,
   rejectionCode,
   notes,
+  tr,
 }: {
   status: string;
   rejectionCode: string | null;
   notes: string | null;
+  tr: (k: string, vars?: Record<string, string | number>) => string;
 }) {
   if (status === "APPROVED") {
     return (
       <div className="mt-1">
-        <div className="text-base font-bold text-emerald-300">Approved ✓</div>
-        <p className="mt-1 text-xs text-slate-400">
-          Full withdrawal limits unlocked. No further action needed.
-        </p>
+        <div className="text-base font-bold text-emerald-300">
+          {tr("kyc.approved")}
+        </div>
+        <p className="mt-1 text-xs text-slate-400">{tr("kyc.approvedNote")}</p>
       </div>
     );
   }
   if (status === "REJECTED") {
     return (
       <div className="mt-1">
-        <div className="text-base font-bold text-rose-300">Rejected</div>
+        <div className="text-base font-bold text-rose-300">
+          {tr("kyc.rejected")}
+        </div>
         {rejectionCode && (
           <p className="mt-0.5 text-xs uppercase tracking-wider text-rose-400">
-            Code: {rejectionCode}
+            {tr("kyc.rejectionCodeLabel", { code: rejectionCode })}
           </p>
         )}
         {notes && <p className="mt-1 text-xs text-slate-400">{notes}</p>}
-        <p className="mt-1 text-xs text-slate-400">
-          You can resubmit using the form below.
-        </p>
+        <p className="mt-1 text-xs text-slate-400">{tr("kyc.resubmitNote")}</p>
       </div>
     );
   }
   if (status === "REQUEST_MORE") {
     return (
       <div className="mt-1">
-        <div className="text-base font-bold text-amber-300">More documents requested</div>
+        <div className="text-base font-bold text-amber-300">
+          {tr("kyc.requestMore")}
+        </div>
         {notes && <p className="mt-1 text-xs text-slate-400">{notes}</p>}
       </div>
     );
   }
   return (
     <div className="mt-1">
-      <div className="text-base font-bold text-cyan-300">Pending review</div>
-      <p className="mt-1 text-xs text-slate-400">
-        Typical turnaround is 1 business day. You'll get an in-app
-        notification when the decision lands.
-      </p>
+      <div className="text-base font-bold text-cyan-300">{tr("kyc.pending")}</div>
+      <p className="mt-1 text-xs text-slate-400">{tr("kyc.pendingNote")}</p>
     </div>
   );
 }

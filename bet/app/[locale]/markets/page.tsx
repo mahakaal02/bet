@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -5,37 +7,77 @@ import { Input } from "@/components/ui/Input";
 import { db } from "@/lib/db";
 import { priceYes } from "@/lib/amm";
 import { fmtCoins, fmtPrice } from "@/lib/utils";
+import {
+  alternatesFor,
+  isLocale,
+  localizedPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import type { MarketCategory } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-const CATEGORIES: { value: MarketCategory | "ALL"; label: string }[] = [
-  { value: "ALL", label: "All" },
-  { value: "POLITICS", label: "Politics" },
-  { value: "SPORTS", label: "Sports" },
-  { value: "CRYPTO", label: "Crypto" },
-  { value: "TECH", label: "Tech" },
-  { value: "ENTERTAINMENT", label: "Ent." },
+const CATEGORIES: { value: MarketCategory | "ALL"; labelKey: string }[] = [
+  { value: "ALL", labelKey: "market.categoryAll" },
+  { value: "POLITICS", labelKey: "market.categoryPolitics" },
+  { value: "SPORTS", labelKey: "market.categorySports" },
+  { value: "CRYPTO", labelKey: "market.categoryCrypto" },
+  { value: "TECH", labelKey: "market.categoryTech" },
+  { value: "ENTERTAINMENT", labelKey: "market.categoryEnt" },
 ];
 
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale: raw } = await params;
+  const locale: Locale = isLocale(raw) ? raw : "en";
+  const origin = (
+    process.env.NEXTAUTH_URL ?? "http://localhost:3100"
+  ).replace(/\/$/, "");
+  return {
+    title: t("market.heading", locale),
+    description: t("meta.description", locale),
+    alternates: {
+      canonical: `${origin}/${locale}/markets`,
+      languages: alternatesFor(origin, "/markets"),
+    },
+  };
+}
+
 export default async function MarketsPage({
+  params,
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; cat?: string; sort?: string; status?: string }>;
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const { locale: raw } = await params;
+  if (!isLocale(raw)) notFound();
+  const locale: Locale = raw;
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
+  const lp = (h: string) => localizedPath(h, locale);
+
   const sp = await searchParams;
-  const q = (sp.q ?? "").trim();
-  const cat = (sp.cat ?? "ALL").toUpperCase();
-  const sort = sp.sort ?? "trending";
-  const status = (sp.status ?? "OPEN").toUpperCase();
+  const pickString = (v: string | string[] | undefined): string =>
+    Array.isArray(v) ? (v[0] ?? "") : (v ?? "");
+  const q = pickString(sp.q).trim();
+  const cat = (pickString(sp.cat) || "ALL").toUpperCase();
+  const sort = pickString(sp.sort) || "trending";
+  const status = (pickString(sp.status) || "OPEN").toUpperCase();
 
   const validCat = CATEGORIES.find((c) => c.value === cat)?.value ?? "ALL";
 
   const markets = await db.market.findMany({
     where: {
-      ...(status !== "ALL" && { status: status as "OPEN" | "RESOLVED" | "CLOSED" | "CANCELLED" }),
+      ...(status !== "ALL" && {
+        status: status as "OPEN" | "RESOLVED" | "CLOSED" | "CANCELLED",
+      }),
       ...(validCat !== "ALL" && { category: validCat as MarketCategory }),
       ...(q && {
         OR: [
@@ -55,15 +97,32 @@ export default async function MarketsPage({
     take: 60,
   });
 
+  // Status word for the "{count} {status} markets" caption. ALL falls
+  // back to the raw lowercased status key, OPEN/RESOLVED/CLOSED/
+  // CANCELLED get translated.
+  const statusLabel =
+    status === "OPEN"
+      ? tr("market.statusOpen")
+      : status === "RESOLVED"
+        ? tr("market.statusResolved")
+        : status === "CLOSED"
+          ? tr("market.statusClosed")
+          : status === "CANCELLED"
+            ? tr("market.statusCancelled")
+            : "";
+
   return (
     <main className="min-h-screen pb-20">
       <Navbar />
       <div className="mx-auto max-w-7xl px-4 py-6">
         <div className="mb-4">
-          <h1 className="text-2xl font-black">Markets</h1>
+          <h1 className="text-2xl font-black">{tr("market.heading")}</h1>
           <p className="text-sm text-slate-400">
-            {markets.length} {status === "OPEN" ? "open" : status.toLowerCase()} market
-            {markets.length === 1 ? "" : "s"}
+            {tr("market.marketCount", {
+              count: markets.length,
+              status: statusLabel,
+              s: markets.length === 1 ? "" : "s",
+            })}
           </p>
         </div>
 
@@ -73,7 +132,7 @@ export default async function MarketsPage({
             <Input
               name="q"
               defaultValue={q}
-              placeholder="Search markets…"
+              placeholder={tr("market.searchPlaceholder")}
               className="pl-9"
             />
           </div>
@@ -82,26 +141,28 @@ export default async function MarketsPage({
             defaultValue={sort}
             className="h-10 rounded-lg border border-slate-700 bg-slate-900/60 px-3 text-sm"
           >
-            <option value="trending">Trending</option>
-            <option value="volume">Volume</option>
-            <option value="ending">Ending soon</option>
-            <option value="new">Newest</option>
+            <option value="trending">{tr("market.sortTrending")}</option>
+            <option value="volume">{tr("market.sortVolume")}</option>
+            <option value="ending">{tr("market.sortEnding")}</option>
+            <option value="new">{tr("market.sortNewest")}</option>
           </select>
           <select
             name="status"
             defaultValue={status}
             className="h-10 rounded-lg border border-slate-700 bg-slate-900/60 px-3 text-sm"
           >
-            <option value="OPEN">Open</option>
-            <option value="RESOLVED">Resolved</option>
-            <option value="ALL">All</option>
+            <option value="OPEN">{tr("market.filterOpen")}</option>
+            <option value="RESOLVED">{tr("market.filterResolved")}</option>
+            <option value="ALL">{tr("market.filterAll")}</option>
           </select>
-          {validCat !== "ALL" && <input type="hidden" name="cat" value={validCat} />}
+          {validCat !== "ALL" && (
+            <input type="hidden" name="cat" value={validCat} />
+          )}
           <button
             type="submit"
             className="h-10 rounded-lg border border-slate-700 bg-slate-900/60 px-3 text-sm font-semibold text-slate-200 hover:bg-slate-800"
           >
-            Apply
+            {tr("market.applyButton")}
           </button>
         </form>
 
@@ -110,8 +171,12 @@ export default async function MarketsPage({
             const active = c.value === validCat;
             const href =
               c.value === "ALL"
-                ? `/markets?q=${encodeURIComponent(q)}&sort=${sort}&status=${status}`
-                : `/markets?q=${encodeURIComponent(q)}&cat=${c.value}&sort=${sort}&status=${status}`;
+                ? lp(
+                    `/markets?q=${encodeURIComponent(q)}&sort=${sort}&status=${status}`,
+                  )
+                : lp(
+                    `/markets?q=${encodeURIComponent(q)}&cat=${c.value}&sort=${sort}&status=${status}`,
+                  );
             return (
               <Link
                 key={c.value}
@@ -122,7 +187,7 @@ export default async function MarketsPage({
                     : "border-slate-700 bg-slate-900/60 text-slate-400 hover:text-slate-200"
                 }`}
               >
-                {c.label}
+                {tr(c.labelKey)}
               </Link>
             );
           })}
@@ -131,26 +196,44 @@ export default async function MarketsPage({
         {markets.length === 0 ? (
           <Card>
             <div className="py-10 text-center text-sm text-slate-400">
-              No markets match these filters.
+              {tr("market.noMatches")}
             </div>
           </Card>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {markets.map((m) => {
-              const p = priceYes({ yesShares: m.yesShares, noShares: m.noShares });
-              const resolved = m.status === "RESOLVED" || m.status === "CANCELLED";
+              const p = priceYes({
+                yesShares: m.yesShares,
+                noShares: m.noShares,
+              });
+              const resolved =
+                m.status === "RESOLVED" || m.status === "CANCELLED";
               return (
-                <Link key={m.id} href={`/markets/${m.slug}`}>
+                <Link key={m.id} href={lp(`/markets/${m.slug}`)}>
                   <Card className="fade-up h-full transition hover:border-cyan-500/30">
                     <div className="mb-2 flex items-center justify-between">
                       <Badge>{m.category}</Badge>
                       {resolved ? (
-                        <Badge tone={m.resolvedAs === "YES" ? "yes" : m.resolvedAs === "NO" ? "no" : "warn"}>
-                          {m.status === "CANCELLED" ? "Cancelled" : `Resolved ${m.resolvedAs}`}
+                        <Badge
+                          tone={
+                            m.resolvedAs === "YES"
+                              ? "yes"
+                              : m.resolvedAs === "NO"
+                                ? "no"
+                                : "warn"
+                          }
+                        >
+                          {m.status === "CANCELLED"
+                            ? tr("market.cancelled")
+                            : tr("market.resolvedOutcome", {
+                                outcome: m.resolvedAs ?? "",
+                              })}
                         </Badge>
                       ) : (
                         <span className="text-[10px] text-slate-500">
-                          Ends {new Date(m.endsAt).toLocaleDateString()}
+                          {tr("market.endsDate", {
+                            date: new Date(m.endsAt).toLocaleDateString(locale),
+                          })}
                         </span>
                       )}
                     </div>
@@ -159,20 +242,26 @@ export default async function MarketsPage({
                     </h3>
                     <div className="mt-3 flex items-center justify-between">
                       <div>
-                        <div className="text-xs text-slate-500">YES</div>
+                        <div className="text-xs text-slate-500">
+                          {tr("market.yes")}
+                        </div>
                         <div className="text-lg font-bold text-emerald-300">
                           {fmtPrice(p)}
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-xs text-slate-500">NO</div>
+                        <div className="text-xs text-slate-500">
+                          {tr("market.no")}
+                        </div>
                         <div className="text-lg font-bold text-rose-300">
                           {fmtPrice(1 - p)}
                         </div>
                       </div>
                     </div>
                     <div className="mt-3 text-[10px] text-slate-500">
-                      Vol {fmtCoins(m.volumeCoins)} · {fmtCoins(Math.round(m.yesShares + m.noShares))} liq.
+                      {tr("market.vol")} {fmtCoins(m.volumeCoins)} ·{" "}
+                      {fmtCoins(Math.round(m.yesShares + m.noShares))}{" "}
+                      {tr("market.liq")}
                     </div>
                   </Card>
                 </Link>

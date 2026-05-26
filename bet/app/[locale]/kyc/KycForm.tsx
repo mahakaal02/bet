@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toaster";
+import { DEFAULT_LOCALE, isLocale, t, type Locale } from "@/lib/i18n";
 
 /**
  * KYC document upload form (PR-BET-ADMIN-FOLLOWUPS).
@@ -24,15 +26,19 @@ export function KycForm({
   hasSubmission: boolean;
   status: string | null;
 }) {
+  const params = useParams<{ locale: string }>();
+  const locale: Locale = isLocale(params.locale)
+    ? params.locale
+    : DEFAULT_LOCALE;
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
+
   const [busy, setBusy] = useState(false);
 
   // If approved, no form — just confirmation copy.
   if (status === "APPROVED") {
     return (
-      <p className="text-sm text-slate-400">
-        Your identity is verified. No further documents needed at this
-        time. If your name or address changes, contact support to refresh.
-      </p>
+      <p className="text-sm text-slate-400">{tr("kyc.approvedFormNote")}</p>
     );
   }
 
@@ -41,10 +47,7 @@ export function KycForm({
   // reviewer.
   if (status === "PENDING") {
     return (
-      <p className="text-sm text-slate-400">
-        Your documents are with the reviewer. You'll be notified when a
-        decision lands. To replace a document, contact support.
-      </p>
+      <p className="text-sm text-slate-400">{tr("kyc.pendingFormNote")}</p>
     );
   }
 
@@ -59,7 +62,7 @@ export function KycForm({
       if (!res.ok) {
         throw new Error(body.error ?? `Failed (${res.status})`);
       }
-      toast("Submitted for review.", "ok");
+      toast(tr("toast.submitted"), "ok");
       setTimeout(() => window.location.reload(), 600);
     } catch (e) {
       toast((e as Error).message, "err");
@@ -78,28 +81,27 @@ export function KycForm({
     >
       <FileField
         name="pan"
-        label="PAN card (front)"
-        hint="Clear photo of the card. JPG/PNG/PDF up to 5 MB."
+        label={tr("kyc.panLabel")}
+        hint={tr("kyc.panHint")}
       />
       <FileField
         name="aadhaar"
-        label="Aadhaar card (front + back)"
-        hint="Mask the first 8 digits of the Aadhaar number if you prefer — the last 4 are sufficient for verification."
+        label={tr("kyc.aadhaarLabel")}
+        hint={tr("kyc.aadhaarHint")}
       />
       <FileField
         name="selfie"
-        label="Selfie"
-        hint="Face clearly visible, no sunglasses or hat. Used for face-match against PAN."
+        label={tr("kyc.selfieLabel")}
+        hint={tr("kyc.selfieHint")}
       />
       <Button type="submit" disabled={busy} className="w-full">
-        {busy ? "Uploading…" : hasSubmission ? "Resubmit" : "Submit for review"}
+        {busy
+          ? tr("kyc.uploadingButton")
+          : hasSubmission
+            ? tr("kyc.resubmitButton")
+            : tr("kyc.submitButton")}
       </Button>
-      <p className="text-[11px] text-slate-500">
-        Documents are encrypted at rest using AES-256-GCM with the
-        platform's KMS-wrapped data-encryption key. Only the assigned
-        compliance reviewer can decrypt them, and access is logged in
-        the admin audit trail.
-      </p>
+      <p className="text-[11px] text-slate-500">{tr("kyc.securityNote")}</p>
     </form>
   );
 }

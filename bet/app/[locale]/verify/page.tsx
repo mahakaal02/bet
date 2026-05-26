@@ -1,11 +1,18 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import {
+  DEFAULT_LOCALE,
+  isLocale,
+  localizedPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 type State = "loading" | "ok" | "invalid";
 
@@ -20,6 +27,13 @@ export default function VerifyPage() {
 function Verify() {
   const router = useRouter();
   const params = useSearchParams();
+  const routeParams = useParams<{ locale: string }>();
+  const locale: Locale = isLocale(routeParams.locale)
+    ? routeParams.locale
+    : DEFAULT_LOCALE;
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
+  const lp = (h: string) => localizedPath(h, locale);
   const [state, setState] = useState<State>("loading");
 
   useEffect(() => {
@@ -47,31 +61,31 @@ function Verify() {
   return (
     <main className="min-h-screen">
       <div className="mx-auto max-w-md px-4 py-12">
-        <Badge tone="info" className="mb-3">Kalki Exchange</Badge>
-        <h1 className="text-2xl font-black">Email verification</h1>
+        <Badge tone="info" className="mb-3">{tr("meta.siteName")}</Badge>
+        <h1 className="text-2xl font-black">{tr("auth.emailVerificationHeading")}</h1>
 
         <Card className="mt-4">
-          {state === "loading" && <p className="text-sm">Verifying your link…</p>}
+          {state === "loading" && <p className="text-sm">{tr("auth.verifyingLink")}</p>}
           {state === "ok" && (
             <>
               <p className="text-sm text-emerald-300">
-                ✅ Your email is verified. Welcome aboard.
+                {tr("auth.verifySuccess")}
               </p>
               <Button
                 className="mt-4 w-full"
-                onClick={() => router.replace("/profile")}
+                onClick={() => router.replace(lp("/profile"))}
               >
-                Continue to profile
+                {tr("auth.continueProfileButton")}
               </Button>
             </>
           )}
           {state === "invalid" && (
             <>
               <p className="text-sm text-rose-300">
-                This link is invalid or has expired.
+                {tr("auth.verifyInvalidLink")}
               </p>
-              <Link href="/profile" className="mt-3 inline-block text-sm text-cyan-300">
-                Request a new one →
+              <Link href={lp("/profile")} className="mt-3 inline-block text-sm text-cyan-300">
+                {tr("auth.requestNewVerifyLink")}
               </Link>
             </>
           )}

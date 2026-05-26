@@ -10,11 +10,15 @@ import { Badge } from "@/components/ui/Badge";
 import { toast } from "@/components/ui/Toaster";
 import { cn, fmtCoins } from "@/lib/utils";
 import type { CoinPack } from "@/lib/coin-packs";
+import { t, type Locale } from "@/lib/i18n";
 
 interface Props {
   packs: CoinPack[];
   /** Current user — only the username and email pre-fill Razorpay Checkout. */
   user: { username: string; email: string };
+  /** Active locale, passed from the server-rendered wallet page so
+   *  all error toasts / inline copy match the rest of the page. */
+  locale: Locale;
 }
 
 interface TopupConfig {
@@ -45,7 +49,7 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
  * Razorpay's checkout.js is loaded lazily so cold page loads aren't taxed
  * by a script users may not need.
  */
-export function BuyCoinsGrid({ packs, user }: Props) {
+export function BuyCoinsGrid({ packs, user, locale }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -82,11 +86,11 @@ export function BuyCoinsGrid({ packs, user }: Props) {
     });
     const order = await orderRes.json().catch(() => ({}));
     if (!orderRes.ok) {
-      toast(prettyError(order.error), "err");
+      toast(prettyError(order.error, locale), "err");
       return;
     }
     if (!window.Razorpay) {
-      toast("Payment widget didn't load. Refresh and try again.", "err");
+      toast(t("wallet.paymentWidgetError", locale), "err");
       return;
     }
 
@@ -114,13 +118,16 @@ export function BuyCoinsGrid({ packs, user }: Props) {
             });
             const body = await verify.json().catch(() => ({}));
             if (!verify.ok) {
-              toast(prettyError(body.error), "err");
+              toast(prettyError(body.error, locale), "err");
               return;
             }
             toast(
               body.duplicate
-                ? "Already credited."
-                : `+${fmtCoins(body.credited)} coins · balance ${fmtCoins(body.balance)}`,
+                ? t("wallet.alreadyCredited", locale)
+                : t("wallet.creditsBalance", locale, {
+                    coins: fmtCoins(body.credited),
+                    balance: fmtCoins(body.balance),
+                  }),
               "ok",
             );
             startTransition(() => router.refresh());
@@ -142,13 +149,16 @@ export function BuyCoinsGrid({ packs, user }: Props) {
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      toast(prettyError(body.error), "err");
+      toast(prettyError(body.error, locale), "err");
       return;
     }
     toast(
       body.duplicate
-        ? "Already credited — try a different pack."
-        : `+${fmtCoins(body.credited)} coins · balance ${fmtCoins(body.balance)}`,
+        ? t("wallet.alreadyCreditedPack", locale)
+        : t("wallet.creditsBalance", locale, {
+            coins: fmtCoins(body.credited),
+            balance: fmtCoins(body.balance),
+          }),
       "ok",
     );
     startTransition(() => router.refresh());
@@ -168,7 +178,7 @@ export function BuyCoinsGrid({ packs, user }: Props) {
         // The old "payments aren't configured" copy leaked the
         // developer reality.
         toast(
-          "Ask an Admin on Secure Kalki Chat for payments",
+          t("wallet.askAdmin", locale),
           "err",
         );
       }
@@ -209,7 +219,7 @@ export function BuyCoinsGrid({ packs, user }: Props) {
                 </span>
               </div>
               <div className="mt-1 text-xs uppercase tracking-wider text-slate-500">
-                coins
+                {t("toast.coins", locale)}
               </div>
               <div className="mt-3 text-lg font-semibold text-slate-100">
                 ₹{fmtCoins(p.priceInr)}
@@ -244,23 +254,19 @@ export function BuyCoinsGrid({ packs, user }: Props) {
         <div className="mt-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-xs">
           {config.chatAppDownloadUrl ? (
             <p className="text-cyan-200">
-              For coin top-ups, message an Admin on Secured Kalki Chat.{" "}
+              {t("wallet.chatAppMessage", locale)}{" "}
               <a
                 href={config.chatAppDownloadUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-semibold text-cyan-300 underline decoration-cyan-500/40 underline-offset-2 hover:text-cyan-200 hover:decoration-cyan-300"
               >
-                Download Secured Chat App now ↓
+                {t("wallet.downloadChatApp", locale)}
               </a>
             </p>
           ) : (
             <p className="text-cyan-200">
-              For coin top-ups, message an Admin on Secured Kalki Chat.
-              <span className="ml-1 text-[10px] text-cyan-400/70">
-                (Download link not configured — ask the super admin to set it
-                in /admin/settings.)
-              </span>
+              {t("wallet.chatAppNoUrl", locale)}
             </p>
           )}
         </div>
@@ -269,23 +275,23 @@ export function BuyCoinsGrid({ packs, user }: Props) {
   );
 }
 
-function prettyError(code?: string): string {
+function prettyError(code: string | undefined, locale: Locale): string {
   switch (code) {
     case "unknown_pack":
-      return "That pack isn't available.";
+      return t("wallet.unknownPack", locale);
     case "rate_limited":
-      return "Slow down — wait a minute before buying again.";
+      return t("wallet.slowDown", locale);
     case "razorpay_not_configured":
-      return "Payments aren't configured. Ask an admin.";
+      return t("wallet.noPaymentConfig", locale);
     case "order_create_failed":
-      return "Couldn't create a payment order. Try again.";
+      return t("wallet.orderCreateFailed", locale);
     case "bad_signature":
-      return "Payment verification failed. Contact support if money was charged.";
+      return t("wallet.badSignature", locale);
     case "instant_topup_disabled":
-      return "Instant top-up is disabled. Use the payment flow.";
+      return t("wallet.instantDisabled", locale);
     case "unauthorized":
-      return "Please sign in.";
+      return t("wallet.unauthorized", locale);
     default:
-      return "Top-up failed. Try again.";
+      return t("wallet.topUpFailed", locale);
   }
 }

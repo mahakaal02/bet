@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signIn, useSession } from "next-auth/react";
+import {
+  DEFAULT_LOCALE,
+  isLocale,
+  splitLocaleFromPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 /**
  * Single-sign-on bridge from the auctions backend → Bet (Kalki Exchange).
@@ -35,10 +42,20 @@ export function TokenBridge() {
   const handled = useRef(false);
   const [working, setWorking] = useState(false);
 
+  // Locale for the i18n'd overlay copy. URL-prefix first, then
+  // pathname fallback (we may be rendered before the [locale] route
+  // segment resolves).
+  const routeParams = useParams<{ locale?: string }>();
+  const pathname = usePathname();
+  const fromPath = splitLocaleFromPath(pathname ?? "/").locale;
+  const locale: Locale = isLocale(routeParams?.locale)
+    ? routeParams.locale
+    : (fromPath ?? DEFAULT_LOCALE);
+
   useEffect(() => {
     if (handled.current) return;
-    const t = params.get("token");
-    if (!t) return;
+    const tok = params.get("token");
+    if (!tok) return;
     if (status === "loading") return;
     handled.current = true;
 
@@ -54,7 +71,7 @@ export function TokenBridge() {
     }
 
     setWorking(true);
-    void signIn("backend-jwt", { token: t, redirect: false })
+    void signIn("backend-jwt", { token: tok, redirect: false })
       .catch(() => {
         // signIn() doesn't throw on bad creds in v4 — it resolves with
         // { error }. The catch is defensive against network failures only.
@@ -70,9 +87,9 @@ export function TokenBridge() {
         aria-hidden
         className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500/30 border-t-cyan-300"
       />
-      <p className="text-sm font-semibold text-slate-300">Signing you in…</p>
+      <p className="text-sm font-semibold text-slate-300">{t("auth.signingYouIn", locale)}</p>
       <p className="text-xs text-slate-500">
-        Bridging your Kalki Bet session — this only happens once per launch.
+        {t("auth.bridgingSession", locale)}
       </p>
     </div>
   );

@@ -1,4 +1,5 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -11,12 +12,43 @@ import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { fmtCoins, levelFromXp } from "@/lib/utils";
 import { Coins, Flame, Share2, Trophy } from "lucide-react";
+import { isLocale, localizedPath, t, type Locale } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProfilePage() {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale: raw } = await params;
+  const locale: Locale = isLocale(raw) ? raw : "en";
+  return {
+    title: t("profile.heading", locale),
+    description: t("profile.referralSubtext", locale),
+  };
+}
+
+export default async function ProfilePage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale: raw } = await params;
+  if (!isLocale(raw)) notFound();
+  const locale: Locale = raw;
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
+  const lp = (h: string) => localizedPath(h, locale);
+
   const u = await getAuthedUser();
-  if (!u) redirect("/login?next=/profile");
+  if (!u) {
+    redirect(
+      localizedPath("/login", locale) +
+        "?next=" +
+        encodeURIComponent(localizedPath("/profile", locale)),
+    );
+  }
 
   // Profile is the canonical account hub — identity, wallet, achievements,
   // sign-out. Watchlist + transaction history were dropped because they
@@ -27,7 +59,7 @@ export default async function ProfilePage() {
     db.user.findUnique({ where: { id: u.id } }),
     db.wallet.findUnique({ where: { userId: u.id } }),
   ]);
-  if (!user) redirect("/login");
+  if (!user) redirect(lp("/login"));
 
   const xp = levelFromXp(user.xp);
 
@@ -48,12 +80,16 @@ export default async function ProfilePage() {
                 <div className="text-xl font-black">{user.username}</div>
                 <div className="text-xs text-slate-500">{user.email}</div>
                 <div className="mt-1 flex items-center gap-1">
-                  <Badge tone="info">Lvl {xp.level}</Badge>
-                  {user.isAdmin && <Badge tone="warn">Admin</Badge>}
+                  <Badge tone="info">
+                    {tr("profile.levelBadge", { level: xp.level })}
+                  </Badge>
+                  {user.isAdmin && (
+                    <Badge tone="warn">{tr("profile.adminBadge")}</Badge>
+                  )}
                   {user.streak > 0 && (
                     <Badge tone="warn">
                       <Flame className="h-3 w-3" />
-                      {user.streak}d streak
+                      {tr("profile.streakBadge", { days: user.streak })}
                     </Badge>
                   )}
                 </div>
@@ -62,8 +98,13 @@ export default async function ProfilePage() {
 
             <div className="mt-4">
               <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>{user.xp} XP</span>
-                <span>{xp.toNext} XP to lvl {xp.level + 1}</span>
+                <span>{tr("profile.xpLabel", { xp: user.xp })}</span>
+                <span>
+                  {tr("profile.xpToNext", {
+                    xp: xp.toNext,
+                    level: xp.level + 1,
+                  })}
+                </span>
               </div>
               <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-800">
                 <div
@@ -75,19 +116,21 @@ export default async function ProfilePage() {
           </Card>
 
           <Card>
-            <CardTitle className="mb-2">Wallet</CardTitle>
+            <CardTitle className="mb-2">{tr("profile.wallet")}</CardTitle>
             <div className="flex items-center gap-2 text-3xl font-black text-cyan-300">
               <Coins className="h-7 w-7" />
               {fmtCoins(wallet?.balance ?? 0)}
             </div>
-            <p className="mt-1 text-xs text-slate-500">Kalki Bet coins</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {tr("profile.walletCoins")}
+            </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
-                href="/wallet"
+                href={lp("/wallet")}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-br from-cyan-400 to-indigo-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:opacity-95"
               >
                 <Coins className="h-3.5 w-3.5" />
-                Buy coins
+                {tr("profile.buyCoinButton")}
               </Link>
             </div>
           </Card>
@@ -95,13 +138,10 @@ export default async function ProfilePage() {
 
         <Card className="mt-4">
           <CardHeader>
-            <CardTitle>Referral</CardTitle>
+            <CardTitle>{tr("profile.referral")}</CardTitle>
             <Trophy className="h-4 w-4 text-amber-400" />
           </CardHeader>
-          <p className="text-sm text-slate-400">
-            Share your code — when someone signs up with it you both get bonus
-            coins.
-          </p>
+          <p className="text-sm text-slate-400">{tr("profile.referralSubtext")}</p>
           <div className="mt-2 flex items-center gap-2">
             <code className="rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-1.5 font-mono text-sm">
               {user.referralCode ?? "—"}
@@ -112,7 +152,7 @@ export default async function ProfilePage() {
 
         <Card className="mt-4">
           <CardHeader>
-            <CardTitle>Achievements</CardTitle>
+            <CardTitle>{tr("profile.achievements")}</CardTitle>
           </CardHeader>
           <AchievementsGrid />
         </Card>
