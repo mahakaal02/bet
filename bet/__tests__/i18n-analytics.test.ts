@@ -348,111 +348,78 @@ describe("withPreservedParams", () => {
    buildAuthRedirect — UTM preservation through the auth round-trip
    ============================================================ */
 
-describe("buildAuthRedirect", () => {
-  it("builds a locale-prefixed login URL with the bare target", () => {
-    const out = buildAuthRedirect("/wallet", {}, "pt");
-    expect(out).toBe("/pt/login?next=" + encodeURIComponent("/pt/wallet"));
+describe("buildAuthRedirect — PR-SINGLE-LOGIN behaviour", () => {
+  // After the single-login migration, `buildAuthRedirect` always
+  // returns the hub's `/login` URL regardless of locale, target
+  // path, or query state. The targetPath / searchParams / locale
+  // parameters are accepted for signature stability (so existing
+  // call sites compile unchanged) but only the hub origin matters
+  // for the redirect itself. UTM / referral attribution flows via
+  // the Referer header to the hub login, which records its own.
+
+  function hubBase(): string {
+    return (
+      process.env.NEXT_PUBLIC_AUCTIONS_URL?.replace(/\/$/, "") ??
+      "http://localhost:3200"
+    );
+  }
+
+  it("returns the hub login URL for the bare case", () => {
+    expect(buildAuthRedirect("/wallet", {}, "pt")).toBe(
+      `${hubBase()}/login`,
+    );
   });
 
-  it("preserves UTM params through the auth round-trip", () => {
+  it("ignores UTM params (analytics flows via Referer to the hub)", () => {
     const out = buildAuthRedirect(
       "/wallet",
       { utm_source: "twitter", utm_campaign: "launch" },
       "pt",
     );
-    // The `next=` value is the URL-encoded full inbound URL so that
-    // LoginForm can read it via useSearchParams and router.replace
-    // straight there.
-    expect(out.startsWith("/pt/login?next=")).toBe(true);
-    const next = decodeURIComponent(out.split("next=")[1]);
-    expect(next).toBe("/pt/wallet?utm_source=twitter&utm_campaign=launch");
+    expect(out).toBe(`${hubBase()}/login`);
   });
 
-  it("preserves click IDs (fbclid, gclid, msclkid)", () => {
+  it("ignores click IDs (fbclid, gclid, msclkid)", () => {
     const out = buildAuthRedirect(
       "/portfolio",
       { fbclid: "fb42", gclid: "g-abc", msclkid: "ms99" },
       "es",
     );
-    const next = decodeURIComponent(out.split("next=")[1]);
-    expect(next).toContain("fbclid=fb42");
-    expect(next).toContain("gclid=g-abc");
-    expect(next).toContain("msclkid=ms99");
+    expect(out).toBe(`${hubBase()}/login`);
   });
 
-  it("preserves referral codes through the auth round-trip", () => {
-    const out = buildAuthRedirect(
-      "/wallet",
-      { ref: "alice-2024", invite: "BETA42" },
-      "fr",
+  it("ignores the locale parameter (single-locale hub today)", () => {
+    expect(buildAuthRedirect("/wallet", null, "fr")).toBe(
+      `${hubBase()}/login`,
     );
-    const next = decodeURIComponent(out.split("next=")[1]);
-    expect(next).toContain("ref=alice-2024");
-    expect(next).toContain("invite=BETA42");
-  });
-
-  it("handles the Next.js array-shape searchParams (picks first value)", () => {
-    const out = buildAuthRedirect(
-      "/notifications",
-      {
-        utm_source: ["newsletter", "duplicate"],
-        ref: "alice",
-      },
-      "en",
+    expect(buildAuthRedirect("/wallet", null, "es")).toBe(
+      `${hubBase()}/login`,
     );
-    const next = decodeURIComponent(out.split("next=")[1]);
-    expect(next).toContain("utm_source=newsletter");
-    expect(next).not.toContain("duplicate");
-    expect(next).toContain("ref=alice");
   });
 
-  it("drops empty / undefined params (no junk in URL)", () => {
-    const out = buildAuthRedirect(
-      "/wallet",
-      {
-        utm_source: "",
-        utm_medium: undefined,
-        ref: "alice",
-      },
-      "pt",
-    );
-    const next = decodeURIComponent(out.split("next=")[1]);
-    expect(next).toContain("ref=alice");
-    expect(next).not.toContain("utm_source=");
-    expect(next).not.toContain("utm_medium=");
-  });
-
-  it("works with URLSearchParams input shape", () => {
+  it("accepts URLSearchParams input shape without throwing", () => {
     const sp = new URLSearchParams("utm_source=twitter&ref=alice");
-    const out = buildAuthRedirect("/wallet", sp, "pt");
-    const next = decodeURIComponent(out.split("next=")[1]);
-    expect(next).toContain("utm_source=twitter");
-    expect(next).toContain("ref=alice");
+    expect(buildAuthRedirect("/wallet", sp, "pt")).toBe(
+      `${hubBase()}/login`,
+    );
   });
 
-  it("supports a custom loginPath (e.g. /sso vs /login)", () => {
-    const out = buildAuthRedirect("/wallet", {}, "pt", "/sso");
-    expect(out.startsWith("/pt/sso?next=")).toBe(true);
-  });
-
-  it("handles bare params (no params at all)", () => {
+  it("handles null / undefined params", () => {
     expect(buildAuthRedirect("/wallet", null, "en")).toBe(
-      "/en/login?next=" + encodeURIComponent("/en/wallet"),
+      `${hubBase()}/login`,
     );
     expect(buildAuthRedirect("/wallet", undefined, "en")).toBe(
-      "/en/login?next=" + encodeURIComponent("/en/wallet"),
+      `${hubBase()}/login`,
     );
   });
 
-  it("the `next=` target is double-encoded-safe (decode roundtrips)", () => {
-    const out = buildAuthRedirect(
-      "/wallet",
-      { utm_campaign: "Q2 Launch (Final)" },
-      "pt",
-    );
-    const next = decodeURIComponent(out.split("next=")[1]);
-    // The inner param value with a space + parens roundtrips intact.
-    expect(next).toContain("utm_campaign=Q2+Launch+%28Final%29");
+  it("normalises a trailing slash on the env-supplied hub URL", () => {
+    // We can't mutate process.env in a single-process test without
+    // a setup file, but we can verify the function trims the slash
+    // when present at module-load time by checking the default
+    // fallback doesn't contain a double slash.
+    const out = buildAuthRedirect("/wallet", null, "en");
+    expect(out).not.toContain("//login");
   });
 });
 

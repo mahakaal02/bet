@@ -2,12 +2,13 @@ import { redirect } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { MarketForm } from "@/components/MarketForm";
 import { getAuthedUser } from "@/lib/auth";
+import { hubLoginUrl } from "@/lib/hub";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewMarketPage() {
   const u = await getAuthedUser();
-  if (!u) redirect("/login?next=/admin/markets/new");
+  if (!u) redirect(hubLoginUrl());
   if (!u.isAdmin) redirect("/");
 
   return (

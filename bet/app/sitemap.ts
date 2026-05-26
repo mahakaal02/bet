@@ -54,13 +54,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
  * Exported so tests assert on the canonical list rather than
  * hard-coding it in two places.
  */
+// PR-SINGLE-LOGIN — `/login` and `/register` removed; bet no longer
+// hosts those pages. The hub (auctions origin) owns the canonical
+// sign-in surface and is indexed from that site's own sitemap.
 export const SITEMAP_STATIC_PATHS = [
   "/",
   "/markets",
   "/leaderboard",
   "/achievements",
-  "/login",
-  "/register",
 ] as const;
 
 export interface SitemapMarketRow {

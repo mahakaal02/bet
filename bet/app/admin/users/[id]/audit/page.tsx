@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { fmtCoins, fmtPrice, timeAgo } from "@/lib/utils";
+import { hubLoginUrl } from "@/lib/hub";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export default async function UserAuditPage({
   params: Promise<{ id: string }>;
 }) {
   const me = await getAuthedUser();
-  if (!me) redirect("/login");
+  if (!me) redirect(hubLoginUrl());
   if (!me.isAdmin) redirect("/");
   const { id } = await params;
 

@@ -141,19 +141,22 @@ describe("buildSitemapEntries", () => {
     }
   });
 
-  it("includes /markets but excludes authenticated routes from static paths", () => {
+  it("includes /markets + landing pages, excludes auth + authenticated + admin routes", () => {
     expect(SITEMAP_STATIC_PATHS).toContain("/markets");
     expect(SITEMAP_STATIC_PATHS).toContain("/leaderboard");
     expect(SITEMAP_STATIC_PATHS).toContain("/achievements");
-    expect(SITEMAP_STATIC_PATHS).toContain("/login");
-    expect(SITEMAP_STATIC_PATHS).toContain("/register");
+    // PR-SINGLE-LOGIN — bet no longer hosts /login or /register; the
+    // hub owns the canonical sign-in surface and indexes it from its
+    // own sitemap. Indexing them here would point Google at dead URLs.
+    expect(SITEMAP_STATIC_PATHS as readonly string[]).not.toContain("/login");
+    expect(SITEMAP_STATIC_PATHS as readonly string[]).not.toContain("/register");
     // Authenticated surfaces — should NEVER be indexed.
-    expect(SITEMAP_STATIC_PATHS).not.toContain("/wallet");
-    expect(SITEMAP_STATIC_PATHS).not.toContain("/profile");
-    expect(SITEMAP_STATIC_PATHS).not.toContain("/portfolio");
-    expect(SITEMAP_STATIC_PATHS).not.toContain("/notifications");
-    expect(SITEMAP_STATIC_PATHS).not.toContain("/watchlist");
-    expect(SITEMAP_STATIC_PATHS).not.toContain("/kyc");
+    expect(SITEMAP_STATIC_PATHS as readonly string[]).not.toContain("/wallet");
+    expect(SITEMAP_STATIC_PATHS as readonly string[]).not.toContain("/profile");
+    expect(SITEMAP_STATIC_PATHS as readonly string[]).not.toContain("/portfolio");
+    expect(SITEMAP_STATIC_PATHS as readonly string[]).not.toContain("/notifications");
+    expect(SITEMAP_STATIC_PATHS as readonly string[]).not.toContain("/watchlist");
+    expect(SITEMAP_STATIC_PATHS as readonly string[]).not.toContain("/kyc");
     // Admin surface — non-localized + non-indexed.
     expect(SITEMAP_STATIC_PATHS as readonly string[]).not.toContain("/admin");
   });

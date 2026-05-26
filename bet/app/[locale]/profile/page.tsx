@@ -12,6 +12,7 @@ import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { fmtCoins, levelFromXp } from "@/lib/utils";
 import { Coins, Flame, Share2, Trophy } from "lucide-react";
+import { hubLoginUrl } from "@/lib/hub";
 import {
   DEFAULT_LOCALE,
   buildAuthRedirect,
@@ -70,7 +71,7 @@ export default async function ProfilePage({
     db.user.findUnique({ where: { id: u.id } }),
     db.wallet.findUnique({ where: { userId: u.id } }),
   ]);
-  if (!user) redirect(lp("/login"));
+  if (!user) redirect(hubLoginUrl());
 
   const xp = levelFromXp(user.xp);
 
