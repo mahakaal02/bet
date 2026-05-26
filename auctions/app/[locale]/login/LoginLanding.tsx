@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Kalki hub landing + login (PR-LOGIN-REDESIGN).
+ * Kalki hub landing + login (PR-LOGIN-REDESIGN v2 — cyan/indigo).
  *
  * Single client component for the dark-luxury Gen-Z iGaming landing
  * page. Combines:
@@ -9,7 +9,7 @@
  *     end-to-end (climb → bust → reset) using SVG + requestAnimationFrame.
  *   • A glassmorphism login card on the right (mobile: above the
  *     hero) with Login / Sign-up tabs, Telegram OAuth, and the
- *     existing 2FA flow preserved verbatim from the prior form.
+ *     existing 2FA flow preserved verbatim from the legacy form.
  *   • Below the fold: a scrolling winner ticker, three market
  *     teaser cards, and a four-cell trust bar.
  *   • Locale-aware text, currency symbol, sample amounts, and
@@ -18,12 +18,24 @@
  *     which writes `kalki_locale` and triggers `router.refresh()`
  *     so the next SSR-ed page picks up the new locale.
  *
+ * New behaviour in v2 — "scroll back + highlight":
+ *   The three market-card CTAs at the bottom of the page act as
+ *   conversion nudges: clicking any of them smooth-scrolls the
+ *   viewport back to the login card and adds a `.highlight-pulse`
+ *   class for ~2.4s so the user's attention re-lands on the form.
+ *   Also auto-switches the auth mode to "signup", because anyone
+ *   tapping a market CTA from an unauthenticated state is by
+ *   definition a new-user funnel.
+ *
  * Auth integration:
  *   • Email/password form posts to `/api/auth/login` (same as the
- *     legacy form). Honors `needs2FA` → second step at
+ *     legacy `LoginForm.tsx`). Honors `needs2FA` → second step at
  *     `/api/auth/login-2fa` with optional `trustDevice`.
  *   • Telegram button redirects to `/api/auth/telegram/start` which
  *     hands off to the Telegram Login Widget bot flow.
+ *   • Demo-user chips appear under the submit button when
+ *     `demoVisible` is true (dev/QA only — page.tsx wires this
+ *     to `NODE_ENV !== 'production'`).
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -53,7 +65,27 @@ export interface LoginLandingProps {
    *  false (no NEXT_PUBLIC_TELEGRAM_BOT set), the Telegram button is
    *  hidden so the user isn't presented with a dead control. */
   telegramEnabled: boolean;
+  /** When true, render a row of demo-user chips under the submit
+   *  button. Single-click fills the form with one of the seeded
+   *  accounts (see backend/prisma/seed.ts). Dev/QA only — the
+   *  server only sets this in non-production. */
+  demoVisible: boolean;
 }
+
+/**
+ * Seed accounts created by `backend/prisma/seed.ts` and
+ * `bet/prisma/seed.ts`. All four share the password `password12345`.
+ * Chip-to-fill helps QA flip between identities while testing
+ * real-time bid updates — open one browser as user1, another as
+ * user2, watch the "outbid" status flip live.
+ */
+const SHARED_PASSWORD = "password12345";
+const DEMO_USERS: Array<{ email: string; label: string; kind: "player" | "admin" }> = [
+  { email: "user1@kalki.local", label: "user1", kind: "player" },
+  { email: "user2@kalki.local", label: "user2", kind: "player" },
+  { email: "user3@kalki.local", label: "user3", kind: "player" },
+  { email: "admin@kalki.local", label: "admin", kind: "admin" },
+];
 
 const rand = (a: number, b: number) => Math.random() * (b - a) + a;
 
@@ -84,6 +116,7 @@ export function LoginLanding({
   initialCountry,
   next,
   telegramEnabled,
+  demoVisible,
 }: LoginLandingProps) {
   const router = useRouter();
   const [country, setCountry] = useState<CountryCode>(initialCountry);
@@ -108,10 +141,10 @@ export function LoginLanding({
   useEffect(() => {
     if (!locMenuOpen) return;
     function onDocClick(e: MouseEvent) {
-      const t = e.target as Node;
+      const target = e.target as Node;
       if (
-        !locMenuRef.current?.contains(t) &&
-        !locBtnRef.current?.contains(t)
+        !locMenuRef.current?.contains(target) &&
+        !locBtnRef.current?.contains(target)
       ) {
         setLocMenuOpen(false);
       }
@@ -165,6 +198,11 @@ export function LoginLanding({
 
   /* ============================================================
      CRASH CHART — full state machine (climb → bust → reset)
+     ------------------------------------------------------------
+     Port of the design's <script> block. We pin the SVG path
+     attributes via refs so requestAnimationFrame can update them
+     at 60fps without re-rendering the component tree on every
+     tick.
      ============================================================ */
   const crashLineRef = useRef<SVGPathElement | null>(null);
   const crashFillRef = useRef<SVGPathElement | null>(null);
@@ -175,7 +213,6 @@ export function LoginLanding({
   const [lastCrash, setLastCrash] = useState(18.24);
   const [playersIn, setPlayersIn] = useState(412);
   const [roundId, setRoundId] = useState(8421092);
-  const lineId = useId();
   const fillId = useId();
   const fillRedId = useId();
   const glowId = useId();
@@ -196,14 +233,16 @@ export function LoginLanding({
       history = [{ t: 0, m: 1.0 }];
       setCrashBusted(false);
       setCrashDelta("▲ +0.00x");
+      // Reset visuals to the neon-cyan colourway. The bust path
+      // mutates these attributes directly; we restore them here.
       if (crashLineRef.current) {
-        crashLineRef.current.setAttribute("stroke", "#00FF94");
+        crashLineRef.current.setAttribute("stroke", "#22D3EE");
       }
       if (crashFillRef.current) {
         crashFillRef.current.setAttribute("fill", `url(#${fillId})`);
       }
       if (crashDotRef.current) {
-        crashDotRef.current.setAttribute("fill", "#00FF94");
+        crashDotRef.current.setAttribute("fill", "#22D3EE");
       }
       setRoundId((r) => r + 1);
       setPlayersIn(Math.floor(rand(280, 620)));
@@ -357,10 +396,10 @@ export function LoginLanding({
       // Schedule the slide-out, then the unmount.
       window.setTimeout(() => {
         setToasts((prev) =>
-          prev.map((t) => (t.id === id ? { ...t, exiting: true } : t)),
+          prev.map((tt) => (tt.id === id ? { ...tt, exiting: true } : tt)),
         );
         window.setTimeout(() => {
-          setToasts((prev) => prev.filter((t) => t.id !== id));
+          setToasts((prev) => prev.filter((tt) => tt.id !== id));
         }, 400);
       }, 5200);
     }
@@ -496,8 +535,63 @@ export function LoginLanding({
      the session cookie. See lib/telegram.ts + the API route.
      ============================================================ */
   function startTelegram() {
-    const params = new URLSearchParams({ next });
-    window.location.href = `/api/auth/telegram/start?${params.toString()}`;
+    window.location.href =
+      "/api/auth/telegram/start?next=" + encodeURIComponent(next);
+  }
+
+  /* ============================================================
+     SCROLL BACK + HIGHLIGHT — wires the three market-card CTAs
+     ------------------------------------------------------------
+     The market cards at the bottom of the page are conversion
+     nudges, not real entries. Clicking any of them smooth-scrolls
+     the viewport back up to the login card and flashes the card
+     for ~2.4s so the user's attention re-anchors there.
+     Also flips the auth mode to "signup" because anyone tapping
+     a market CTA from an unauthenticated state is, by definition,
+     a new-user funnel.
+     ============================================================ */
+  const loginCardRef = useRef<HTMLDivElement>(null);
+  const highlightTimerRef = useRef<number | null>(null);
+
+  const scrollBackAndHighlight = useCallback(() => {
+    const el = loginCardRef.current;
+    if (!el) return;
+    // `block: "center"` keeps the card visible regardless of the
+    // user's current scroll position — works on both desktop
+    // (login is top-right) and mobile (login is above the hero).
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.remove("highlight-pulse");
+    // Force reflow so re-adding the class restarts the animation
+    // even if the user mashes the same CTA repeatedly.
+    void el.offsetWidth;
+    el.classList.add("highlight-pulse");
+    setMode("signup");
+    if (highlightTimerRef.current !== null) {
+      window.clearTimeout(highlightTimerRef.current);
+    }
+    highlightTimerRef.current = window.setTimeout(() => {
+      el.classList.remove("highlight-pulse");
+      highlightTimerRef.current = null;
+    }, 2400);
+  }, []);
+
+  // Clean up the highlight timer on unmount — prevents the timer
+  // firing on a stale DOM node after a route change.
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current !== null) {
+        window.clearTimeout(highlightTimerRef.current);
+      }
+    };
+  }, []);
+
+  /* ============================================================
+     DEMO USER CHIP — fills the form with a seeded account
+     ============================================================ */
+  function fillDemoUser(email: string) {
+    setLoginId(email);
+    setPassword(SHARED_PASSWORD);
+    setError(null);
   }
 
   /* ============================================================
@@ -529,7 +623,8 @@ export function LoginLanding({
             {/* ============ LOGO SLOT — START ============
                 Drop-in placeholder. Devs swap the inner <svg> with
                 the final mark or `<img src="/logo.svg">`. The 28×28
-                container + neon gradient bg + glow live in CSS. */}
+                container + cyan→indigo gradient bg + glow live in
+                CSS. */}
             <span className="brand-mark" aria-label="kalki.bet logo">
               <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
                 <text
@@ -539,7 +634,7 @@ export function LoginLanding({
                   fontFamily="Space Grotesk, sans-serif"
                   fontWeight="700"
                   fontSize="20"
-                  fill="#002112"
+                  fill="#020617"
                 >
                   K
                 </text>
@@ -704,8 +799,8 @@ export function LoginLanding({
                 <svg viewBox="0 0 800 200" preserveAspectRatio="none">
                   <defs>
                     <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#00FF94" stopOpacity="0.35" />
-                      <stop offset="100%" stopColor="#00FF94" stopOpacity="0" />
+                      <stop offset="0%" stopColor="#22D3EE" stopOpacity="0.35" />
+                      <stop offset="100%" stopColor="#22D3EE" stopOpacity="0" />
                     </linearGradient>
                     <linearGradient id={fillRedId} x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#FF4D6D" stopOpacity="0.35" />
@@ -727,7 +822,7 @@ export function LoginLanding({
                   <path
                     ref={crashLineRef}
                     d="M0 200"
-                    stroke="#00FF94"
+                    stroke="#22D3EE"
                     strokeWidth="2.5"
                     fill="none"
                     filter={`url(#${glowId})`}
@@ -737,7 +832,7 @@ export function LoginLanding({
                     cx="0"
                     cy="200"
                     r="5"
-                    fill="#00FF94"
+                    fill="#22D3EE"
                     filter={`url(#${glowId})`}
                   />
                 </svg>
@@ -748,7 +843,7 @@ export function LoginLanding({
           {/* RIGHT — LOGIN CARD */}
           <aside className="login-wrap" aria-label="Sign in">
             <div className="login-glow" />
-            <div className="login">
+            <div className="login" ref={loginCardRef}>
               <span className="live-tag">
                 <span className="live-dot" />
                 <span>{loginOnlineLabel}</span>&nbsp;
@@ -897,6 +992,26 @@ export function LoginLanding({
                           : t("login_trusted_by")}
                       </span>
                     </div>
+
+                    {demoVisible && (
+                      <div className="demo-users">
+                        <div className="demo-users-label">
+                          Demo users · password <code>{SHARED_PASSWORD}</code>
+                        </div>
+                        <div className="demo-users-row">
+                          {DEMO_USERS.map((u) => (
+                            <button
+                              key={u.email}
+                              type="button"
+                              className={`demo-user-chip ${u.kind === "admin" ? "admin" : ""}`}
+                              onClick={() => fillDemoUser(u.email)}
+                            >
+                              {u.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </form>
                 </>
               )}
@@ -999,10 +1114,20 @@ export function LoginLanding({
             </div>
           </div>
 
-          {/* MARKET CARDS */}
+          {/*
+            MARKET CARDS — each entire card is a <button> that calls
+            scrollBackAndHighlight(). The .market-cta pill inside is
+            decorative (pointer-events: none in CSS) so the click
+            target is consistent regardless of where the user taps.
+          */}
           <div className="markets">
             {/* 1. Prediction */}
-            <div className="market">
+            <button
+              type="button"
+              className="market"
+              onClick={scrollBackAndHighlight}
+              aria-label={t("m1_cta")}
+            >
               <div className="market-head">
                 <span className="market-kind">{t("m1_kind")}</span>
                 <span className="market-status blue">
@@ -1042,15 +1167,20 @@ export function LoginLanding({
                     <span>{locale.samples.liquidity}</span>
                   </div>
                 </div>
-                <button className="market-cta">
+                <span className="market-cta">
                   <span>{t("m1_cta")}</span>{" "}
                   <span style={{ fontFamily: "var(--font-mono)" }}>→</span>
-                </button>
+                </span>
               </div>
-            </div>
+            </button>
 
             {/* 2. Aviator */}
-            <div className="market">
+            <button
+              type="button"
+              className="market"
+              onClick={scrollBackAndHighlight}
+              aria-label={t("m2_cta")}
+            >
               <div className="market-head">
                 <span className="market-kind">{t("m2_kind")}</span>
                 <span className="market-status live">
@@ -1074,7 +1204,7 @@ export function LoginLanding({
                 >
                   <path
                     d="M0 78 Q60 75 90 60 T180 14"
-                    stroke="#00FF94"
+                    stroke="#22D3EE"
                     strokeWidth="2"
                     fill="none"
                     filter={`url(#${glowId})`}
@@ -1084,7 +1214,7 @@ export function LoginLanding({
                     fill={`url(#${fillId})`}
                     opacity="0.6"
                   />
-                  <circle cx="180" cy="14" r="3" fill="#00FF94" />
+                  <circle cx="180" cy="14" r="3" fill="#22D3EE" />
                 </svg>
                 <span className="aviator-mult">7.42x</span>
               </div>
@@ -1107,15 +1237,20 @@ export function LoginLanding({
                     </span>
                   </div>
                 </div>
-                <button className="market-cta">
+                <span className="market-cta">
                   <span>{t("m2_cta")}</span>{" "}
                   <span style={{ fontFamily: "var(--font-mono)" }}>↗</span>
-                </button>
+                </span>
               </div>
-            </div>
+            </button>
 
             {/* 3. Lowest unique bid */}
-            <div className="market">
+            <button
+              type="button"
+              className="market"
+              onClick={scrollBackAndHighlight}
+              aria-label={t("m3_cta")}
+            >
               <div className="market-head">
                 <span className="market-kind">{t("m3_kind")}</span>
                 <span className="market-status gold">{t("m3_jackpot")}</span>
@@ -1157,12 +1292,12 @@ export function LoginLanding({
                     <span>{locale.samples.retailValue}</span>
                   </div>
                 </div>
-                <button className="market-cta">
+                <span className="market-cta">
                   <span>{t("m3_cta")}</span>{" "}
                   <span style={{ fontFamily: "var(--font-mono)" }}>→</span>
-                </button>
+                </span>
               </div>
-            </div>
+            </button>
           </div>
 
           {/* TRUST BAR */}

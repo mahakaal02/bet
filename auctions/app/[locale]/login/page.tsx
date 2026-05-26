@@ -43,11 +43,18 @@ export default async function LoginPage({
 
   const initialCountry = await detectCountry(sp);
 
+  // Demo-user chips are a dev/QA convenience only — they expose the
+  // seeded `password12345` account list. Anything other than a
+  // strict production build can show them; CI / staging set
+  // NODE_ENV=production so they stay hidden there.
+  const demoVisible = process.env.NODE_ENV !== "production";
+
   return (
     <LoginLanding
       initialCountry={initialCountry}
       next={safeNext}
       telegramEnabled={isTelegramConfigured()}
+      demoVisible={demoVisible}
     />
   );
 }
