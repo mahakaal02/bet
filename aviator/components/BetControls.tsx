@@ -6,6 +6,7 @@ import { useGame } from '@/lib/store';
 import { getToken } from '@/lib/auth';
 import { tierFor } from '@/lib/tiers';
 import { formatCoins } from '@/lib/format';
+import { useTranslation, type TranslateFunction } from '@/lib/i18n/client';
 
 /**
  * Bet controls — the player's primary action surface. Five logical
@@ -86,6 +87,7 @@ function openTopupPage() {
 type Mode = 'bet' | 'auto';
 
 export default function BetControls() {
+  const { t } = useTranslation();
   const phase = useGame((s) => s.phase);
   const balance = useGame((s) => s.balance);
   const currentBet = useGame((s) => s.currentBet);
@@ -136,15 +138,15 @@ export default function BetControls() {
       // round ride until the user taps cashout manually.
       const auto = mode === 'auto' && autoAt.trim() ? Number(autoAt) : null;
       if (auto !== null && (isNaN(auto) || auto < 1.01)) {
-        throw new Error('Auto cashout must be at least 1.01×');
+        throw new Error(t('game.autoCashoutMinError'));
       }
       if (amount < MIN_BET) {
-        throw new Error(`Minimum bet is ${MIN_BET} coins`);
+        throw new Error(t('game.minBetCoins', { min: MIN_BET }));
       }
       if (balance != null && amount > balance) {
         // Server-side guard duplicates the same rule — this is the
         // friendlier client-side preflight.
-        throw new Error(`Wallet has only ${formatCoins(balance)}`);
+        throw new Error(t('game.walletHasOnly', { amount: formatCoins(balance) }));
       }
       const res = await api.post<PlaceBidResp>('/aviator/bet', {
         amount,
@@ -283,6 +285,7 @@ export default function BetControls() {
         mode={mode}
         onChange={setMode}
         disabled={inputLocked}
+        t={t}
       />
 
       {/* Main row: controls on the LEFT, hero BET button on the RIGHT.
@@ -320,7 +323,7 @@ export default function BetControls() {
                   if (amount > 0 && amount < MIN_BET) setAmount(MIN_BET);
                 }}
                 disabled={inputLocked}
-                aria-label="Bet amount in coins"
+                aria-label={t('game.betAmount')}
                 className={`w-full h-11 pl-3 pr-14 bg-elevated/80 border rounded-xl font-mono text-base font-bold outline-none transition tabular-nums text-center ${
                   insufficient || belowMin
                     ? 'border-danger/60 focus:border-danger'
@@ -328,7 +331,7 @@ export default function BetControls() {
                 } disabled:opacity-60`}
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-text-muted text-[10px] pointer-events-none uppercase tracking-wider">
-                coins
+                {t('common.coins')}
               </span>
             </div>
             <StepperBtn
@@ -377,7 +380,7 @@ export default function BetControls() {
               disabled={inputLocked || balance == null}
               accent
             >
-              Max
+              {t('game.maxChip')}
             </QuickChip>
           </div>
 
@@ -391,7 +394,7 @@ export default function BetControls() {
             <div className="pt-1.5 mt-1 border-t border-dashed border-divider space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-secondary">
-                  Auto cashout at
+                  {t('game.autoCashoutAt')}
                 </label>
               </div>
               <div className="relative">
@@ -402,7 +405,7 @@ export default function BetControls() {
                   value={autoAt}
                   onChange={(e) => setAutoAt(e.target.value)}
                   disabled={inputLocked}
-                  aria-label="Auto cashout multiplier"
+                  aria-label={t('game.autoCashoutAria')}
                   className="w-full h-10 pl-3 pr-7 bg-elevated/80 border border-border focus:border-success/70 rounded-xl font-mono text-sm font-bold outline-none transition tabular-nums text-center disabled:opacity-60"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-text-muted text-sm">
@@ -441,6 +444,7 @@ export default function BetControls() {
             tierColor={tier.color}
             currentBetAmount={currentBet?.amount ?? 0}
             cashedOut={cashedOut}
+            t={t}
             // PR-AVIATOR-PAYOUT-CAP — values for the 'capped' chip.
             // cashedOutAt holds the multiplier at the time the cap
             // fired; originalPayout (optional) lets us render the
@@ -468,6 +472,7 @@ export default function BetControls() {
             cashedOut={cashedOut}
             currentBet={currentBet}
             balance={balance}
+            t={t}
           />
         </div>
       </div>
@@ -479,13 +484,13 @@ export default function BetControls() {
       {balance != null && (
         <div className="flex items-center justify-between text-[10px] font-mono text-text-muted px-1">
           <span>
-            Wallet{' '}
+            {t('game.wallet')}{' '}
             <span className="text-text-secondary font-bold tabular-nums">
               {formatCoins(balance)}
             </span>
           </span>
           <span className="uppercase tracking-[0.18em]">
-            Min bet {MIN_BET} coins
+            {t('game.minBet', { min: MIN_BET })}
           </span>
         </div>
       )}
@@ -535,10 +540,12 @@ function ModeTabs({
   mode,
   onChange,
   disabled,
+  t,
 }: {
   mode: Mode;
   onChange: (m: Mode) => void;
   disabled?: boolean;
+  t: TranslateFunction;
 }) {
   const tab = (key: Mode, label: string) => {
     const active = mode === key;
@@ -561,8 +568,8 @@ function ModeTabs({
   };
   return (
     <div className="inline-flex p-1 rounded-full bg-elevated/70 border border-border w-fit">
-      {tab('bet', 'Bet')}
-      {tab('auto', 'Auto')}
+      {tab('bet', t('game.bet'))}
+      {tab('auto', t('game.auto'))}
     </div>
   );
 }
@@ -653,6 +660,7 @@ function HeroButton({
   cappedPayout,
   cappedOriginalPayout,
   cappedMultiplier,
+  t,
 }: {
   state: HeroState;
   onClick: () => void;
@@ -670,6 +678,7 @@ function HeroButton({
   cappedPayout: number | null;
   cappedOriginalPayout: number | null;
   cappedMultiplier: number | null;
+  t: TranslateFunction;
 }) {
   const base =
     'relative w-full flex-1 min-h-[112px] rounded-2xl font-extrabold text-white shadow-card overflow-hidden flex items-center justify-center transition select-none';
@@ -690,20 +699,20 @@ function HeroButton({
         '…'
       ) : amount > 0 ? (
         <span className="flex flex-col items-center leading-tight gap-1">
-          <span className="text-xs tracking-[0.22em] font-bold opacity-95">BET</span>
+          <span className="text-xs tracking-[0.22em] font-bold opacity-95">{t('game.placeBet')}</span>
           <span className="font-mono text-2xl font-black tabular-nums">{formatCoins(amount)}</span>
-          <span className="text-[10px] tracking-[0.16em] opacity-75">coins</span>
+          <span className="text-[10px] tracking-[0.16em] opacity-75">{t('common.coins')}</span>
         </span>
       ) : (
-        'BET'
+        t('game.placeBet')
       );
       break;
     case 'topup':
       visualStyle = 'bg-gradient-to-br from-warning to-[#D96A2A] hover:brightness-110 active:brightness-95';
       label = (
         <span className="flex flex-col items-center leading-tight gap-1">
-          <span className="text-xs tracking-[0.22em] font-bold opacity-95">TOP UP TO BET</span>
-          <span className="font-mono text-base font-black">Add coins</span>
+          <span className="text-xs tracking-[0.22em] font-bold opacity-95">{t('game.topUpToBet')}</span>
+          <span className="font-mono text-base font-black">{t('game.topUpToBetSub')}</span>
         </span>
       );
       break;
@@ -714,7 +723,7 @@ function HeroButton({
       };
       label = (
         <span className="flex flex-col items-center leading-tight gap-1">
-          <span className="text-xs font-bold tracking-[0.22em] opacity-95">CASHOUT</span>
+          <span className="text-xs font-bold tracking-[0.22em] opacity-95">{t('game.cashout')}</span>
           <span className="font-mono text-2xl font-black tabular-nums">
             {formatCoins(liveProfit)}
           </span>
@@ -728,7 +737,7 @@ function HeroButton({
       visualStyle = 'bg-gradient-to-br from-[#7A2233] to-[#3D1019] opacity-95';
       label = (
         <span className="flex flex-col items-center leading-tight gap-1">
-          <span className="text-xs tracking-[0.22em] opacity-95">BUSTED</span>
+          <span className="text-xs tracking-[0.22em] opacity-95">{t('game.busted')}</span>
           <span className="font-mono text-xl font-black tabular-nums">
             −{formatCoins(currentBetAmount)}
           </span>
@@ -745,11 +754,11 @@ function HeroButton({
       visualStyle = 'bg-success/15 border border-success/40 text-success';
       label = (
         <span className="flex flex-col items-center leading-tight gap-1">
-          <span className="text-xs tracking-[0.22em] font-bold opacity-95">BET PLACED</span>
+          <span className="text-xs tracking-[0.22em] font-bold opacity-95">{t('game.betPlaced')}</span>
           <span className="font-mono text-xl font-black tabular-nums">
             {formatCoins(currentBetAmount)}
           </span>
-          <span className="text-[10px] tracking-[0.16em] opacity-70">coins · waiting for round</span>
+          <span className="text-[10px] tracking-[0.16em] opacity-70">{t('game.waitingForRound')}</span>
         </span>
       );
       actionable = false;
@@ -761,10 +770,10 @@ function HeroButton({
       label = (
         <span className="flex flex-col items-center leading-tight gap-1">
           <span className="text-xs tracking-[0.22em] opacity-90">
-            WAIT FOR NEXT ROUND
+            {t('game.waitForNextRound')}
           </span>
           <span className="text-[10px] opacity-60">
-            Betting opens in a few seconds
+            {t('game.bettingOpensSoon')}
           </span>
         </span>
       );
@@ -784,17 +793,17 @@ function HeroButton({
       label = (
         <span className="flex flex-col items-center leading-tight gap-1">
           <span className="text-xs font-bold tracking-[0.22em] opacity-95">
-            MAX PAYOUT REACHED
+            {t('game.maxPayoutReached')}
           </span>
           <span className="font-mono text-xl font-black tabular-nums">
             {cappedPayout != null
               ? `+${formatCoins(cappedPayout)}`
-              : 'Auto cashed out'}
+              : t('game.autoCashedOut')}
           </span>
           <span className="text-[10px] font-mono opacity-80 tabular-nums">
             {cappedMultiplier != null
               ? `@ ${cappedMultiplier.toFixed(2)}×`
-              : 'Auto cashed out'}
+              : t('game.autoCashedOut')}
           </span>
         </span>
       );
@@ -809,11 +818,11 @@ function HeroButton({
       // out) is unambiguous.
       label = cashedOut ? (
         <span className="flex flex-col items-center leading-tight gap-1">
-          <span className="text-xs tracking-[0.22em] opacity-90">CASHED OUT</span>
-          <span className="text-[10px] opacity-70">Waiting for round to finish</span>
+          <span className="text-xs tracking-[0.22em] opacity-90">{t('game.cashedOut')}</span>
+          <span className="text-[10px] opacity-70">{t('game.waitingForFinish')}</span>
         </span>
       ) : (
-        'WAITING…'
+        t('game.waiting')
       );
       actionable = false;
       break;
@@ -849,6 +858,7 @@ function FeedbackLine({
   cashedOut,
   currentBet,
   balance,
+  t,
 }: {
   error: string | null;
   insufficient: boolean;
@@ -856,27 +866,31 @@ function FeedbackLine({
   cashedOut: boolean;
   currentBet: { amount: number; cashedOutAt: number | null } | null;
   balance: number | null;
+  t: TranslateFunction;
 }) {
   if (error) return <p className="text-xs text-danger leading-tight">{error}</p>;
   if (cashedOut && currentBet?.cashedOutAt != null) {
     const profit = Math.floor(currentBet.amount * currentBet.cashedOutAt);
     return (
       <p className="text-xs text-success leading-tight">
-        Cashed out @ {currentBet.cashedOutAt.toFixed(2)}× · +{formatCoins(profit)}
+        {t('game.cashedOutAt', {
+          multiplier: currentBet.cashedOutAt.toFixed(2),
+          coins: formatCoins(profit),
+        })}
       </p>
     );
   }
   if (insufficient) {
     return (
       <p className="text-xs text-danger leading-tight">
-        Wallet has {formatCoins(balance)} — top up to place this bet.
+        {t('game.walletHasTopUp', { amount: formatCoins(balance) })}
       </p>
     );
   }
   if (belowMin) {
     return (
       <p className="text-xs text-warning leading-tight">
-        Minimum bet is {MIN_BET} coins.
+        {t('game.minBetCoins', { min: MIN_BET })}
       </p>
     );
   }

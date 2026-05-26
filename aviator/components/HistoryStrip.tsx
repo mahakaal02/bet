@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from '@/lib/store';
 import { tierFor } from '@/lib/tiers';
 import { formatMultiplier } from '@/lib/format';
+import { useTranslation, type TranslateFunction } from '@/lib/i18n/client';
 
 /**
  * Recent-rounds rail. Tier-tinted chips, horizontally scrollable on
@@ -36,6 +37,7 @@ const EXPANDED_COUNT = 28;
 export default function HistoryStrip() {
   const history = useGame((s) => s.history);
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
 
   // Escape key closes the modal. Effect only attaches the listener
   // while the modal is open so we're not adding global handlers on
@@ -54,7 +56,7 @@ export default function HistoryStrip() {
       <div className="glass rounded-2xl px-3 py-2 lg:rounded-3xl lg:px-4 lg:py-2.5">
         <div className="flex items-center gap-3">
           <span className="hidden sm:inline-block text-[10px] font-bold uppercase tracking-[0.22em] text-text-secondary whitespace-nowrap">
-            Recent
+            {t('game.recent')}
           </span>
           <div className="relative flex-1 overflow-hidden fade-edge-x">
             <div className="flex gap-1.5 overflow-x-auto scroll-cool min-w-max">
@@ -67,7 +69,7 @@ export default function HistoryStrip() {
                     exit={{ opacity: 0 }}
                     className="text-text-muted text-xs px-2 py-1"
                   >
-                    Waiting for first round…
+                    {t('game.waitingForFirstRound')}
                   </motion.span>
                 )}
                 {history.slice(0, INLINE_COUNT).map((h, idx) => (
@@ -76,6 +78,7 @@ export default function HistoryStrip() {
                     roundNumber={h.roundNumber}
                     crashMultiplier={h.crashMultiplier}
                     animateIn={idx === 0}
+                    t={t}
                   />
                 ))}
               </AnimatePresence>
@@ -87,8 +90,8 @@ export default function HistoryStrip() {
             <button
               type="button"
               onClick={() => setOpen(true)}
-              aria-label="Show full round history"
-              title="Round history"
+              aria-label={t('game.showFullHistory')}
+              title={t('game.roundHistory')}
               className="shrink-0 grid h-7 w-7 place-items-center rounded-full border border-divider bg-elevated/60 text-text-secondary hover:text-text-primary hover:bg-elevated chip-press transition"
             >
               <svg
@@ -121,7 +124,7 @@ export default function HistoryStrip() {
             className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm px-3 pt-3 sm:px-6 sm:pt-6"
             onClick={() => setOpen(false)}
             role="dialog"
-            aria-label="Round history"
+            aria-label={t('game.roundHistory')}
             aria-modal="true"
           >
             <motion.div
@@ -135,12 +138,12 @@ export default function HistoryStrip() {
             >
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-sm font-bold tracking-[0.18em] uppercase text-text-primary">
-                  Round History
+                  {t('game.roundHistory')}
                 </h2>
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  aria-label="Close round history"
+                  aria-label={t('game.closeRoundHistory')}
                   className="grid h-8 w-8 place-items-center rounded-full border border-divider bg-elevated/60 text-text-secondary hover:text-text-primary hover:bg-elevated chip-press transition"
                 >
                   <svg
@@ -175,13 +178,14 @@ export default function HistoryStrip() {
                        `place-self`, narrower chips would left-align
                        and leave ragged-looking gaps on the right. */
                     placeSelfCentre
+                    t={t}
                   />
                 ))}
               </div>
 
               {history.length === 0 && (
                 <p className="py-8 text-center text-sm text-text-muted">
-                  No rounds yet. The first crash you see will land here.
+                  {t('game.noRoundsYet')}
                 </p>
               )}
             </motion.div>
@@ -202,11 +206,13 @@ function Chip({
   crashMultiplier,
   animateIn,
   placeSelfCentre = false,
+  t,
 }: {
   roundNumber: number;
   crashMultiplier: number;
   animateIn: boolean;
   placeSelfCentre?: boolean;
+  t: TranslateFunction;
 }) {
   const tier = tierFor(crashMultiplier);
   const isLegendary = crashMultiplier >= 10;
@@ -228,7 +234,7 @@ function Chip({
         backgroundColor: `${tier.color}1A`,
         color: tier.color,
       }}
-      title={`Round #${roundNumber} — ${tier.label}`}
+      title={t('game.roundLabel', { n: roundNumber, tier: tier.label })}
     >
       {isLegendary ? (
         <span className="shimmer-text">{formatMultiplier(crashMultiplier)}</span>

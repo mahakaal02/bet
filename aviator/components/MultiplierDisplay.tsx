@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { useGame } from '@/lib/store';
+import { useTranslation } from '@/lib/i18n/client';
 
 /**
  * Top-of-stage status pill. The big numerical multiplier is now
@@ -31,6 +32,7 @@ export default function MultiplierDisplay() {
 }
 
 function BettingPill({ bettingEndsAt }: { bettingEndsAt: number | null }) {
+  const { t } = useTranslation();
   // Whole-second integer countdown. Previously this displayed one
   // decimal (e.g. `8.3s`) which read as "milliseconds in the readout"
   // and made the urgency feel jittery rather than crisp. A 1 Hz tick
@@ -54,7 +56,7 @@ function BettingPill({ bettingEndsAt }: { bettingEndsAt: number | null }) {
   // to ember orange so the eye is drawn to the countdown.
   const urgent = remainingSec <= 3;
   const color = urgent ? '#FF8A3D' : '#8B5CFF';
-  const label = urgent ? 'Almost!' : 'Starts in';
+  const label = urgent ? t('game.almost') : t('game.startsIn');
 
   return (
     <motion.div
@@ -84,6 +86,7 @@ function BettingPill({ bettingEndsAt }: { bettingEndsAt: number | null }) {
 }
 
 function RunningPill() {
+  const { t } = useTranslation();
   return (
     <motion.div
       key="running"
@@ -97,13 +100,14 @@ function RunningPill() {
         style={{ boxShadow: '0 0 8px #22E0BD' }}
       />
       <span className="text-[10px] font-bold uppercase tracking-[0.22em]">
-        In flight
+        {t('game.inFlight')}
       </span>
     </motion.div>
   );
 }
 
 function CrashedPill() {
+  const { t } = useTranslation();
   return (
     <motion.div
       key="crashed"
@@ -114,13 +118,14 @@ function CrashedPill() {
     >
       <span className="inline-block h-1.5 w-1.5 rounded-full bg-danger" />
       <span className="text-[10px] font-bold uppercase tracking-[0.22em]">
-        Crashed
+        {t('game.crashed')}
       </span>
     </motion.div>
   );
 }
 
 function ConnectingPill() {
+  const { t } = useTranslation();
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -129,7 +134,7 @@ function ConnectingPill() {
     >
       <span className="inline-block h-1.5 w-1.5 rounded-full bg-text-muted animate-pulse" />
       <span className="text-[10px] font-bold uppercase tracking-[0.22em]">
-        Connecting
+        {t('game.connecting')}
       </span>
     </motion.div>
   );

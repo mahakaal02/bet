@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { formatCoins, formatMultiplier } from '@/lib/format';
+import { useTranslation } from '@/lib/i18n/client';
 
 /**
  * "My stats" modal — player-facing performance summary. Mirrors the
@@ -44,13 +45,6 @@ interface StatsResp {
   biggestWin: number;
 }
 
-const RANGES: { key: Range; label: string }[] = [
-  { key: 'day', label: 'Day' },
-  { key: 'week', label: 'Week' },
-  { key: 'month', label: 'Month' },
-  { key: 'all', label: 'All' },
-];
-
 export default function StatsModal({
   open,
   onClose,
@@ -58,6 +52,13 @@ export default function StatsModal({
   open: boolean;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
+  const RANGES: { key: Range; label: string }[] = [
+    { key: 'day', label: t('stats.rangeDay') },
+    { key: 'week', label: t('stats.rangeWeek') },
+    { key: 'month', label: t('stats.rangeMonth') },
+    { key: 'all', label: t('stats.rangeAll') },
+  ];
   const [range, setRange] = useState<Range>('day');
   const [data, setData] = useState<StatsResp | null>(null);
   const [loading, setLoading] = useState(false);
@@ -78,7 +79,7 @@ export default function StatsModal({
         if (!cancelled) setData(r);
       })
       .catch((e) => {
-        if (!cancelled) setError(e?.message ?? 'Could not load stats');
+        if (!cancelled) setError(e?.message ?? t('stats.loadFailed'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -111,7 +112,7 @@ export default function StatsModal({
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm px-3 pt-3 sm:px-6 sm:pt-12"
           onClick={onClose}
           role="dialog"
-          aria-label="My stats"
+          aria-label={t('stats.title')}
           aria-modal="true"
         >
           <motion.div
@@ -125,12 +126,12 @@ export default function StatsModal({
           >
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-bold tracking-[0.18em] uppercase text-text-primary">
-                My Stats
+                {t('stats.title')}
               </h2>
               <button
                 type="button"
                 onClick={onClose}
-                aria-label="Close stats"
+                aria-label={t('stats.closeAria')}
                 className="grid h-8 w-8 place-items-center rounded-full border border-divider bg-elevated/60 text-text-secondary hover:text-text-primary hover:bg-elevated chip-press transition"
               >
                 <svg
@@ -179,12 +180,12 @@ export default function StatsModal({
               <p className="py-6 text-center text-sm text-danger">{error}</p>
             ) : loading && !data ? (
               <p className="py-6 text-center text-sm text-text-muted">
-                Loading stats…
+                {t('stats.loading')}
               </p>
             ) : data ? (
               <div className="grid grid-cols-2 gap-2">
                 <StatCard
-                  label="Biggest X"
+                  label={t('stats.biggestX')}
                   value={
                     data.biggestMultiplier > 0
                       ? formatMultiplier(data.biggestMultiplier)
@@ -193,7 +194,7 @@ export default function StatsModal({
                   accent="gold"
                 />
                 <StatCard
-                  label="Biggest Win"
+                  label={t('stats.biggestWin')}
                   value={
                     data.biggestWin > 0
                       ? `+${formatCoins(data.biggestWin, { compact: true })}`
@@ -202,11 +203,11 @@ export default function StatsModal({
                   accent="success"
                 />
                 <StatCard
-                  label="Total Bets"
+                  label={t('stats.totalBets')}
                   value={data.totalBets.toLocaleString('en-IN')}
                 />
                 <StatCard
-                  label="Win Rate"
+                  label={t('stats.winRate')}
                   value={
                     data.totalBets > 0
                       ? `${Math.round(data.winRate * 100)}%`
@@ -214,16 +215,16 @@ export default function StatsModal({
                   }
                   subValue={
                     data.totalBets > 0
-                      ? `${data.wins} won · ${data.losses} lost`
+                      ? t('stats.winsLosses', { wins: data.wins, losses: data.losses })
                       : undefined
                   }
                 />
                 <StatCard
-                  label="Wagered"
+                  label={t('stats.wagered')}
                   value={formatCoins(data.totalStaked, { compact: true })}
                 />
                 <StatCard
-                  label="Net P/L"
+                  label={t('stats.netPL')}
                   value={
                     (data.netProfit >= 0 ? '+' : '−') +
                     formatCoins(Math.abs(data.netProfit), { compact: true })
@@ -243,10 +244,10 @@ export default function StatsModal({
                 doesn't wonder why their "Day" total is lower than
                 what they remember playing this morning. */}
             <p className="mt-3 text-[10px] text-text-muted text-center leading-tight">
-              {range === 'day' && 'Last 24 hours · sampled from your 200 most recent bets'}
-              {range === 'week' && 'Last 7 days · sampled from your 200 most recent bets'}
-              {range === 'month' && 'Last 30 days · sampled from your 200 most recent bets'}
-              {range === 'all' && 'Since account creation · sampled from your 200 most recent bets'}
+              {range === 'day' && t('stats.footnoteDay')}
+              {range === 'week' && t('stats.footnoteWeek')}
+              {range === 'month' && t('stats.footnoteMonth')}
+              {range === 'all' && t('stats.footnoteAll')}
             </p>
           </motion.div>
         </motion.div>

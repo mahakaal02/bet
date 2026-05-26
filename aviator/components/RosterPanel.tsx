@@ -6,6 +6,7 @@ import { useGame } from '@/lib/store';
 import { tierFor } from '@/lib/tiers';
 import { formatCoins } from '@/lib/format';
 import type { RosterEntry } from '@/lib/types';
+import { useTranslation } from '@/lib/i18n/client';
 
 /**
  * Live player feed — the social side of the table. Two visual states:
@@ -37,6 +38,7 @@ function colorFor(name: string): string {
 export default function RosterPanel() {
   const roster = useGame((s) => s.roster);
   const phase = useGame((s) => s.phase);
+  const { t } = useTranslation();
 
   const { active, cashedOut, totalStake, totalCashed } = useMemo(() => {
     let totalStake = 0;
@@ -62,7 +64,7 @@ export default function RosterPanel() {
       <header className="px-4 pt-4 pb-3 border-b border-divider">
         <div className="flex items-center justify-between">
           <h2 className="text-xs font-bold uppercase tracking-[0.20em] text-text-secondary">
-            Players
+            {t('game.players')}
           </h2>
           <span className="font-mono text-xs text-text-secondary">
             {roster.length}
@@ -70,12 +72,12 @@ export default function RosterPanel() {
         </div>
         <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
           <Stat
-            label="Bet volume"
+            label={t('game.betVolume')}
             value={formatCoins(totalStake)}
             tone="primary"
           />
           <Stat
-            label="Paid out"
+            label={t('game.paidOut')}
             value={formatCoins(totalCashed)}
             tone="success"
           />
@@ -86,24 +88,24 @@ export default function RosterPanel() {
         {roster.length === 0 ? (
           <p className="text-text-muted text-xs px-2 py-3">
             {phase === 'BETTING'
-              ? 'No bets yet for this round.'
-              : 'Waiting for next round…'}
+              ? t('game.noBetsYet')
+              : t('game.waitingForNextRound')}
           </p>
         ) : (
           <>
             <AnimatePresence initial={false}>
               {active.map((b) => (
-                <PlayerRow key={`a-${b.username}`} bet={b} state="active" />
+                <PlayerRow key={`a-${b.username}`} bet={b} state="active" autoLabel={t('game.autoLabel')} autoTitle={t('game.autoCashoutTarget')} />
               ))}
             </AnimatePresence>
             {cashedOut.length > 0 && (
               <div className="pt-2 mt-2 border-t border-divider/60 space-y-1">
                 <p className="text-[10px] uppercase tracking-[0.18em] text-text-muted px-2 pt-1">
-                  Cashed out · {cashedOut.length}
+                  {t('game.cashedOutCount', { count: cashedOut.length })}
                 </p>
                 <AnimatePresence initial={false}>
                   {cashedOut.map((b) => (
-                    <PlayerRow key={`c-${b.username}`} bet={b} state="cashed" />
+                    <PlayerRow key={`c-${b.username}`} bet={b} state="cashed" autoLabel={t('game.autoLabel')} autoTitle={t('game.autoCashoutTarget')} />
                   ))}
                 </AnimatePresence>
               </div>
@@ -149,9 +151,13 @@ function Stat({
 function PlayerRow({
   bet,
   state,
+  autoLabel,
+  autoTitle,
 }: {
   bet: RosterEntry;
   state: 'active' | 'cashed';
+  autoLabel: string;
+  autoTitle: string;
 }) {
   const color = colorFor(bet.username);
   const tier = bet.cashedOutAt != null ? tierFor(bet.cashedOutAt) : null;
@@ -197,9 +203,9 @@ function PlayerRow({
         ) : bet.autoCashoutAt != null ? (
           <span
             className="text-[10px] px-1.5 py-0.5 rounded-md border border-success/40 text-success/90 bg-success/10 tabular-nums"
-            title="Auto-cashout target"
+            title={autoTitle}
           >
-            auto {bet.autoCashoutAt.toFixed(2)}×
+            {autoLabel} {bet.autoCashoutAt.toFixed(2)}×
           </span>
         ) : (
           <span className="text-text-muted">—</span>

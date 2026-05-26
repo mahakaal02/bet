@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useGame } from '@/lib/store';
 import { getSocket } from '@/lib/socket';
 import { getUser } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n/client';
 
 const USERNAME_PALETTE = [
   '#8B5CFF', '#3DD9FF', '#22E0BD', '#FFC857',
@@ -34,6 +35,7 @@ function relative(now: number, iso: string) {
 export default function ChatPanel() {
   const chat = useGame((s) => s.chat);
   const me = typeof window === 'undefined' ? null : getUser()?.username ?? null;
+  const { t } = useTranslation();
 
   const listRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState('');
@@ -67,7 +69,7 @@ export default function ChatPanel() {
       { message: text },
       (ack?: { ok: boolean; error?: string }) => {
         setSending(false);
-        if (ack && ack.ok === false) setError(ack.error ?? 'send failed');
+        if (ack && ack.ok === false) setError(ack.error ?? t('game.chatSendFailed'));
         else setDraft('');
       },
     );
@@ -80,11 +82,11 @@ export default function ChatPanel() {
     >
       <header className="px-4 pt-4 pb-3 border-b border-divider flex items-center justify-between">
         <h2 className="text-xs font-bold uppercase tracking-[0.20em] text-text-secondary">
-          Live chat
+          {t('game.liveChat')}
         </h2>
         <span className="inline-flex items-center gap-1.5 text-[10px] text-success font-bold uppercase tracking-[0.18em]">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-success glow-breath" />
-          Online
+          {t('common.online')}
         </span>
       </header>
 
@@ -94,7 +96,7 @@ export default function ChatPanel() {
       >
         {chat.length === 0 ? (
           <p className="text-text-muted text-xs py-2">
-            Be the first to say something.
+            {t('game.chatBeFirst')}
           </p>
         ) : (
           <AnimatePresence initial={false}>
@@ -116,7 +118,7 @@ export default function ChatPanel() {
                     {m.username}
                     {isMe && (
                       <span className="text-text-muted text-[10px] ml-1 font-medium">
-                        you
+                        {t('game.chatYou')}
                       </span>
                     )}
                   </span>
@@ -141,7 +143,7 @@ export default function ChatPanel() {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           maxLength={280}
-          placeholder="Say something…"
+          placeholder={t('game.chatPlaceholder')}
           className="flex-1 bg-elevated border border-border rounded-xl px-3 py-2 text-sm outline-none focus:border-aurora-violet/70 transition"
         />
         <button
@@ -149,7 +151,7 @@ export default function ChatPanel() {
           disabled={sending || !draft.trim()}
           className="px-4 py-2 rounded-xl text-sm font-bold text-white bg-gradient-to-br from-aurora-violet to-[#5C2BFF] hover:brightness-110 transition disabled:opacity-40"
         >
-          Send
+          {t('game.chatSend')}
         </button>
       </form>
 
