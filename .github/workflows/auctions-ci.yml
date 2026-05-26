@@ -1,0 +1,71 @@
+# Auctions (Kalki Auctions / hub) — CI. Mirrors `bet-ci.yml` for the
+# auctions app: typecheck + production build on every push to main and
+# every PR that touches the `auctions/` tree. Narrow path filter so the
+# action minutes don't get burned on changes elsewhere in the monorepo.
+name: Auctions CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "auctions/**"
+      - ".github/workflows/auctions-ci.yml"
+  pull_request:
+    paths:
+      - "auctions/**"
+      - ".github/workflows/auctions-ci.yml"
+
+# Cancel an in-flight run if a newer commit is pushed to the same PR/branch —
+# avoids burning compute on a stack of obsolete runs.
+concurrency:
+  group: auctions-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: auctions
+
+    # Mirror the env the production build receives (build-and-push.yml).
+    # Build-time inlined NEXT_PUBLIC_* values bake into the static chunks,
+    # so CI passes the same set the prod image uses. CI-only values are
+    # arbitrary placeholders — they never reach a real network call.
+    env:
+      NEXT_PUBLIC_AUCTIONS_URL: http://localhost:3200
+      NEXT_PUBLIC_AVIATOR_URL: http://localhost:3000
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:4000
+      NEXT_PUBLIC_EXCHANGE_URL: http://localhost:3100
+      NEXT_PUBLIC_ADMIN_URL: http://localhost:5173
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: auctions/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Production build — catches Next.js-level issues that pure
+      # `tsc --noEmit` misses (e.g. invalid metadata exports, server-
+      # action shape mismatches, missing 'use client' on hook usage).
+      - name: Next build
+        run: npm run build
+
+      # `next lint` is advisory — same rationale as `bet-ci.yml`:
+      # auctions doesn't ship an .eslintrc, so `next lint` drops into
+      # an interactive setup prompt that can't be answered in CI.
+      # Warnings still surface in the run output without blocking.
+      - name: Lint
+        continue-on-error: true
+        run: npx next lint --max-warnings 0

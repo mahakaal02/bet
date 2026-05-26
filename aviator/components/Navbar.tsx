@@ -5,8 +5,10 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { getUser, getToken } from '@/lib/auth';
 import { useGame } from '@/lib/store';
+import { useTranslation } from '@/lib/i18n/client';
 import WalletChip from './WalletChip';
 import StatsModal from './StatsModal';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 /**
  * Resolve the Kalki hub URL with the bearer token attached, so a logo
@@ -37,6 +39,7 @@ function hubUrl(): string {
 export default function Navbar() {
   const [username, setUsername] = useState<string>('?');
   const [statsOpen, setStatsOpen] = useState(false);
+  const { t, locale } = useTranslation();
   useEffect(() => {
     setUsername(getUser()?.username ?? '?');
   }, []);
@@ -50,7 +53,7 @@ export default function Navbar() {
       <div className="mx-auto max-w-7xl flex items-center justify-between px-4 lg:px-6 py-2.5">
         <a
           href={hubUrl()}
-          aria-label="Back to Kalki hub"
+          aria-label={t('nav.backToKalkiHub')}
           className="flex items-center gap-2.5 chip-press"
         >
           <Image
@@ -81,11 +84,12 @@ export default function Navbar() {
             }}
           />
           <span className="text-[11px] font-bold text-text-secondary tabular-nums">
-            {onlineCount} online
+            {onlineCount} {t('common.online').toLowerCase()}
           </span>
         </div>
 
         <div className="flex items-center gap-2 text-sm">
+          <LanguageSwitcher currentLocale={locale} size="sm" />
           <WalletChip />
           {/* My-stats button. Bar-chart icon, opens the StatsModal
               with Day/Week/Month/All tabs. Sits next to Notifications
@@ -93,8 +97,8 @@ export default function Navbar() {
           <button
             type="button"
             onClick={() => setStatsOpen(true)}
-            aria-label="My stats"
-            title="My stats"
+            aria-label={t('nav.myStats')}
+            title={t('nav.myStats')}
             className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-elevated/60 text-text-secondary hover:bg-elevated hover:text-text-primary chip-press transition"
           >
             <svg
@@ -111,8 +115,8 @@ export default function Navbar() {
             </svg>
           </button>
           <Link
-            href="/notifications"
-            aria-label="Notifications"
+            href={`/${locale}/notifications`}
+            aria-label={t('nav.notifications')}
             className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-elevated/60 text-text-secondary hover:bg-elevated hover:text-text-primary chip-press transition"
           >
             <svg
@@ -126,9 +130,9 @@ export default function Navbar() {
             </svg>
           </Link>
           <Link
-            href="/profile"
-            aria-label="Profile"
-            title={username !== '?' ? `@${username}` : 'Profile'}
+            href={`/${locale}/profile`}
+            aria-label={t('nav.profile')}
+            title={username !== '?' ? `@${username}` : t('nav.profile')}
             className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-elevated/60 text-text-secondary hover:bg-elevated hover:text-text-primary chip-press transition"
           >
             <svg
