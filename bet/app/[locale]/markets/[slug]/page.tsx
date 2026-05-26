@@ -17,7 +17,8 @@ import { OpenOrdersPanel } from "@/components/OpenOrdersPanel";
 import { MobileTradeBar } from "@/components/MobileTradeBar";
 import { getAuthedUser } from "@/lib/auth";
 import {
-  alternatesFor,
+  DEFAULT_LOCALE,
+  buildLocalizedMetadata,
   isLocale,
   t,
   type Locale,
@@ -40,10 +41,7 @@ export async function generateMetadata({
   params: Promise<{ locale: string; slug: string }>;
 }): Promise<Metadata> {
   const { locale: raw, slug } = await params;
-  const locale: Locale = isLocale(raw) ? raw : "en";
-  const origin = (
-    process.env.NEXTAUTH_URL ?? "http://localhost:3100"
-  ).replace(/\/$/, "");
+  const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
   const m = await db.market.findUnique({
     where: { slug },
     select: {
@@ -55,14 +53,18 @@ export async function generateMetadata({
       resolvedAs: true,
     },
   });
+
   if (!m) {
-    return {
+    // Even on a missing market we emit a full localized metadata
+    // block so the 404 page itself is properly tagged for crawlers
+    // that hit dead-link variants.
+    return buildLocalizedMetadata({
+      locale,
+      path: `/markets/${slug}`,
       title: t("market.notFound", locale),
-      alternates: {
-        canonical: `${origin}/${locale}/markets/${slug}`,
-        languages: alternatesFor(origin, `/markets/${slug}`),
-      },
-    };
+      description: t("errors.notFoundDescription", locale),
+      noindex: true,
+    });
   }
 
   const yes =
@@ -76,25 +78,22 @@ export async function generateMetadata({
     locale,
   )} ${(1 - yes).toFixed(2)}`;
   // First line of the description, capped for nice-looking previews.
+  // Market title/description are user-generated and stay in their
+  // authoring language — the surrounding chrome (price tag, OG type)
+  // is localized.
   const teaser = m.description.split("\n")[0].slice(0, 180);
 
-  return {
+  // Build the base block via the helper, then override `ogType` to
+  // "article" because per-market pages are content (not the homepage)
+  // — gives crawlers a more accurate signal. Sibling
+  // `opengraph-image.tsx` route file supplies the OG image.
+  return buildLocalizedMetadata({
+    locale,
+    path: `/markets/${slug}`,
     title: m.title,
     description: `${priceTag} — ${teaser}`,
-    alternates: {
-      canonical: `${origin}/${locale}/markets/${slug}`,
-      languages: alternatesFor(origin, `/markets/${slug}`),
-    },
-    openGraph: {
-      title: m.title,
-      description: priceTag,
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: m.title,
-      description: priceTag,
-    },
-  };
+    ogType: "article",
+  });
 }
 
 export default async function MarketPage({

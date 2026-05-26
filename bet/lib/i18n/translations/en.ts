@@ -29,6 +29,57 @@ const en: Dictionary = {
       "Trade YES/NO on real-world events with your Kalki Bet coins — the same wallet that powers auctions and Aviator.",
     description:
       "Prediction markets, live auctions, and crash-game gameplay — one wallet, three products, all powered by demo coins.",
+    // ─── Per-page SEO (title + description) ────────────────────
+    // Marketing-tone copy distinct from the on-page H1s. These flow
+    // into <title>, <meta description>, OG and Twitter cards.
+    homeTitle: "Predict, trade and win on real-world events",
+    homeDescription:
+      "Trade YES/NO prediction markets on news, politics, sports and crypto. Free starter coins; cash out anytime before the event resolves.",
+    marketsTitle: "Prediction markets — trade real-world events",
+    marketsDescription:
+      "Browse open prediction markets, watch prices move in real time, and trade with your Kalki Bet coins.",
+    walletTitle: "Your wallet · Kalki Bet coins",
+    walletDescription:
+      "Top up, withdraw, and track every coin movement. One balance across Markets, Auctions and Aviator.",
+    profileTitle: "Your profile",
+    profileDescription:
+      "Manage your account, referrals, achievements and verification status.",
+    portfolioTitle: "Your portfolio",
+    portfolioDescription:
+      "Mark-to-market valuation of your open YES/NO positions across every prediction market.",
+    watchlistTitle: "Watchlist",
+    watchlistDescription:
+      "Your starred markets — quick access to the prediction markets you're tracking.",
+    notificationsTitle: "Notifications",
+    notificationsDescription:
+      "Trade fills, market resolutions, mentions and rewards — your inbox for everything that happened while you were away.",
+    leaderboardTitle: "Leaderboard — top traders",
+    leaderboardDescription:
+      "Top traders ranked by XP. Earn XP by trading on prediction markets — 1 XP per 20 coins spent.",
+    achievementsTitle: "Achievements — trader badges",
+    achievementsDescription:
+      "Unlock badges by trading, inviting friends and hitting milestones. Earn XP and bonus coins.",
+    kycTitle: "Identity verification",
+    kycDescription:
+      "Submit identity documents to unlock higher withdrawal limits. Encrypted at rest and reviewed by a compliance specialist.",
+    loginTitle: "Sign in to Kalki Exchange",
+    loginDescription:
+      "Sign in to trade prediction markets, manage your wallet and track your portfolio.",
+    registerTitle: "Create your Kalki account",
+    registerDescription:
+      "Sign up in seconds and receive 10,000 starter coins. Trade prediction markets on news, sports and crypto.",
+    forgotTitle: "Reset your password",
+    forgotDescription:
+      "Forgot your password? Enter your email to receive a reset link.",
+    resetTitle: "Choose a new password",
+    resetDescription:
+      "Set a new password for your Kalki Exchange account.",
+    verifyTitle: "Verify your email",
+    verifyDescription:
+      "Confirm your email address to unlock withdrawals and account features.",
+    withdrawTitle: "Withdraw coins",
+    withdrawDescription:
+      "Cash out your Kalki Bet coins to UPI or bank. Each withdrawal is reviewed before payout.",
   },
 
   nav: {

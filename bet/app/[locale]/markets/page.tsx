@@ -8,7 +8,8 @@ import { db } from "@/lib/db";
 import { priceYes } from "@/lib/amm";
 import { fmtCoins, fmtPrice } from "@/lib/utils";
 import {
-  alternatesFor,
+  DEFAULT_LOCALE,
+  buildLocalizedMetadata,
   isLocale,
   localizedPath,
   t,
@@ -35,18 +36,13 @@ export async function generateMetadata({
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
   const { locale: raw } = await params;
-  const locale: Locale = isLocale(raw) ? raw : "en";
-  const origin = (
-    process.env.NEXTAUTH_URL ?? "http://localhost:3100"
-  ).replace(/\/$/, "");
-  return {
-    title: t("market.heading", locale),
-    description: t("meta.description", locale),
-    alternates: {
-      canonical: `${origin}/${locale}/markets`,
-      languages: alternatesFor(origin, "/markets"),
-    },
-  };
+  const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  return buildLocalizedMetadata({
+    locale,
+    path: "/markets",
+    title: t("meta.marketsTitle", locale),
+    description: t("meta.marketsDescription", locale),
+  });
 }
 
 export default async function MarketsPage({

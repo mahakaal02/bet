@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -12,7 +13,14 @@ import { Badge } from "@/components/ui/Badge";
 import { db } from "@/lib/db";
 import { priceYes } from "@/lib/amm";
 import { fmtCoins, fmtPrice } from "@/lib/utils";
-import { isLocale, localizedPath, t, type Locale } from "@/lib/i18n";
+import {
+  DEFAULT_LOCALE,
+  buildLocalizedMetadata,
+  isLocale,
+  localizedPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 import {
   TrendingUp,
   Trophy,
@@ -20,6 +28,28 @@ import {
   ShieldCheck,
   ArrowRight,
 } from "lucide-react";
+
+/**
+ * Landing-page SEO metadata. Because this is the locale root (e.g.
+ * `/en`, `/pt`), the title here is the bare site name — the layout's
+ * title template won't double-wrap it the way it does on sub-pages.
+ * Description sells the product in the user's language; OG + Twitter
+ * pick up the same copy.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale: raw } = await params;
+  const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  return buildLocalizedMetadata({
+    locale,
+    path: "/",
+    title: t("meta.homeTitle", locale),
+    description: t("meta.homeDescription", locale),
+  });
+}
 
 /**
  * Localized landing page (PR-BET-I18N).

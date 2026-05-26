@@ -10,7 +10,14 @@ import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { MIN_WITHDRAW_COINS } from "@/lib/coins";
 import { fmtCoins, timeAgo } from "@/lib/utils";
-import { isLocale, localizedPath, t, type Locale } from "@/lib/i18n";
+import {
+  DEFAULT_LOCALE,
+  buildLocalizedMetadata,
+  isLocale,
+  localizedPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -20,13 +27,14 @@ export async function generateMetadata({
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
   const { locale: raw } = await params;
-  const locale: Locale = isLocale(raw) ? raw : "en";
-  return {
-    title: t("withdraw.heading", locale),
-    description: t("withdraw.subtext", locale, {
-      amount: fmtCoins(MIN_WITHDRAW_COINS),
-    }),
-  };
+  const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  return buildLocalizedMetadata({
+    locale,
+    path: "/wallet/withdraw",
+    title: t("meta.withdrawTitle", locale),
+    description: t("meta.withdrawDescription", locale),
+    noindex: true,
+  });
 }
 
 /**

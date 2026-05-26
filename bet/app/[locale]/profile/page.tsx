@@ -12,7 +12,14 @@ import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { fmtCoins, levelFromXp } from "@/lib/utils";
 import { Coins, Flame, Share2, Trophy } from "lucide-react";
-import { isLocale, localizedPath, t, type Locale } from "@/lib/i18n";
+import {
+  DEFAULT_LOCALE,
+  buildLocalizedMetadata,
+  isLocale,
+  localizedPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -22,11 +29,15 @@ export async function generateMetadata({
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
   const { locale: raw } = await params;
-  const locale: Locale = isLocale(raw) ? raw : "en";
-  return {
-    title: t("profile.heading", locale),
-    description: t("profile.referralSubtext", locale),
-  };
+  const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  return buildLocalizedMetadata({
+    locale,
+    path: "/profile",
+    title: t("meta.profileTitle", locale),
+    description: t("meta.profileDescription", locale),
+    ogType: "profile",
+    noindex: true,
+  });
 }
 
 export default async function ProfilePage({

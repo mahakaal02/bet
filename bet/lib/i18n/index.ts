@@ -31,6 +31,12 @@ export {
   type Locale,
 } from "./config";
 
+export {
+  buildLocalizedMetadata,
+  openGraphLocale,
+  type LocalizedMetadataInput,
+} from "./seo";
+
 /**
  * Dictionary registry. Keyed by locale; English is the only one
  * required to be complete — others are typed `Partial<Dictionary>`

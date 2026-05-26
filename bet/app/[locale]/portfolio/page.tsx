@@ -8,7 +8,14 @@ import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { priceYes } from "@/lib/amm";
 import { fmtCoins, fmtPrice, timeAgo } from "@/lib/utils";
-import { isLocale, localizedPath, t, type Locale } from "@/lib/i18n";
+import {
+  DEFAULT_LOCALE,
+  buildLocalizedMetadata,
+  isLocale,
+  localizedPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +25,14 @@ export async function generateMetadata({
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
   const { locale: raw } = await params;
-  const locale: Locale = isLocale(raw) ? raw : "en";
-  return {
-    title: t("portfolio.heading", locale),
-    description: t("portfolio.subtext", locale),
-  };
+  const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  return buildLocalizedMetadata({
+    locale,
+    path: "/portfolio",
+    title: t("meta.portfolioTitle", locale),
+    description: t("meta.portfolioDescription", locale),
+    noindex: true,
+  });
 }
 
 export default async function PortfolioPage({

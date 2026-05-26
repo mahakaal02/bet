@@ -21,6 +21,54 @@ const pt: Partial<Dictionary> = {
       "Negocie SIM/NÃO em eventos do mundo real com suas moedas Kalki Bet — a mesma carteira que alimenta os leilões e o Aviator.",
     description:
       "Mercados de previsão, leilões ao vivo e crash-game — uma carteira, três produtos, tudo movido a moedas demo.",
+    homeTitle: "Preveja, negocie e ganhe em eventos do mundo real",
+    homeDescription:
+      "Negocie mercados de previsão SIM/NÃO sobre notícias, política, esportes e cripto. Moedas iniciais grátis; faça cash-out a qualquer momento antes do evento ser resolvido.",
+    marketsTitle: "Mercados de previsão — negocie eventos reais",
+    marketsDescription:
+      "Explore mercados de previsão abertos, veja os preços se moverem em tempo real e negocie com suas moedas Kalki Bet.",
+    walletTitle: "Sua carteira · moedas Kalki Bet",
+    walletDescription:
+      "Recarregue, saque e acompanhe cada movimentação de moedas. Um saldo único entre Mercados, Leilões e Aviator.",
+    profileTitle: "Seu perfil",
+    profileDescription:
+      "Gerencie sua conta, indicações, conquistas e status de verificação.",
+    portfolioTitle: "Seu portfólio",
+    portfolioDescription:
+      "Avaliação a mercado das suas posições SIM/NÃO em aberto em todos os mercados de previsão.",
+    watchlistTitle: "Favoritos",
+    watchlistDescription:
+      "Seus mercados favoritados — acesso rápido aos mercados de previsão que você acompanha.",
+    notificationsTitle: "Notificações",
+    notificationsDescription:
+      "Execuções de negociações, resoluções de mercado, menções e recompensas — sua caixa de entrada para tudo que aconteceu enquanto você esteve fora.",
+    leaderboardTitle: "Ranking — top traders",
+    leaderboardDescription:
+      "Top traders ranqueados por XP. Ganhe XP negociando em mercados de previsão — 1 XP a cada 20 moedas gastas.",
+    achievementsTitle: "Conquistas — medalhas de trader",
+    achievementsDescription:
+      "Desbloqueie medalhas negociando, convidando amigos e batendo metas. Ganhe XP e moedas bônus.",
+    kycTitle: "Verificação de identidade",
+    kycDescription:
+      "Envie documentos de identidade para desbloquear limites maiores de saque. Criptografados em repouso e revisados por um especialista de compliance.",
+    loginTitle: "Entrar na Kalki Exchange",
+    loginDescription:
+      "Entre para negociar mercados de previsão, gerenciar sua carteira e acompanhar seu portfólio.",
+    registerTitle: "Crie sua conta Kalki",
+    registerDescription:
+      "Cadastre-se em segundos e receba 10.000 moedas iniciais. Negocie mercados de previsão sobre notícias, esportes e cripto.",
+    forgotTitle: "Redefinir sua senha",
+    forgotDescription:
+      "Esqueceu sua senha? Digite seu e-mail para receber um link de redefinição.",
+    resetTitle: "Escolha uma nova senha",
+    resetDescription:
+      "Defina uma nova senha para sua conta Kalki Exchange.",
+    verifyTitle: "Verifique seu e-mail",
+    verifyDescription:
+      "Confirme seu endereço de e-mail para desbloquear saques e recursos da conta.",
+    withdrawTitle: "Sacar moedas",
+    withdrawDescription:
+      "Saque suas moedas Kalki Bet para UPI ou banco. Cada saque é revisado antes do pagamento.",
   },
 
   nav: {

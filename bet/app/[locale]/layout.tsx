@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import {
   DEFAULT_LOCALE,
   LOCALES,
-  alternatesFor,
+  buildLocalizedMetadata,
   isLocale,
   t,
   type Locale,
@@ -25,6 +25,9 @@ import {
  *   4. Emit the canonical link tag pointing at the current URL,
  *      so duplicate content (the same page reachable via /en/foo
  *      and /foo before middleware) consolidates to the localized URL.
+ *   5. Provide the title template (`%s · Kalki Exchange`) inherited
+ *      by every child page's `title`, so per-page metadata only needs
+ *      the page-specific portion.
  *
  * Layout chrome (Navbar, footer, etc.) intentionally lives at a
  * lower level (per-page or in shared client components) rather
@@ -53,52 +56,29 @@ export async function generateMetadata({
 }: LocaleLayoutProps): Promise<Metadata> {
   const { locale: raw } = await params;
   const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  const siteName = t("meta.siteName", locale);
 
-  const origin =
-    process.env.NEXTAUTH_URL?.replace(/\/$/, "") ?? "http://localhost:3100";
-
-  // Empty pathname means the alternates target the locale roots
-  // (`/en`, `/pt`, …). Per-page metadata in deeper pages should
-  // call `alternatesFor(origin, '/wallet')` etc. so each route's
-  // hreflang block points at the correct sub-path.
-  const languages = alternatesFor(origin, "/");
-
-  const title = t("meta.siteName", locale);
-  const description = t("meta.description", locale);
+  // Layout-level metadata acts as the default for any descendant
+  // that doesn't define its own `generateMetadata`. The title.template
+  // here means a child page returning `title: "Wallet"` ends up as
+  // `Wallet · Kalki Exchange` in the browser tab.
+  const base = buildLocalizedMetadata({
+    locale,
+    path: "/",
+    title: siteName,
+    description: t("meta.description", locale),
+  });
 
   return {
-    title: { default: title, template: `%s · ${title}` },
-    description,
-    alternates: {
-      canonical: `${origin}/${locale}`,
-      languages,
+    ...base,
+    title: {
+      default: siteName,
+      template: `%s · ${siteName}`,
     },
-    openGraph: {
-      type: "website",
-      siteName: title,
-      title,
-      description,
-      locale: openGraphLocale(locale),
-      // Per-locale alternate OG locales for richer unfurls.
-      alternateLocale: LOCALES.filter((l) => l !== locale).map(openGraphLocale),
-    },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description,
-    },
+    metadataBase: new URL(
+      (process.env.NEXTAUTH_URL ?? "http://localhost:3100").replace(/\/$/, ""),
+    ),
   };
-}
-
-/** Map our short locale codes to the canonical Open Graph
- *  language_TERRITORY format. */
-function openGraphLocale(l: Locale): string {
-  switch (l) {
-    case "en": return "en_US";
-    case "pt": return "pt_BR";
-    case "es": return "es_ES";
-    case "fr": return "fr_FR";
-  }
 }
 
 export default async function LocaleLayout({

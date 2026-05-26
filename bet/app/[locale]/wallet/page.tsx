@@ -11,7 +11,14 @@ import { getAuthedUser } from "@/lib/auth";
 import { COIN_PACKS } from "@/lib/coin-packs";
 import { MIN_WITHDRAW_COINS } from "@/lib/coins";
 import { fmtCoins, timeAgo } from "@/lib/utils";
-import { isLocale, localizedPath, t, type Locale } from "@/lib/i18n";
+import {
+  DEFAULT_LOCALE,
+  buildLocalizedMetadata,
+  isLocale,
+  localizedPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -21,11 +28,17 @@ export async function generateMetadata({
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
   const { locale: raw } = await params;
-  const locale: Locale = isLocale(raw) ? raw : "en";
-  return {
-    title: t("wallet.heading", locale),
-    description: t("wallet.subtext", locale),
-  };
+  const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  return buildLocalizedMetadata({
+    locale,
+    path: "/wallet",
+    title: t("meta.walletTitle", locale),
+    description: t("meta.walletDescription", locale),
+    // Authenticated surface — serves user-specific balance data, so
+    // it shouldn't be indexed. The robots.txt also disallows it, but
+    // a per-page noindex meta is the belt-and-suspenders signal.
+    noindex: true,
+  });
 }
 
 /**

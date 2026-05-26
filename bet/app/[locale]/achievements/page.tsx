@@ -9,7 +9,7 @@ import { getAuthedUser } from "@/lib/auth";
 import { fmtCoins, timeAgo, cn } from "@/lib/utils";
 import {
   DEFAULT_LOCALE,
-  alternatesFor,
+  buildLocalizedMetadata,
   isLocale,
   localizedPath,
   t,
@@ -25,16 +25,12 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale: raw } = await params;
   const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
-  const origin =
-    process.env.NEXTAUTH_URL?.replace(/\/$/, "") ?? "http://localhost:3100";
-  return {
-    title: t("achievements.heading", locale),
-    description: t("achievements.subtext", locale),
-    alternates: {
-      canonical: `${origin}/${locale}/achievements`,
-      languages: alternatesFor(origin, "/achievements"),
-    },
-  };
+  return buildLocalizedMetadata({
+    locale,
+    path: "/achievements",
+    title: t("meta.achievementsTitle", locale),
+    description: t("meta.achievementsDescription", locale),
+  });
 }
 
 /**

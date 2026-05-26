@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { KycForm } from "./KycForm";
 import {
   DEFAULT_LOCALE,
-  alternatesFor,
+  buildLocalizedMetadata,
   isLocale,
   localizedPath,
   t,
@@ -22,16 +22,13 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale: raw } = await params;
   const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
-  const origin =
-    process.env.NEXTAUTH_URL?.replace(/\/$/, "") ?? "http://localhost:3100";
-  return {
-    title: t("kyc.heading", locale),
-    description: t("kyc.subtext", locale),
-    alternates: {
-      canonical: `${origin}/${locale}/kyc`,
-      languages: alternatesFor(origin, "/kyc"),
-    },
-  };
+  return buildLocalizedMetadata({
+    locale,
+    path: "/kyc",
+    title: t("meta.kycTitle", locale),
+    description: t("meta.kycDescription", locale),
+    noindex: true,
+  });
 }
 
 /**

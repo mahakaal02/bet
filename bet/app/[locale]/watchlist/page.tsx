@@ -9,7 +9,14 @@ import { getAuthedUser } from "@/lib/auth";
 import { priceYes } from "@/lib/amm";
 import { fmtCoins, fmtPrice, timeAgo } from "@/lib/utils";
 import { Star } from "lucide-react";
-import { isLocale, localizedPath, t, type Locale } from "@/lib/i18n";
+import {
+  DEFAULT_LOCALE,
+  buildLocalizedMetadata,
+  isLocale,
+  localizedPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -19,11 +26,14 @@ export async function generateMetadata({
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
   const { locale: raw } = await params;
-  const locale: Locale = isLocale(raw) ? raw : "en";
-  return {
-    title: t("watchlist.heading", locale),
-    description: t("watchlist.heading", locale),
-  };
+  const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  return buildLocalizedMetadata({
+    locale,
+    path: "/watchlist",
+    title: t("meta.watchlistTitle", locale),
+    description: t("meta.watchlistDescription", locale),
+    noindex: true,
+  });
 }
 
 export default async function WatchlistPage({

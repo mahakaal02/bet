@@ -10,7 +10,7 @@ import { timeAgo } from "@/lib/utils";
 import { Bell } from "lucide-react";
 import {
   DEFAULT_LOCALE,
-  alternatesFor,
+  buildLocalizedMetadata,
   isLocale,
   localizedPath,
   t,
@@ -26,15 +26,13 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale: raw } = await params;
   const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
-  const origin =
-    process.env.NEXTAUTH_URL?.replace(/\/$/, "") ?? "http://localhost:3100";
-  return {
-    title: t("notifications.heading", locale),
-    alternates: {
-      canonical: `${origin}/${locale}/notifications`,
-      languages: alternatesFor(origin, "/notifications"),
-    },
-  };
+  return buildLocalizedMetadata({
+    locale,
+    path: "/notifications",
+    title: t("meta.notificationsTitle", locale),
+    description: t("meta.notificationsDescription", locale),
+    noindex: true,
+  });
 }
 
 export default async function NotificationsPage({

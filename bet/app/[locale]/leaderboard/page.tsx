@@ -8,7 +8,7 @@ import { fmtCoins } from "@/lib/utils";
 import { Trophy } from "lucide-react";
 import {
   DEFAULT_LOCALE,
-  alternatesFor,
+  buildLocalizedMetadata,
   isLocale,
   t,
   type Locale,
@@ -23,16 +23,12 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale: raw } = await params;
   const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
-  const origin =
-    process.env.NEXTAUTH_URL?.replace(/\/$/, "") ?? "http://localhost:3100";
-  return {
-    title: t("leaderboard.heading", locale),
-    description: t("leaderboard.subtext", locale),
-    alternates: {
-      canonical: `${origin}/${locale}/leaderboard`,
-      languages: alternatesFor(origin, "/leaderboard"),
-    },
-  };
+  return buildLocalizedMetadata({
+    locale,
+    path: "/leaderboard",
+    title: t("meta.leaderboardTitle", locale),
+    description: t("meta.leaderboardDescription", locale),
+  });
 }
 
 export default async function LeaderboardPage({

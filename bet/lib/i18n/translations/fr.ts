@@ -15,6 +15,54 @@ const fr: Partial<Dictionary> = {
       "Tradez OUI/NON sur des événements réels avec vos coins Kalki Bet — le même portefeuille qui alimente les enchères et Aviator.",
     description:
       "Marchés de prédiction, enchères en direct et crash-game — un portefeuille, trois produits, tout en coins démo.",
+    homeTitle: "Prédisez, tradez et gagnez sur des événements réels",
+    homeDescription:
+      "Tradez les marchés de prédiction OUI/NON sur l'actualité, la politique, le sport et la crypto. Coins de démarrage offerts ; encaissez à tout moment avant la résolution.",
+    marketsTitle: "Marchés de prédiction — tradez des événements réels",
+    marketsDescription:
+      "Parcourez les marchés de prédiction ouverts, observez les prix bouger en temps réel et tradez avec vos coins Kalki Bet.",
+    walletTitle: "Votre portefeuille · coins Kalki Bet",
+    walletDescription:
+      "Rechargez, retirez et suivez chaque mouvement de coins. Un solde unique sur les Marchés, les Enchères et Aviator.",
+    profileTitle: "Votre profil",
+    profileDescription:
+      "Gérez votre compte, parrainages, succès et statut de vérification.",
+    portfolioTitle: "Votre portefeuille de positions",
+    portfolioDescription:
+      "Valorisation au prix du marché de vos positions OUI/NON ouvertes sur tous les marchés de prédiction.",
+    watchlistTitle: "Favoris",
+    watchlistDescription:
+      "Vos marchés favoris — accès rapide aux marchés de prédiction que vous suivez.",
+    notificationsTitle: "Notifications",
+    notificationsDescription:
+      "Exécutions de trades, résolutions de marché, mentions et récompenses — votre boîte pour tout ce qui s'est passé en votre absence.",
+    leaderboardTitle: "Classement — meilleurs traders",
+    leaderboardDescription:
+      "Meilleurs traders classés par XP. Gagnez de l'XP en tradant — 1 XP par 20 coins dépensés.",
+    achievementsTitle: "Succès — badges de trader",
+    achievementsDescription:
+      "Débloquez des badges en tradant, en invitant des amis et en atteignant des jalons. Gagnez de l'XP et des coins bonus.",
+    kycTitle: "Vérification d'identité",
+    kycDescription:
+      "Soumettez vos pièces d'identité pour débloquer des limites de retrait plus élevées. Chiffrées au repos et examinées par un spécialiste conformité.",
+    loginTitle: "Connexion à Kalki Exchange",
+    loginDescription:
+      "Connectez-vous pour trader les marchés de prédiction, gérer votre portefeuille et suivre vos positions.",
+    registerTitle: "Créez votre compte Kalki",
+    registerDescription:
+      "Inscrivez-vous en quelques secondes et recevez 10 000 coins de démarrage. Tradez les marchés de prédiction sur l'actualité, le sport et la crypto.",
+    forgotTitle: "Réinitialiser votre mot de passe",
+    forgotDescription:
+      "Mot de passe oublié ? Saisissez votre e-mail pour recevoir un lien de réinitialisation.",
+    resetTitle: "Choisissez un nouveau mot de passe",
+    resetDescription:
+      "Définissez un nouveau mot de passe pour votre compte Kalki Exchange.",
+    verifyTitle: "Vérifiez votre e-mail",
+    verifyDescription:
+      "Confirmez votre adresse e-mail pour débloquer les retraits et les fonctionnalités du compte.",
+    withdrawTitle: "Retirer des coins",
+    withdrawDescription:
+      "Retirez vos coins Kalki Bet vers UPI ou un compte bancaire. Chaque retrait est examiné avant paiement.",
   },
 
   nav: {

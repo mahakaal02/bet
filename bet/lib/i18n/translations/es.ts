@@ -17,6 +17,54 @@ const es: Partial<Dictionary> = {
       "Negocia SÍ/NO en eventos del mundo real con tus monedas Kalki Bet — la misma billetera que alimenta las subastas y Aviator.",
     description:
       "Mercados de predicción, subastas en vivo y crash-game — una billetera, tres productos, todo con monedas demo.",
+    homeTitle: "Predice, opera y gana en eventos del mundo real",
+    homeDescription:
+      "Opera mercados de predicción SÍ/NO sobre noticias, política, deportes y cripto. Monedas iniciales gratis; retira en cualquier momento antes de que el evento se resuelva.",
+    marketsTitle: "Mercados de predicción — opera eventos reales",
+    marketsDescription:
+      "Explora los mercados de predicción abiertos, observa cómo se mueven los precios en tiempo real y opera con tus monedas Kalki Bet.",
+    walletTitle: "Tu billetera · monedas Kalki Bet",
+    walletDescription:
+      "Recarga, retira y registra cada movimiento de monedas. Un solo saldo en Mercados, Subastas y Aviator.",
+    profileTitle: "Tu perfil",
+    profileDescription:
+      "Gestiona tu cuenta, referidos, logros y estado de verificación.",
+    portfolioTitle: "Tu portafolio",
+    portfolioDescription:
+      "Valoración a mercado de tus posiciones SÍ/NO abiertas en todos los mercados de predicción.",
+    watchlistTitle: "Favoritos",
+    watchlistDescription:
+      "Tus mercados favoritos — acceso rápido a los mercados de predicción que sigues.",
+    notificationsTitle: "Notificaciones",
+    notificationsDescription:
+      "Ejecuciones de órdenes, resoluciones de mercado, menciones y recompensas — tu bandeja para todo lo que ocurrió mientras estabas fuera.",
+    leaderboardTitle: "Clasificación — mejores traders",
+    leaderboardDescription:
+      "Mejores traders ordenados por XP. Gana XP operando en mercados de predicción — 1 XP por cada 20 monedas gastadas.",
+    achievementsTitle: "Logros — insignias de trader",
+    achievementsDescription:
+      "Desbloquea insignias operando, invitando amigos y alcanzando hitos. Gana XP y monedas extra.",
+    kycTitle: "Verificación de identidad",
+    kycDescription:
+      "Envía tus documentos de identidad para desbloquear límites de retiro más altos. Cifrados en reposo y revisados por un especialista de compliance.",
+    loginTitle: "Inicia sesión en Kalki Exchange",
+    loginDescription:
+      "Inicia sesión para operar en mercados de predicción, gestionar tu billetera y seguir tu portafolio.",
+    registerTitle: "Crea tu cuenta Kalki",
+    registerDescription:
+      "Regístrate en segundos y recibe 10.000 monedas iniciales. Opera mercados de predicción sobre noticias, deportes y cripto.",
+    forgotTitle: "Restablecer tu contraseña",
+    forgotDescription:
+      "¿Olvidaste tu contraseña? Ingresa tu correo para recibir un enlace de restablecimiento.",
+    resetTitle: "Elige una nueva contraseña",
+    resetDescription:
+      "Define una nueva contraseña para tu cuenta Kalki Exchange.",
+    verifyTitle: "Verifica tu correo",
+    verifyDescription:
+      "Confirma tu dirección de correo para desbloquear retiros y funciones de la cuenta.",
+    withdrawTitle: "Retirar monedas",
+    withdrawDescription:
+      "Retira tus monedas Kalki Bet a UPI o cuenta bancaria. Cada retiro pasa por revisión antes del pago.",
   },
 
   nav: {
