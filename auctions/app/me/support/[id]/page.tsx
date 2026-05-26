@@ -28,15 +28,20 @@ interface TicketDetail {
   updatedAt: string;
 }
 
-export default async function TicketDetailPage({ params }: { params: { id: string } }) {
+export default async function TicketDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
   const token = await getSessionToken();
-  if (!token) redirect(`/login?next=/me/support/${params.id}`);
+  if (!token) redirect(`/login?next=/me/support/${id}`);
 
   let ticket: TicketDetail;
   try {
-    ticket = await backend.authed(token).get(`/me/support/${params.id}`);
+    ticket = await backend.authed(token).get(`/me/support/${id}`);
   } catch (err) {
-    if (err instanceof BackendUnauthorized) redirect(`/login?next=/me/support/${params.id}`);
+    if (err instanceof BackendUnauthorized) redirect(`/login?next=/me/support/${id}`);
     throw err;
   }
 
