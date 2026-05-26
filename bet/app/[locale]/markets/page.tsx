@@ -141,12 +141,12 @@ export default async function MarketsPage({
 
         <form method="get" className="mb-4 flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <Input
               name="q"
               defaultValue={q}
               placeholder={tr("market.searchPlaceholder")}
-              className="pl-9"
+              className="ps-9"
             />
           </div>
           <select
@@ -265,7 +265,7 @@ export default async function MarketsPage({
                           {fmtPrice(p)}
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-end">
                         <div className="text-xs text-slate-500">
                           {tr("market.no")}
                         </div>

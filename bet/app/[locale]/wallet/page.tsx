@@ -166,7 +166,7 @@ export default async function WalletPage({
               {tr("wallet.verifyEmailNote")}{" "}
               <Link
                 href={lp("/profile")}
-                className="ml-1 underline hover:text-amber-100"
+                className="ms-1 underline hover:text-amber-100"
               >
                 {tr("profile.heading")}
               </Link>

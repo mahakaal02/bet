@@ -110,7 +110,7 @@ function Column({ rows, kind }: { rows: Row[]; kind: "bid" | "ask" }) {
             <div
               className={cn(
                 "absolute inset-y-0",
-                isBid ? "right-0 bg-emerald-500/10" : "left-0 bg-rose-500/10",
+                isBid ? "end-0 bg-emerald-500/10" : "start-0 bg-rose-500/10",
                 empty && "bg-transparent",
               )}
               style={{ width: empty ? 0 : `${bar}%` }}

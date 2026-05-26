@@ -26,9 +26,13 @@ export {
   PREFERRED_LOCALE_COOKIE_MAX_AGE_SECONDS,
   GEO_ROUTED_COOKIE,
   GEO_ROUTED_COOKIE_MAX_AGE_SECONDS,
+  RTL_LOCALES,
+  LOCALE_HEADER,
   isLocale,
   localeForCountry,
+  dirForLocale,
   type Locale,
+  type Direction,
 } from "./config";
 
 export {

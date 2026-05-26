@@ -208,7 +208,7 @@ export function BuyCoinsGrid({ packs, user, locale }: Props) {
               )}
             >
               {p.highlight && (
-                <Badge tone="info" className="absolute -top-2 left-3">
+                <Badge tone="info" className="absolute -top-2 start-3">
                   {p.highlight}
                 </Badge>
               )}

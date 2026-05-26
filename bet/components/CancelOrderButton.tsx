@@ -51,7 +51,7 @@ export function CancelOrderButton({
 
   if (tinyVariant) {
     return (
-      <div className="text-right">
+      <div className="text-end">
         <button
           type="button"
           onClick={onClick}

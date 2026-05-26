@@ -3,6 +3,7 @@ import {
   DEFAULT_LOCALE,
   GEO_ROUTED_COOKIE,
   GEO_ROUTED_COOKIE_MAX_AGE_SECONDS,
+  LOCALE_HEADER,
   PREFERRED_LOCALE_COOKIE,
   PREFERRED_LOCALE_COOKIE_MAX_AGE_SECONDS,
   isLikelyBot,
@@ -93,11 +94,13 @@ export function middleware(req: NextRequest) {
 
   if (pathLocale) {
     // URL already has a locale prefix. Trust it as the user's intent
-    // and let it through unchanged. No cookie writes here — that's
-    // owned by the language switcher (explicit user action) so a
-    // user landing on /en/ via a shared link doesn't accidentally
-    // overwrite their /pt/ preference.
-    return NextResponse.next();
+    // and let it through unchanged — but surface the locale to the
+    // root layout via a request header so `<html lang>` and
+    // `<html dir>` render correctly. (The root layout sits above
+    // [locale]/ so it can't read `params.locale` directly.)
+    const headers = new Headers(req.headers);
+    headers.set(LOCALE_HEADER, pathLocale);
+    return NextResponse.next({ request: { headers } });
   }
 
   // PR-BET-I18N — migration completed. Every user-facing route now

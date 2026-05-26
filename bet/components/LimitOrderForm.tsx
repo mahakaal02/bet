@@ -168,7 +168,7 @@ export function LimitOrderForm({
             {available.toFixed(2)} {outcome}
           </span>
           {pos && pos.locked > 0 && (
-            <span className="ml-1 text-slate-600">
+            <span className="ms-1 text-slate-600">
               · {pos.locked.toFixed(2)} locked in orders
             </span>
           )}

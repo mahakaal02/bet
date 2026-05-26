@@ -107,7 +107,7 @@ export default async function AchievementsPage({
           </div>
           {u && (
             <div
-              className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-2 text-right"
+              className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-2 text-end"
               aria-label={tr("achievements.unlockedCount", {
                 count: myCount,
                 total: catalog.length,

@@ -142,7 +142,7 @@ export default async function WatchlistPage({
                           {fmtPrice(p)}
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-end">
                         <div className="text-xs text-slate-500">
                           {tr("market.no")}
                         </div>

@@ -146,7 +146,7 @@ export default async function PortfolioPage({
                       now {fmtPrice(p.livePrice)}
                     </div>
                   </div>
-                  <div className="text-right text-sm">
+                  <div className="text-end text-sm">
                     <div className="font-mono">{fmtCoins(p.value)}</div>
                     <div
                       className={`font-mono text-xs ${
@@ -189,7 +189,7 @@ export default async function PortfolioPage({
                       {tx.market.title}
                     </Link>
                   </div>
-                  <div className="text-right">
+                  <div className="text-end">
                     <div className="font-mono">
                       −{fmtCoins(tx.cost)}{" "}
                       <span className="text-slate-500">@ {fmtPrice(tx.pricePerShare)}</span>

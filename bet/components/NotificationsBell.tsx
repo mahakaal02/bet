@@ -90,13 +90,13 @@ export function NotificationsBell() {
       >
         <Bell className="h-4 w-4" />
         {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+          <span className="absolute -end-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
             {unread > 99 ? "99+" : unread}
           </span>
         )}
       </button>
       {open && (
-        <div className="fade-up absolute right-0 mt-2 w-80 overflow-hidden rounded-xl border border-slate-800 bg-slate-950/95 shadow-2xl backdrop-blur">
+        <div className="fade-up absolute end-0 mt-2 w-80 overflow-hidden rounded-xl border border-slate-800 bg-slate-950/95 shadow-2xl backdrop-blur">
           <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Notifications

@@ -336,6 +336,97 @@ GPT-4o-mini call; admin can override), and a "translation completeness"
 column on the admin market list so operators see which markets need
 attention.
 
+## Accessibility & RTL readiness
+
+### `<html lang>` + `<html dir>` — server-resolved
+
+The root `app/layout.tsx` reads the resolved locale from a request
+header that middleware sets (`x-bet-locale`) and emits the correct
+`<html lang>` and `<html dir>` *before any HTML ships*. Why server-
+side instead of a client-side flip?
+
+- Screen readers read the initial `lang` value the moment the document
+  loads. A `useEffect` that swaps it post-hydration is too late —
+  the announcement has already happened in the wrong language.
+- `dir` controls the entire visual layout via CSS logical properties.
+  Flipping it client-side causes a layout flash on every navigation.
+
+For non-localized routes (`/admin/*`, `/share/*`, error pages), the
+header is absent and we fall back to `DEFAULT_LOCALE` ("en"). This
+is the single source of truth — assistive tech keys off it.
+
+### LanguageSwitcher — WAI-ARIA listbox pattern
+
+`components/LanguageSwitcher.tsx` implements the full
+[WAI-ARIA Listbox pattern](https://www.w3.org/WAI/ARIA/apg/patterns/listbox/):
+
+| Action | Result |
+|---|---|
+| Click / Enter / Space / ↓ on trigger | Open menu, highlight current locale |
+| ↓ inside menu | Next option (wraps) |
+| ↑ inside menu | Previous option (wraps) |
+| Home / End | First / last option |
+| Type a letter | Jump to first option starting with that letter |
+| Enter / Space | Select highlighted option |
+| Tab | Close menu, let focus advance (matches native `<select>`) |
+| Escape | Cancel, return focus to trigger |
+| Click outside | Close, return focus to trigger |
+
+Implementation notes:
+
+- `aria-activedescendant` points at the currently-highlighted `<li>`
+  so screen readers announce the choice without DOM focus moving.
+- All options have `min-h-11` (44px) for touch targets per WCAG 2.5.5.
+- Visible focus ring via `focus-visible:ring-cyan-400/60`.
+- `aria-haspopup="listbox"`, `aria-expanded`, `aria-controls`, and
+  `aria-label={t("switcher.label", locale)}` on the trigger.
+
+### Future RTL — what's already in place
+
+When we add `ar` / `he` / `fa` / `ur`, the only mechanical edits
+required are:
+
+1. Add the code to `LOCALES`, `LOCALE_DISPLAY`, `COUNTRY_TO_LOCALE`
+   in `config.ts`.
+2. Add the code to `RTL_LOCALES` (also in `config.ts`).
+3. Ship a `translations/<code>.ts` dictionary.
+
+The display layer is already RTL-safe because:
+
+- Every directional CSS class in user-facing code uses Tailwind 4
+  logical utilities (`me-`, `ms-`, `pe-`, `ps-`, `start-N`, `end-N`,
+  `text-start`, `text-end`, `rounded-ss-`, etc.). These resolve
+  through `padding-inline-start` / `inset-inline-end` / etc., which
+  flip automatically when `dir="rtl"` is set on `<html>`.
+- The LanguageSwitcher's `align="end"` prop maps to `end-0` — anchors
+  the dropdown to the text-flow end, which is right in LTR and left
+  in RTL. No re-layout needed.
+- Icon-bearing chevrons (`rotate-180` on open) are symmetric about
+  the vertical axis, so the visual still reads "down to expand"
+  regardless of writing direction.
+
+Things deliberately LEFT directional:
+
+- The order book ladder (`OrderBookLadder.tsx`) keeps BID/ASK on
+  their conventional sides — these carry trading semantics, not
+  text direction. We color-code (emerald = bid, rose = ask) so
+  RTL readers identify them by color, not position.
+- Number-mono columns (volume, P/L, prices) stay LTR — numbers
+  are universally LTR even in RTL languages. Tailwind's
+  `font-mono` already preserves this.
+
+### `dir`/`lang` propagation tested
+
+`__tests__/i18n-direction.test.ts` locks in:
+- All currently-shipped locales (en/pt/es/fr) → "ltr"
+- Anything in `RTL_LOCALES` → "rtl"
+- Unknown locales default to "ltr" (safe fallback)
+- `RTL_LOCALES` is a Set (O(1) lookup)
+
+When an RTL locale is added the test suite immediately verifies
+the direction without needing fixture updates — just append to
+`RTL_LOCALES` and run.
+
 ## What's NOT in this PR
 
 - **Full translation coverage** — the dictionary keys for nav,

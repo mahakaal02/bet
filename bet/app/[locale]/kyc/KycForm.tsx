@@ -123,7 +123,7 @@ function FileField({
         name={name}
         accept="image/*,application/pdf"
         required
-        className="block w-full rounded-md border border-slate-800 bg-slate-950/60 text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-cyan-500 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-950 hover:file:bg-cyan-400"
+        className="block w-full rounded-md border border-slate-800 bg-slate-950/60 text-sm text-slate-300 file:me-3 file:rounded-md file:border-0 file:bg-cyan-500 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-950 hover:file:bg-cyan-400"
       />
       <div className="mt-1 text-[11px] text-slate-500">{hint}</div>
     </label>

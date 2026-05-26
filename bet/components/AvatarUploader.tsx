@@ -130,7 +130,7 @@ export function AvatarUploader({ image, name, size = 56 }: Props) {
         <button
           type="button"
           onClick={onRemove}
-          className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full border border-slate-700 bg-slate-900 text-slate-300 opacity-0 transition group-hover:opacity-100 hover:bg-slate-800 hover:text-rose-300"
+          className="absolute -end-1 -top-1 grid h-5 w-5 place-items-center rounded-full border border-slate-700 bg-slate-900 text-slate-300 opacity-0 transition group-hover:opacity-100 hover:bg-slate-800 hover:text-rose-300"
           aria-label={tr("avatar.removeAria")}
         >
           <X className="h-3 w-3" />

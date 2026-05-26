@@ -101,7 +101,7 @@ export default async function LeaderboardPage({
                       </div>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-end">
                     <div className="font-mono text-sm font-bold">
                       {fmtCoins(u.xp)}
                     </div>

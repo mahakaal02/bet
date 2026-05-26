@@ -456,7 +456,7 @@ function RoutingDisclosure({
     <div className="mt-3 overflow-hidden rounded-lg border border-slate-800 bg-slate-950/40">
       <button
         onClick={onToggle}
-        className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-slate-900/40"
+        className="flex w-full items-center justify-between px-3 py-2 text-start text-xs hover:bg-slate-900/40"
       >
         <span className="flex items-center gap-1.5">
           <Sparkles className="h-3 w-3 text-cyan-400" />
@@ -476,7 +476,7 @@ function RoutingDisclosure({
               return (
                 <div key={i} className="flex justify-between py-0.5">
                   <span>
-                    <Badge tone="info" className="mr-1">
+                    <Badge tone="info" className="me-1">
                       {tr("market.book")}
                     </Badge>
                     {(l.shares ?? 0).toFixed(2)} {tr("market.sharesAbbrev")} @ {fmtPrice(l.price ?? 0)}
@@ -490,7 +490,7 @@ function RoutingDisclosure({
             return (
               <div key={i} className="flex justify-between py-0.5">
                 <span>
-                  <Badge tone="default" className="mr-1">
+                  <Badge tone="default" className="me-1">
                     {tr("market.amm")}
                   </Badge>
                   {sharesOut.toFixed(2)} {tr("market.sharesAbbrev")}
@@ -515,7 +515,7 @@ function Row({ label, value, hint }: { label: string; value: string; hint?: stri
       <span>
         {label}
         {hint && (
-          <span className="ml-1 text-[10px] text-slate-600">({hint})</span>
+          <span className="ms-1 text-[10px] text-slate-600">({hint})</span>
         )}
       </span>
       <span className="font-mono text-slate-200">{value}</span>

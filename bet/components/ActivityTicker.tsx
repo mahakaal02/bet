@@ -79,7 +79,7 @@ export function ActivityTicker() {
   if (events.length === 0) {
     return (
       <div className="glass rounded-xl px-4 py-3 text-xs text-slate-500">
-        <Activity className="mr-1 inline h-3 w-3" />
+        <Activity className="me-1 inline h-3 w-3" />
         {t("activity.waitingForTrades", locale)}
       </div>
     );
@@ -88,7 +88,7 @@ export function ActivityTicker() {
   return (
     <div className="glass rounded-xl px-2 py-1">
       <div className="border-b border-white/5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-        <Activity className="mr-1 inline h-3 w-3 text-emerald-400" />
+        <Activity className="me-1 inline h-3 w-3 text-emerald-400" />
         {t("activity.liveActivity", locale)}
       </div>
       <ul className="max-h-72 overflow-y-auto">
@@ -121,7 +121,7 @@ export function ActivityTicker() {
               </span>{" "}
               · {e.marketTitle}
             </Link>
-            <div className="text-right">
+            <div className="text-end">
               <div className="font-mono text-[11px]">
                 {fmtCoins(e.coins)} <span className="text-slate-500">@</span>{" "}
                 {fmtPrice(e.price)}

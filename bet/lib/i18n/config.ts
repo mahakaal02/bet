@@ -20,6 +20,44 @@ export type Locale = (typeof LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = "en";
 
 /**
+ * Right-to-left locales. Currently empty (en/pt/es/fr are all LTR)
+ * but kept as a typed set so adding `ar` / `he` / `fa` / `ur` in the
+ * future is a one-line config change — every component that calls
+ * `dirForLocale()` picks up the new direction automatically.
+ *
+ * Type widening lets us list locales here that aren't yet in `LOCALES`
+ * — keeps the dataset honest about which locales are RTL "in
+ * principle" so future expansion doesn't forget any.
+ */
+export const RTL_LOCALES: ReadonlySet<string> = new Set<string>([
+  // "ar",  // Arabic
+  // "he",  // Hebrew
+  // "fa",  // Persian
+  // "ur",  // Urdu
+]);
+
+export type Direction = "ltr" | "rtl";
+
+/**
+ * Resolve text direction for a locale. Used by:
+ *   • root layout to emit `<html dir="...">`
+ *   • components that need to position direction-sensitive UI
+ *     (e.g. chevrons that point "forward" — back vs continue)
+ */
+export function dirForLocale(locale: Locale | string): Direction {
+  return RTL_LOCALES.has(locale) ? "rtl" : "ltr";
+}
+
+/**
+ * Header name middleware uses to surface the resolved locale to the
+ * root layout. The root layout sits ABOVE the `[locale]/` segment so
+ * it has no access to `params.locale` — it reads this header instead
+ * to emit `<html lang>` and `<html dir>` correctly. Keep in sync
+ * with `middleware.ts`.
+ */
+export const LOCALE_HEADER = "x-bet-locale";
+
+/**
  * Display name for each locale, used by the language switcher. Native
  * spellings (Português, not "Portuguese") because users recognise
  * those faster, even if they don't currently read the page's language.

@@ -266,7 +266,7 @@ export default async function MarketPage({
                         {t.user.username}
                       </span>
                     </div>
-                    <div className="text-right">
+                    <div className="text-end">
                       <div className="font-mono">
                         {fmtCoins(t.cost)}{" "}
                         <span className="text-slate-500">
