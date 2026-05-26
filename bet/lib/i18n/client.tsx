@@ -254,3 +254,88 @@ export {
   localeAnalyticsContext,
   type LocaleAnalyticsContext,
 } from "./analytics";
+
+// Locale-aware Intl formatters — server- and client-safe.
+export {
+  formatNumber,
+  formatCoins,
+  formatCompact,
+  formatPercent,
+  formatCurrency,
+  formatPrice,
+  formatDate,
+  formatDateTime,
+  formatRelativeTime,
+} from "./format";
+
+/* ============================================================
+   useFormat — formatters scoped to the active locale
+   ============================================================
+
+   Convenience hook so client components don't repeatedly pass
+   `locale` to every formatter. The returned object is memoised on
+   the locale identity, so destructured callers don't trigger
+   unnecessary re-renders.
+
+       const { coins, price, relative } = useFormat();
+       return <span>{coins(wallet.balance)}</span>;
+
+   For server components the bare exported helpers are simpler:
+
+       import { formatCoins } from "@/lib/i18n";
+       formatCoins(balance, locale)
+*/
+
+import {
+  formatCoins as fmtCoinsRaw,
+  formatCompact as fmtCompactRaw,
+  formatCurrency as fmtCurrencyRaw,
+  formatDate as fmtDateRaw,
+  formatDateTime as fmtDateTimeRaw,
+  formatNumber as fmtNumberRaw,
+  formatPercent as fmtPercentRaw,
+  formatPrice as fmtPriceRaw,
+  formatRelativeTime as fmtRelativeRaw,
+} from "./format";
+
+export interface LocaleFormatters {
+  number: (
+    v: number | bigint,
+    options?: Intl.NumberFormatOptions,
+  ) => string;
+  coins: (v: number | bigint) => string;
+  compact: (
+    v: number | bigint,
+    options?: Intl.NumberFormatOptions,
+  ) => string;
+  percent: (ratio: number, digits?: number) => string;
+  currency: (v: number, currency?: string) => string;
+  price: (price: number, digits?: number) => string;
+  date: (date: Date | string, options?: Intl.DateTimeFormatOptions) => string;
+  dateTime: (
+    date: Date | string,
+    options?: Intl.DateTimeFormatOptions,
+  ) => string;
+  relative: (date: Date | string, now?: Date) => string;
+}
+
+export function useFormat(): LocaleFormatters & {
+  locale: Locale;
+} {
+  const { locale } = useTranslation();
+  return useMemo<LocaleFormatters & { locale: Locale }>(
+    () => ({
+      locale,
+      number: (v, options) => fmtNumberRaw(v, locale, options),
+      coins: (v) => fmtCoinsRaw(v, locale),
+      compact: (v, options) => fmtCompactRaw(v, locale, options),
+      percent: (ratio, digits) => fmtPercentRaw(ratio, locale, digits),
+      currency: (v, currency) => fmtCurrencyRaw(v, locale, currency),
+      price: (price, digits) => fmtPriceRaw(price, locale, digits),
+      date: (date, options) => fmtDateRaw(date, locale, options),
+      dateTime: (date, options) => fmtDateTimeRaw(date, locale, options),
+      relative: (date, now) => fmtRelativeRaw(date, locale, now),
+    }),
+    [locale],
+  );
+}
