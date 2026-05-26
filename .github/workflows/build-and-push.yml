@@ -82,6 +82,7 @@ jobs:
               NEXT_PUBLIC_BACKEND_URL=https://kalki-backend.cloud.podstack.ai
               NEXT_PUBLIC_EXCHANGE_URL=https://kalki-bet.cloud.podstack.ai
               NEXT_PUBLIC_ADMIN_URL=https://kalki-admin.cloud.podstack.ai
+              NEXT_PUBLIC_TELEGRAM_BOT=${{ secrets.NEXT_PUBLIC_TELEGRAM_BOT }}
           - service: aviator
             changed: ${{ needs.detect.outputs.aviator }}
             build_args: |

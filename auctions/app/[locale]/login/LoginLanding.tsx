@@ -61,10 +61,6 @@ export interface LoginLandingProps {
   initialCountry: CountryCode;
   /** Same-origin path to redirect to after a successful sign-in. */
   next: string;
-  /** Whether Telegram login is configured in this environment. When
-   *  false (no NEXT_PUBLIC_TELEGRAM_BOT set), the Telegram button is
-   *  hidden so the user isn't presented with a dead control. */
-  telegramEnabled: boolean;
   /** When true, render a row of demo-user chips under the submit
    *  button. Single-click fills the form with one of the seeded
    *  accounts (see backend/prisma/seed.ts). Dev/QA only — the
@@ -115,7 +111,6 @@ function htmlString(key: StringKey, lang: LanguageCode): { __html: string } {
 export function LoginLanding({
   initialCountry,
   next,
-  telegramEnabled,
   demoVisible,
 }: LoginLandingProps) {
   const router = useRouter();
@@ -886,30 +881,34 @@ export function LoginLanding({
                       : t("login_sub_login")}
                   </p>
 
-                  {telegramEnabled && (
-                    <>
-                      <div className="oauth">
-                        <button
-                          type="button"
-                          className="oauth-btn"
-                          aria-label="Continue with Telegram"
-                          onClick={startTelegram}
-                        >
-                          <svg
-                            className="ic"
-                            viewBox="0 0 24 24"
-                            fill="#5BB2FF"
-                            aria-hidden
-                          >
-                            <path d="M9.8 15.6L9.6 18.7c.4 0 .6-.2.8-.4l1.9-1.8 4 2.9c.7.4 1.2.2 1.4-.7l2.6-12c.2-1.1-.4-1.5-1.1-1.3L4.6 11.3c-1.1.4-1 1-.2 1.3l3.8 1.2 8.9-5.6c.4-.3.8-.1.5.2" />
-                          </svg>
-                          <span>{t("login_continue_telegram")}</span>
-                        </button>
-                      </div>
+                  {/* Telegram OAuth — always rendered. The design treats
+                      this as the canonical sign-in path (it's the only
+                      social-auth option after PR-AUTH-CLEANUP dropped
+                      Google + Apple). If the Telegram env (bot token /
+                      public username) isn't configured server-side,
+                      clicking the button hits /api/auth/telegram/start
+                      which surfaces an explicit 503 — strictly better
+                      UX than silently hiding the only OAuth entry. */}
+                  <div className="oauth">
+                    <button
+                      type="button"
+                      className="oauth-btn"
+                      aria-label="Continue with Telegram"
+                      onClick={startTelegram}
+                    >
+                      <svg
+                        className="ic"
+                        viewBox="0 0 24 24"
+                        fill="#5BB2FF"
+                        aria-hidden
+                      >
+                        <path d="M9.8 15.6L9.6 18.7c.4 0 .6-.2.8-.4l1.9-1.8 4 2.9c.7.4 1.2.2 1.4-.7l2.6-12c.2-1.1-.4-1.5-1.1-1.3L4.6 11.3c-1.1.4-1 1-.2 1.3l3.8 1.2 8.9-5.6c.4-.3.8-.1.5.2" />
+                      </svg>
+                      <span>{t("login_continue_telegram")}</span>
+                    </button>
+                  </div>
 
-                      <div className="divider">{t("login_or")}</div>
-                    </>
-                  )}
+                  <div className="divider">{t("login_or")}</div>
 
                   <form onSubmit={onPasswordSubmit} autoComplete="on">
                     <div className="field">

@@ -1,20 +1,28 @@
 import { redirect } from "next/navigation";
 import { getSessionToken } from "@/lib/session";
 import { detectCountry } from "@/lib/locale-detect";
-import { isTelegramConfigured } from "@/lib/telegram";
 import { LoginLanding } from "./LoginLanding";
 
 /**
  * Hub login + landing page (PR-LOGIN-REDESIGN).
  *
  * Server shell. Resolves locale (geo → cookie → Accept-Language →
- * default) and Telegram-config flag, then renders the client-side
- * `<LoginLanding/>` with everything pre-populated so the first
- * paint matches the post-hydration UI exactly (no locale flash,
- * no SSR/CSR mismatch).
+ * default), then renders the client-side `<LoginLanding/>` with
+ * everything pre-populated so the first paint matches the post-
+ * hydration UI exactly (no locale flash, no SSR/CSR mismatch).
  *
  * Already-signed-in users skip the landing and go straight to the
  * `?next=` target (default `/` — the hub's three-tile game picker).
+ *
+ * Telegram OAuth is intentionally NOT gated server-side anymore.
+ * The design treats it as the canonical sign-in path (it's the only
+ * social-auth option after PR-AUTH-CLEANUP dropped Google + Apple)
+ * so the button always renders. If the Telegram env vars
+ * (`TELEGRAM_BOT_TOKEN` server-side, `NEXT_PUBLIC_TELEGRAM_BOT`
+ * client-side) aren't configured, clicking the button hits
+ * `/api/auth/telegram/start` which surfaces an explicit 503 with
+ * a fix-the-env message — strictly better UX than silently hiding
+ * the only OAuth entry point.
  */
 
 export const dynamic = "force-dynamic";
@@ -53,7 +61,6 @@ export default async function LoginPage({
     <LoginLanding
       initialCountry={initialCountry}
       next={safeNext}
-      telegramEnabled={isTelegramConfigured()}
       demoVisible={demoVisible}
     />
   );

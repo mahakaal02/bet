@@ -172,6 +172,19 @@ spec:
             # SPA cookie-auth flow would break again.
             - name: CORS_ALLOWED_ORIGINS
               value: {{ .Values.backend.corsAllowedOrigins | default "https://kalki-admin.cloud.podstack.ai,https://kalki-aviator.cloud.podstack.ai,https://kalki-auctions.cloud.podstack.ai,https://kalki-bet.cloud.podstack.ai" | quote }}
+            # PR-TELEGRAM-LOGIN — same bot token the auctions Next.js
+            # app uses. TelegramAuthService re-verifies the HMAC over
+            # the payload (defense-in-depth — auctions/api/auth/telegram
+            # /callback verifies once; the backend verifies again so
+            # neither can be bypassed in isolation). Empty value here
+            # causes /auth/telegram to throw an UnauthorizedException
+            # with "Telegram login is not configured" — explicit
+            # failure beats a silent half-disabled feature.
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: kalki-shared
+                  key: TELEGRAM_BOT_TOKEN
             {{- if .Values.clamav.enabled }}
             # Activate the ClamAV daemon scanner (PR-INFRA-CLAMAV-1).
             # Backend reaches `clamd` via the Service in this namespace;

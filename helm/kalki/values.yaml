@@ -53,6 +53,24 @@ sharedSecret:
   #   kubectl -n kalki rollout restart deploy/kalki-bet
   nowpaymentsApiKey: ""
   nowpaymentsIpnSecret: ""
+  # PR-TELEGRAM-LOGIN — bot credentials for Telegram OAuth.
+  #   TELEGRAM_BOT_TOKEN     Server-side. Numeric prefix is the bot id
+  #                          (used by /api/auth/telegram/start); the full
+  #                          token is the HMAC key for callback
+  #                          verification (auctions + backend share it).
+  #   NEXT_PUBLIC_TELEGRAM_BOT  The bot's @username (without '@'). Inlined
+  #                          into client bundles at build time AND
+  #                          consumed server-side by lib/telegram.ts:
+  #                          `telegramBotUsername()`. Safe to be public.
+  #
+  # `default ""` so an unset value renders an empty string. Both
+  # values must be set for the login flow to actually complete;
+  # without them, /api/auth/telegram/start returns a 503 with a
+  # clear "set TELEGRAM_BOT_TOKEN + NEXT_PUBLIC_TELEGRAM_BOT" message.
+  # Override in the in-cluster `kalki-helm-values` Secret (same
+  # pattern as the postgres password rotation runbook above).
+  telegramBotToken: ""
+  telegramBotUsername: ""
 postgres:
   enabled: true
   image: postgres:16-alpine
