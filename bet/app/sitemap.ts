@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { db } from "@/lib/db";
-import { LOCALES, DEFAULT_LOCALE } from "@/lib/i18n";
+import { LOCALES, DEFAULT_LOCALE, type Locale } from "@/lib/i18n";
 
 /**
  * Per-locale sitemap (PR-BET-I18N).
@@ -36,34 +36,63 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     select: { slug: true, updatedAt: true },
   });
 
-  // Static surfaces (paths without locale prefix). Order roughly
-  // matches the user's discovery flow — landing → catalog →
-  // reference pages.
-  //
-  // Authenticated routes (/wallet, /profile, /portfolio,
-  // /watchlist, /notifications) intentionally omitted: they serve
-  // user-specific content and would either 401 the crawler or
-  // pollute the index with empty pages.
-  const staticPaths = [
-    "/",
-    "/markets",
-    "/leaderboard",
-    "/achievements",
-    "/login",
-    "/register",
-  ] as const;
+  // Delegate the actual sitemap-shape construction to a pure builder
+  // so the tests can exercise it without touching the database.
+  return buildSitemapEntries(markets, ORIGIN);
+}
 
+/**
+ * Static surfaces (paths without locale prefix). Order roughly
+ * matches the user's discovery flow — landing → catalog →
+ * reference pages.
+ *
+ * Authenticated routes (/wallet, /profile, /portfolio, /watchlist,
+ * /notifications) intentionally omitted: they serve user-specific
+ * content and would either 401 the crawler or pollute the index
+ * with empty pages.
+ *
+ * Exported so tests assert on the canonical list rather than
+ * hard-coding it in two places.
+ */
+export const SITEMAP_STATIC_PATHS = [
+  "/",
+  "/markets",
+  "/leaderboard",
+  "/achievements",
+  "/login",
+  "/register",
+] as const;
+
+export interface SitemapMarketRow {
+  slug: string;
+  updatedAt: Date;
+}
+
+/**
+ * Pure sitemap builder — no DB, no Date.now(), no env reads. Inputs
+ * are the market rows + origin; output is the Next.js sitemap
+ * structure ready to be returned from the route. Kept as a separate
+ * exported function so tests can construct exact-fixture inputs and
+ * verify every entry (URL, alternates, change-frequency, priority)
+ * without standing up Prisma.
+ */
+export function buildSitemapEntries(
+  markets: SitemapMarketRow[],
+  origin: string,
+  now: Date = new Date(),
+): MetadataRoute.Sitemap {
+  const base = origin.replace(/\/$/, "");
   const entries: MetadataRoute.Sitemap = [];
 
-  for (const path of staticPaths) {
+  for (const path of SITEMAP_STATIC_PATHS) {
     for (const locale of LOCALES) {
       entries.push({
-        url: localizeAbsolute(path, locale),
-        lastModified: new Date(),
+        url: localizeAbsolute(path, locale, base),
+        lastModified: now,
         changeFrequency: path === "/" ? "daily" : "hourly",
         priority: path === "/" ? 1.0 : 0.8,
         alternates: {
-          languages: buildLanguagesBlock(path),
+          languages: buildLanguagesBlock(path, base),
         },
       });
     }
@@ -73,12 +102,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const path = `/markets/${m.slug}`;
     for (const locale of LOCALES) {
       entries.push({
-        url: localizeAbsolute(path, locale),
+        url: localizeAbsolute(path, locale, base),
         lastModified: m.updatedAt,
         changeFrequency: "hourly",
         priority: 0.6,
         alternates: {
-          languages: buildLanguagesBlock(path),
+          languages: buildLanguagesBlock(path, base),
         },
       });
     }
@@ -87,17 +116,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return entries;
 }
 
-function localizeAbsolute(path: string, locale: string): string {
-  return path === "/"
-    ? `${ORIGIN}/${locale}`
-    : `${ORIGIN}/${locale}${path}`;
+function localizeAbsolute(path: string, locale: Locale, base: string): string {
+  return path === "/" ? `${base}/${locale}` : `${base}/${locale}${path}`;
 }
 
-function buildLanguagesBlock(path: string): Record<string, string> {
+function buildLanguagesBlock(
+  path: string,
+  base: string,
+): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const l of LOCALES) out[l] = localizeAbsolute(path, l);
+  for (const l of LOCALES) out[l] = localizeAbsolute(path, l, base);
   // x-default points at the default-locale variant. Google uses this
   // when none of the declared language regions match the user's locale.
-  out["x-default"] = localizeAbsolute(path, DEFAULT_LOCALE);
+  out["x-default"] = localizeAbsolute(path, DEFAULT_LOCALE, base);
   return out;
 }
