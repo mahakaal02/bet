@@ -672,6 +672,90 @@ Today's volume (4 locales × ~640 LoC) is small enough that
 inlining is cheaper than the round-trip cost. Document the
 threshold; revisit when LOCALES.length ≥ 10.
 
+## Locale-aware formatting (Intl APIs)
+
+`lib/i18n/format.ts` wraps the platform `Intl.*` APIs so numbers,
+currency, percentages, dates and relative time render correctly per
+locale. Every helper:
+
+- Is **SSR-safe** — `Intl` works identically in Node and the
+  browser; server-rendered values match client hydration exactly.
+- **Caches** the constructed `Intl.NumberFormat` /
+  `Intl.DateTimeFormat` / `Intl.RelativeTimeFormat` per `(locale,
+  options)` tuple, so hot lists don't re-allocate formatters on
+  every render.
+- Returns **`"—"` for non-finite / invalid input** so charts and
+  tables degrade gracefully on missing data.
+
+### Helpers
+
+```ts
+import {
+  formatNumber, formatCoins, formatCompact,
+  formatPercent, formatCurrency, formatPrice,
+  formatDate, formatDateTime, formatRelativeTime,
+} from "@/lib/i18n";
+
+formatNumber(1234567.89, "pt")   // "1.234.567,89"
+formatNumber(1234567.89, "fr")   // "1 234 567,89" (NBSP grouping)
+formatCoins(42500, "en")         // "42,500"
+formatCompact(2_500_000, "en")   // "2.5M"
+formatPercent(0.55, "en")        // "55%"
+formatCurrency(1234, "fr", "EUR")// "1 234,00 €"
+formatPrice(0.55, "pt")          // "0,55" — decimal market quote
+formatDate("2026-05-26", "fr")   // "26 mai 2026"
+formatRelativeTime(twoHoursAgo, "fr") // "il y a 2 heures"
+```
+
+### Client-side hook
+
+For client components, `useFormat()` returns formatters pre-scoped
+to the active locale so call sites don't re-pass it:
+
+```tsx
+"use client";
+import { useFormat } from "@/lib/i18n/client";
+
+export function WalletBalance({ balance }: { balance: number }) {
+  const { coins, currency } = useFormat();
+  return (
+    <>
+      <div>{coins(balance)} coins</div>
+      <div>{currency(balance, "INR")}</div>
+    </>
+  );
+}
+```
+
+The returned object is `useMemo`-d on `locale`, so destructured
+formatters are referentially stable across renders.
+
+### Why Intl over hand-rolled strings
+
+The previous `fmtCoins` / `timeAgo` helpers hardcoded `"en-US"` and
+literal English ("yesterday", "3d ago"). Switching to Intl gives:
+
+- **Native CLDR translations** for relative time — no new
+  translation keys needed for "il y a 2 heures" / "há 2 dias" etc.
+- **Correct digit grouping per locale** — Brazilian users expect
+  `1.234,56`, French users `1 234,56` (NBSP), Indian users
+  `12,34,567` (lakh grouping if we add `hi`).
+- **Currency-symbol placement** that matches local convention (€
+  suffix in fr-FR, ₹ prefix everywhere).
+
+### Tested
+
+`__tests__/i18n-format.test.ts` — 38 cases covering:
+- locale-specific separators (comma/dot/NBSP)
+- bigint losslessness
+- non-finite → `"—"` fallback
+- currency symbol + side
+- date language fragments per locale
+- relative-time per-locale phrasing ("ago", "há", "hace", "il y a")
+- past/future direction
+- coarsest-unit picking
+- caching stability
+
 ## What's NOT in this PR
 
 - **Full translation coverage** — the dictionary keys for nav,

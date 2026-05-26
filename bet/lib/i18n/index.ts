@@ -80,6 +80,18 @@ export {
   type LocaleAnalyticsContext,
 } from "./analytics";
 
+export {
+  formatNumber,
+  formatCoins,
+  formatCompact,
+  formatPercent,
+  formatCurrency,
+  formatPrice,
+  formatDate,
+  formatDateTime,
+  formatRelativeTime,
+} from "./format";
+
 /**
  * Dictionary registry. Keyed by locale; English is the only one
  * required to be complete — others are typed `Partial<Dictionary>`
