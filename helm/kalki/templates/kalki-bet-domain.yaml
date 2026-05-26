@@ -1,0 +1,108 @@
+{{/*
+Path-based routing for the kalki.bet apex domain. Additive to the
+existing kalki-<svc>.cloud.podstack.ai IngressRoutes (those are left
+untouched). One IngressRoute fans out to five backing services by
+path prefix, with the bare host falling through to the bet service.
+
+NOTE: StripPrefix is applied on the four prefixed routes so each
+upstream sees requests at /. SPAs (admin, aviator, auctions, bet)
+may emit absolute asset URLs (/_next/..., /static/...) that escape
+their prefix and fall through to the apex bet service — fix that
+at the app level (basePath / publicPath) if it bites.
+*/}}
+{{- $domain := "kalki.bet" -}}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: kalki-bet-strip-admin
+  labels:
+    {{- include "kalki.labels" (dict "name" "bet-domain" "ctx" .) | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes:
+      - /admin
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: kalki-bet-strip-backend
+  labels:
+    {{- include "kalki.labels" (dict "name" "bet-domain" "ctx" .) | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes:
+      - /backend
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: kalki-bet-strip-auctions
+  labels:
+    {{- include "kalki.labels" (dict "name" "bet-domain" "ctx" .) | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes:
+      - /auctions
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: kalki-bet-strip-aviator
+  labels:
+    {{- include "kalki.labels" (dict "name" "bet-domain" "ctx" .) | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes:
+      - /aviator
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: kalki-bet-domain
+  labels:
+    {{- include "kalki.labels" (dict "name" "bet-domain" "ctx" .) | nindent 4 }}
+spec:
+  entryPoints:
+    - {{ .Values.traefik.entryPoint }}
+  routes:
+    - kind: Rule
+      match: Host(`{{ $domain }}`) && PathPrefix(`/admin`)
+      priority: 100
+      services:
+        - name: kalki-admin
+          port: {{ .Values.admin.port }}
+      middlewares:
+        - name: kalki-bet-strip-admin
+    - kind: Rule
+      match: Host(`{{ $domain }}`) && PathPrefix(`/backend`)
+      priority: 100
+      services:
+        - name: kalki-backend
+          port: {{ .Values.backend.port }}
+      middlewares:
+        - name: kalki-bet-strip-backend
+    - kind: Rule
+      match: Host(`{{ $domain }}`) && PathPrefix(`/auctions`)
+      priority: 100
+      services:
+        - name: kalki-auctions
+          port: {{ .Values.auctions.port }}
+      middlewares:
+        - name: kalki-bet-strip-auctions
+    - kind: Rule
+      match: Host(`{{ $domain }}`) && PathPrefix(`/aviator`)
+      priority: 100
+      services:
+        - name: kalki-aviator
+          port: {{ .Values.aviator.port }}
+      middlewares:
+        - name: kalki-bet-strip-aviator
+    - kind: Rule
+      match: Host(`{{ $domain }}`)
+      priority: 1
+      services:
+        - name: kalki-bet
+          port: {{ .Values.bet.port }}
+  tls:
+    certResolver: {{ .Values.traefik.certResolver }}
