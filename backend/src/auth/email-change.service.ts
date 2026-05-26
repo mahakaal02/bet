@@ -130,6 +130,17 @@ export class EmailChangeService {
     });
     if (!user) throw new NotFoundException('user not found');
 
+    // OAuth-only accounts (e.g. Telegram sign-up) have no password to
+    // re-authenticate. They reach this code path only if they've
+    // *already* added an email — for now, force them through
+    // support to set a password first. The alternative (issuing a
+    // password-reset flow inline) is feature creep for this PR.
+    if (!user.passwordHash) {
+      throw new BadRequestException(
+        'this account has no password — set one via password reset first',
+      );
+    }
+
     // Re-auth the password — same gate as the 2FA-disable flow.
     const passwordOk = await bcrypt.compare(input.password, user.passwordHash);
     if (!passwordOk) throw new UnauthorizedException('invalid credentials');

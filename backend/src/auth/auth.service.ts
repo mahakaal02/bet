@@ -90,6 +90,14 @@ export class AuthService {
     });
     if (!user) throw new UnauthorizedException('invalid credentials');
 
+    // OAuth-only accounts (e.g. Telegram sign-up) have `passwordHash = null`
+    // — they CANNOT log in via email+password. Reject with the same generic
+    // message so the response is indistinguishable from "wrong password" /
+    // "no such email" (don't leak account-existence or auth-method).
+    if (!user.passwordHash) {
+      throw new UnauthorizedException('invalid credentials');
+    }
+
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('invalid credentials');
 

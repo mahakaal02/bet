@@ -8,31 +8,32 @@ import { verifyTelegramAuth } from "@/lib/telegram";
  * Telegram's OAuth flow finishes by 302-redirecting the browser
  * here with the signed user payload as query params. We:
  *
- *   1. HMAC-verify the payload against TELEGRAM_BOT_TOKEN.
- *   2. POST the verified user to the auctions backend at
- *      `POST /auth/telegram` which is expected to upsert a user
- *      row keyed on the Telegram numeric ID and return the same
- *      `{token, user}` shape `/auth/login` returns. New backend
- *      endpoint — see BACKEND CONTRACT below.
- *   3. Set the `kalki_token` cookie and 302-redirect to `?next=`.
+ *   1. HMAC-verify the payload against TELEGRAM_BOT_TOKEN (defense
+ *      in depth — see step 2).
+ *   2. POST the FULL Telegram payload (incl. `hash`, with original
+ *      snake_case field names) to the auctions backend at
+ *      `POST /auth/telegram`. The backend re-verifies the same
+ *      HMAC against the same `TELEGRAM_BOT_TOKEN` — we share the
+ *      env so neither side can be bypassed in isolation. The
+ *      backend then upserts a user row keyed on the Telegram
+ *      numeric ID and returns the same `{token, user}` shape that
+ *      `/auth/login` returns.
+ *   3. Set the `kalki_token` cookie and 303-redirect to `?next=`.
  *
  * BACKEND CONTRACT  ────────────────────────────────────────────
  *   POST {AUCTIONS_BACKEND_URL}/auth/telegram
- *   Body: {
- *     telegramId: number,
- *     username: string | null,
- *     firstName: string,
- *     lastName: string | null,
- *     photoUrl: string | null,
- *     authDate: number          // unix seconds
+ *   Body: TelegramAuthDto = {
+ *     id: number,                  // Telegram numeric user id
+ *     first_name: string,
+ *     last_name?: string,
+ *     username?: string,
+ *     photo_url?: string,
+ *     auth_date: number,           // unix seconds
+ *     hash: string                 // 64-char HMAC-SHA256 hex
  *   }
  *   Response: 200 { token, user: { id, email|null, username,
  *                                  isAdmin, coinBalance } }
  *             or  4xx { message }
- *
- * Once the backend implements the endpoint, no further changes
- * are needed here. Until then, this route returns a clear 503 so
- * QA notices the missing dependency.
  */
 
 export const dynamic = "force-dynamic";
@@ -55,21 +56,29 @@ export async function GET(req: Request) {
     return NextResponse.redirect(loginUrl.toString(), { status: 303 });
   }
 
-  // Trade the verified Telegram identity for a backend JWT.
+  // Trade the verified Telegram identity for a backend JWT. We send
+  // the EXACT Telegram payload (snake_case, including `hash`) so the
+  // backend can re-run the same HMAC check — shared env means neither
+  // side can be bypassed in isolation.
   const backendUrl =
     process.env.AUCTIONS_BACKEND_URL ?? "http://localhost:4000";
+  const forwardBody: Record<string, string | number> = {
+    id: payload.id,
+    first_name: payload.first_name,
+    auth_date: payload.auth_date,
+    hash: payload.hash,
+  };
+  if (payload.last_name !== undefined)
+    forwardBody.last_name = payload.last_name;
+  if (payload.username !== undefined) forwardBody.username = payload.username;
+  if (payload.photo_url !== undefined)
+    forwardBody.photo_url = payload.photo_url;
+
   try {
     const res = await fetch(`${backendUrl}/auth/telegram`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        telegramId: payload.id,
-        username: payload.username ?? null,
-        firstName: payload.first_name,
-        lastName: payload.last_name ?? null,
-        photoUrl: payload.photo_url ?? null,
-        authDate: payload.auth_date,
-      }),
+      body: JSON.stringify(forwardBody),
       cache: "no-store",
     });
 
@@ -85,14 +94,14 @@ export async function GET(req: Request) {
       return NextResponse.redirect(loginUrl.toString(), { status: 303 });
     }
 
-    const body = (await res.json()) as { token?: string };
-    if (!body.token) {
+    const sessionBody = (await res.json()) as { token?: string };
+    if (!sessionBody.token) {
       const loginUrl = new URL("/login", url.origin);
       loginUrl.searchParams.set("error", "telegram_token_missing");
       return NextResponse.redirect(loginUrl.toString(), { status: 303 });
     }
 
-    await setSessionToken(body.token);
+    await setSessionToken(sessionBody.token);
     return NextResponse.redirect(new URL(next, url.origin).toString(), {
       status: 303,
     });

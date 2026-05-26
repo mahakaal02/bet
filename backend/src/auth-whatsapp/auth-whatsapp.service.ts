@@ -119,6 +119,10 @@ export class WhatsappAuthService {
     const user = await this.prisma.user.findUnique({ where: { whatsappPhone: phone } });
     if (!user) throw new UnauthorizedException('invalid credentials');
     if (!user.phoneVerified) throw new UnauthorizedException('phone not verified');
+    // OAuth-only accounts (e.g. Telegram-only sign-up that later linked
+    // a phone) have no password — reject with the same generic message
+    // so the response is indistinguishable from a wrong password.
+    if (!user.passwordHash) throw new UnauthorizedException('invalid credentials');
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('invalid credentials');
     return this.issue(user, this.sanitize(user));

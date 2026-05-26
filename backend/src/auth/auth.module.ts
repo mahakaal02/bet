@@ -14,6 +14,8 @@ import { TrustedDeviceController } from './trusted-device.controller';
 import { TrustedDeviceService } from './trusted-device.service';
 import { EmailChangeController } from './email-change.controller';
 import { EmailChangeService } from './email-change.service';
+import { TelegramAuthController } from './telegram.controller';
+import { TelegramAuthService } from './telegram.service';
 import { ResponsibleGamblingModule } from '../responsible-gambling/responsible-gambling.module';
 
 @Module({
@@ -36,6 +38,7 @@ import { ResponsibleGamblingModule } from '../responsible-gambling/responsible-g
     TwoFactorController,
     TrustedDeviceController,
     EmailChangeController,
+    TelegramAuthController,
   ],
   providers: [
     AuthService,
@@ -44,6 +47,7 @@ import { ResponsibleGamblingModule } from '../responsible-gambling/responsible-g
     TwoFactorService,
     TrustedDeviceService,
     EmailChangeService,
+    TelegramAuthService,
   ],
   exports: [AuthService, JwtModule, TwoFactorService, TrustedDeviceService],
 })
