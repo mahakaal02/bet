@@ -49,9 +49,10 @@ async function fetchAuction(id: string): Promise<AuctionRow | null> {
 export async function generateMetadata({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const auction = await fetchAuction(params.id);
+  const { id } = await params;
+  const auction = await fetchAuction(id);
   if (!auction) {
     return { title: "Auction not found · Kalki Auctions" };
   }
@@ -76,8 +77,13 @@ export async function generateMetadata({
   };
 }
 
-export default async function SharePage({ params }: { params: { id: string } }) {
-  const auction = await fetchAuction(params.id);
+export default async function SharePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const auction = await fetchAuction(id);
 
   if (!auction) {
     return (

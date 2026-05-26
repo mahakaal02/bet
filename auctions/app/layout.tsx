@@ -32,6 +32,22 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
+      <head>
+        {/* PR-LOGIN-REDESIGN — Space Grotesk (display/UI) + JetBrains
+            Mono (live numbers, tickers) for the hub landing/login.
+            Loaded once at the document level so subsequent navigations
+            don't refetch; CJK/Arabic fallbacks live in the page CSS. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Sans+Arabic:wght@400;500;600&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] antialiased">
         {/* Mounted globally so the session-reminder heartbeat pings
             irrespective of which page the user is on. The component
