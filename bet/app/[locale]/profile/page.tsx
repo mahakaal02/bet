@@ -14,6 +14,7 @@ import { fmtCoins, levelFromXp } from "@/lib/utils";
 import { Coins, Flame, Share2, Trophy } from "lucide-react";
 import {
   DEFAULT_LOCALE,
+  buildAuthRedirect,
   buildLocalizedMetadata,
   isLocale,
   localizedPath,
@@ -42,8 +43,10 @@ export async function generateMetadata({
 
 export default async function ProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { locale: raw } = await params;
   if (!isLocale(raw)) notFound();
@@ -54,11 +57,8 @@ export default async function ProfilePage({
 
   const u = await getAuthedUser();
   if (!u) {
-    redirect(
-      localizedPath("/login", locale) +
-        "?next=" +
-        encodeURIComponent(localizedPath("/profile", locale)),
-    );
+    const sp = await searchParams;
+    redirect(buildAuthRedirect("/profile", sp, locale));
   }
 
   // Profile is the canonical account hub — identity, wallet, achievements,

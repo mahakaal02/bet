@@ -13,6 +13,7 @@ import { MIN_WITHDRAW_COINS } from "@/lib/coins";
 import { fmtCoins, timeAgo } from "@/lib/utils";
 import {
   DEFAULT_LOCALE,
+  buildAuthRedirect,
   buildLocalizedMetadata,
   isLocale,
   localizedPath,
@@ -49,8 +50,10 @@ export async function generateMetadata({
  */
 export default async function WalletPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { locale: raw } = await params;
   if (!isLocale(raw)) notFound();
@@ -61,11 +64,11 @@ export default async function WalletPage({
 
   const u = await getAuthedUser();
   if (!u) {
-    redirect(
-      localizedPath("/login", locale) +
-        "?next=" +
-        encodeURIComponent(localizedPath("/wallet", locale)),
-    );
+    // PR-BET-I18N analytics safety — preserve UTM / click-ID / referral
+    // state across the auth round-trip by encoding the full inbound
+    // URL (path + searchParams) into `?next=`.
+    const sp = await searchParams;
+    redirect(buildAuthRedirect("/wallet", sp, locale));
   }
 
   const [wallet, recent, me, pendingWithdrawals] = await Promise.all([

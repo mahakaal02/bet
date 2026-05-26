@@ -10,6 +10,7 @@ import { timeAgo } from "@/lib/utils";
 import { Bell } from "lucide-react";
 import {
   DEFAULT_LOCALE,
+  buildAuthRedirect,
   buildLocalizedMetadata,
   isLocale,
   localizedPath,
@@ -37,8 +38,10 @@ export async function generateMetadata({
 
 export default async function NotificationsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { locale: raw } = await params;
   if (!isLocale(raw)) notFound();
@@ -47,7 +50,10 @@ export default async function NotificationsPage({
     t(k, locale, vars);
 
   const u = await getAuthedUser();
-  if (!u) redirect(localizedPath("/login?next=/notifications", locale));
+  if (!u) {
+    const sp = await searchParams;
+    redirect(buildAuthRedirect("/notifications", sp, locale));
+  }
 
   const [items, unread] = await Promise.all([
     db.notification.findMany({

@@ -151,14 +151,31 @@ export function appendTrackingParams(
  * (`extractTrackingParams` + `appendTrackingParams`) exists for
  * analytics use cases where you specifically want the marketing
  * subset, e.g. when sending events to a downstream pipeline.
+ *
+ * Optionally accepts a hash fragment (e.g. "#comments-section")
+ * which is appended after the query string. Pass `null`/`undefined`
+ * to skip — typical for non-client-side callers that don't have a
+ * `window.location.hash` to read.
  */
 export function withPreservedParams(
   targetPath: string,
   source: URLSearchParams | null | undefined,
+  hash?: string | null,
 ): string {
-  if (!source) return targetPath;
+  // Normalize the hash: strip leading "#" if present, then re-prefix
+  // when we have something. Empty hash is treated as no hash.
+  const normalizedHash =
+    hash && hash.length > 0
+      ? hash.startsWith("#")
+        ? hash
+        : `#${hash}`
+      : "";
+
+  if (!source) {
+    return targetPath + normalizedHash;
+  }
   const qs = source.toString();
-  if (!qs) return targetPath;
+  if (!qs) return targetPath + normalizedHash;
   // Don't double-append if the target already has a `?` — merge.
   if (targetPath.includes("?")) {
     const [path, existing] = targetPath.split("?", 2);
@@ -167,9 +184,87 @@ export function withPreservedParams(
       // Target wins for conflicts (most-recent intent).
       if (!merged.has(k)) merged.set(k, v);
     }
-    return `${path}?${merged.toString()}`;
+    return `${path}?${merged.toString()}${normalizedHash}`;
   }
-  return `${targetPath}?${qs}`;
+  return `${targetPath}?${qs}${normalizedHash}`;
+}
+
+/**
+ * Build a "redirect-to-login-and-come-back-here" URL that preserves
+ * the user's full intended destination — including UTM tags, click
+ * IDs, and any other query state — across the auth round-trip.
+ *
+ *   buildAuthRedirect("/wallet", searchParams, "pt")
+ *     → "/pt/login?next=%2Fpt%2Fwallet%3Futm_source%3Dtwitter"
+ *
+ * Why a dedicated helper instead of inlining the encoding? Two
+ * reasons:
+ *   1. Centralises the `next=` URL-encoding rule (it's a URL
+ *      *inside* a URL, so the inner one MUST be encoded once or
+ *      it'll get interpreted as the outer query).
+ *   2. Every auth-gated server component had to make this decision
+ *      and most got it wrong — `redirect(lp("/login?next=/wallet"))`
+ *      ships the BARE path as the next target and silently drops
+ *      attribution on the round-trip.
+ *
+ * Use from server components:
+ *
+ *   import { buildAuthRedirect } from "@/lib/i18n";
+ *
+ *   export default async function WalletPage({ params, searchParams }) {
+ *     const { locale } = await params;
+ *     const sp = await searchParams;
+ *     const u = await getAuthedUser();
+ *     if (!u) redirect(buildAuthRedirect("/wallet", sp, locale));
+ *     // ...
+ *   }
+ *
+ * `searchParams` is the Next.js server-component shape
+ * (`Record<string, string | string[] | undefined>`). Arrays collapse
+ * to first value; empty / missing keys are skipped.
+ */
+export function buildAuthRedirect(
+  /** Target path inside the locale tree (no locale prefix). */
+  targetPath: string,
+  /** searchParams on the gated page that triggered the redirect. */
+  searchParams:
+    | URLSearchParams
+    | Record<string, string | string[] | undefined>
+    | null
+    | undefined,
+  /** Locale to prefix on both /login and the `next=` target. */
+  locale: string,
+  /** Which auth surface to send the user to. Defaults to "/login". */
+  loginPath: string = "/login",
+): string {
+  // Normalize searchParams to URLSearchParams so we can serialize.
+  let sp: URLSearchParams;
+  if (searchParams instanceof URLSearchParams) {
+    sp = searchParams;
+  } else if (searchParams) {
+    sp = new URLSearchParams();
+    for (const [k, raw] of Object.entries(searchParams)) {
+      if (raw === undefined || raw === "") continue;
+      sp.set(k, Array.isArray(raw) ? (raw[0] ?? "") : raw);
+    }
+  } else {
+    sp = new URLSearchParams();
+  }
+
+  // Build the locale-prefixed `next=` target so post-login the user
+  // returns to the SAME page in the SAME locale they came from. We
+  // intentionally inline the locale prefix instead of calling
+  // `localizedPath` to avoid a circular import (analytics ↔ index).
+  const innerPath = targetPath.startsWith("/")
+    ? `/${locale}${targetPath}`
+    : `/${locale}/${targetPath}`;
+  const qs = sp.toString();
+  const innerFull = qs.length > 0 ? `${innerPath}?${qs}` : innerPath;
+
+  const loginInner = loginPath.startsWith("/")
+    ? `/${locale}${loginPath}`
+    : `/${locale}/${loginPath}`;
+  return `${loginInner}?next=${encodeURIComponent(innerFull)}`;
 }
 
 /* ============================================================

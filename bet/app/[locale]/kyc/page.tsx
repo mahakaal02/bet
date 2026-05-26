@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { KycForm } from "./KycForm";
 import {
   DEFAULT_LOCALE,
+  buildAuthRedirect,
   buildLocalizedMetadata,
   isLocale,
   localizedPath,
@@ -54,8 +55,10 @@ export async function generateMetadata({
  */
 export default async function KycPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { locale: raw } = await params;
   if (!isLocale(raw)) notFound();
@@ -64,7 +67,10 @@ export default async function KycPage({
     t(k, locale, vars);
 
   const me = await getAuthedUser();
-  if (!me) redirect(localizedPath("/login?next=/kyc", locale));
+  if (!me) {
+    const sp = await searchParams;
+    redirect(buildAuthRedirect("/kyc", sp, locale));
+  }
 
   const submission = await db.kycSubmission.findUnique({
     where: { userId: me.id },

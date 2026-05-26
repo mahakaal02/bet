@@ -12,6 +12,7 @@ import { MIN_WITHDRAW_COINS } from "@/lib/coins";
 import { fmtCoins, timeAgo } from "@/lib/utils";
 import {
   DEFAULT_LOCALE,
+  buildAuthRedirect,
   buildLocalizedMetadata,
   isLocale,
   localizedPath,
@@ -45,8 +46,10 @@ export async function generateMetadata({
  */
 export default async function WithdrawPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { locale: raw } = await params;
   if (!isLocale(raw)) notFound();
@@ -57,11 +60,9 @@ export default async function WithdrawPage({
 
   const u = await getAuthedUser();
   if (!u) {
-    redirect(
-      localizedPath("/login", locale) +
-        "?next=" +
-        encodeURIComponent(localizedPath("/wallet/withdraw", locale)),
-    );
+    // Preserve UTM/click-IDs through the auth round-trip.
+    const sp = await searchParams;
+    redirect(buildAuthRedirect("/wallet/withdraw", sp, locale));
   }
 
   const [wallet, me, history] = await Promise.all([

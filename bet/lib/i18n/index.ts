@@ -74,6 +74,7 @@ export {
   extractTrackingParams,
   appendTrackingParams,
   withPreservedParams,
+  buildAuthRedirect,
   localeDimension,
   localeAnalyticsContext,
   type LocaleAnalyticsContext,

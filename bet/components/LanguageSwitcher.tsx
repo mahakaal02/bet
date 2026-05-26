@@ -148,11 +148,15 @@ export function LanguageSwitcher({
     }
     // Build the cross-locale target with every query parameter
     // intact — UTM tags, click IDs, referral codes, search/sort
-    // filters, etc. The user's analytics session continues
-    // uninterrupted; their on-page state (selected sort, search
-    // text) survives the language flip.
+    // filters, etc. — AND the hash fragment so a user reading
+    // `/pt/markets#comments` lands on `/en/markets#comments` rather
+    // than the top of the page. The user's analytics session
+    // continues uninterrupted; their on-page position (anchor +
+    // sort + filters) survives the language flip.
     const base = localizedPath(pathname ?? "/", next);
-    const target = withPreservedParams(base, searchParams);
+    const hash =
+      typeof window !== "undefined" ? window.location.hash : undefined;
+    const target = withPreservedParams(base, searchParams, hash);
     setOpen(false);
     router.push(target);
     router.refresh();

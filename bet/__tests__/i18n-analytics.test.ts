@@ -5,6 +5,7 @@ import {
   LOCALES,
   TRACKING_PARAM_KEYS,
   appendTrackingParams,
+  buildAuthRedirect,
   extractTrackingParams,
   localeAnalyticsContext,
   localeDimension,
@@ -303,6 +304,155 @@ describe("withPreservedParams", () => {
     expect(out).toContain("utm_campaign=launch");
     expect(out).toContain("utm_source=twitter");
     expect(out).toContain("fbclid=ABC");
+  });
+
+  describe("hash fragment preservation", () => {
+    it("appends the hash when no params present", () => {
+      expect(withPreservedParams("/en/markets", null, "#comments")).toBe(
+        "/en/markets#comments",
+      );
+    });
+
+    it("appends the hash after the query string", () => {
+      const sp = new URLSearchParams("q=foo");
+      expect(withPreservedParams("/en/markets", sp, "#latest")).toBe(
+        "/en/markets?q=foo#latest",
+      );
+    });
+
+    it("normalizes a hash that lacks the leading '#'", () => {
+      const sp = new URLSearchParams("q=foo");
+      expect(withPreservedParams("/en/markets", sp, "comments")).toBe(
+        "/en/markets?q=foo#comments",
+      );
+    });
+
+    it("skips an empty/undefined hash", () => {
+      expect(withPreservedParams("/en/markets", null, "")).toBe("/en/markets");
+      expect(withPreservedParams("/en/markets", null, undefined)).toBe(
+        "/en/markets",
+      );
+      expect(withPreservedParams("/en/markets", null, null)).toBe("/en/markets");
+    });
+
+    it("preserves hash when target already has a query", () => {
+      const sp = new URLSearchParams("locale=en");
+      expect(withPreservedParams("/en/markets?q=foo", sp, "#sec")).toBe(
+        "/en/markets?q=foo&locale=en#sec",
+      );
+    });
+  });
+});
+
+/* ============================================================
+   buildAuthRedirect — UTM preservation through the auth round-trip
+   ============================================================ */
+
+describe("buildAuthRedirect", () => {
+  it("builds a locale-prefixed login URL with the bare target", () => {
+    const out = buildAuthRedirect("/wallet", {}, "pt");
+    expect(out).toBe("/pt/login?next=" + encodeURIComponent("/pt/wallet"));
+  });
+
+  it("preserves UTM params through the auth round-trip", () => {
+    const out = buildAuthRedirect(
+      "/wallet",
+      { utm_source: "twitter", utm_campaign: "launch" },
+      "pt",
+    );
+    // The `next=` value is the URL-encoded full inbound URL so that
+    // LoginForm can read it via useSearchParams and router.replace
+    // straight there.
+    expect(out.startsWith("/pt/login?next=")).toBe(true);
+    const next = decodeURIComponent(out.split("next=")[1]);
+    expect(next).toBe("/pt/wallet?utm_source=twitter&utm_campaign=launch");
+  });
+
+  it("preserves click IDs (fbclid, gclid, msclkid)", () => {
+    const out = buildAuthRedirect(
+      "/portfolio",
+      { fbclid: "fb42", gclid: "g-abc", msclkid: "ms99" },
+      "es",
+    );
+    const next = decodeURIComponent(out.split("next=")[1]);
+    expect(next).toContain("fbclid=fb42");
+    expect(next).toContain("gclid=g-abc");
+    expect(next).toContain("msclkid=ms99");
+  });
+
+  it("preserves referral codes through the auth round-trip", () => {
+    const out = buildAuthRedirect(
+      "/wallet",
+      { ref: "alice-2024", invite: "BETA42" },
+      "fr",
+    );
+    const next = decodeURIComponent(out.split("next=")[1]);
+    expect(next).toContain("ref=alice-2024");
+    expect(next).toContain("invite=BETA42");
+  });
+
+  it("handles the Next.js array-shape searchParams (picks first value)", () => {
+    const out = buildAuthRedirect(
+      "/notifications",
+      {
+        utm_source: ["newsletter", "duplicate"],
+        ref: "alice",
+      },
+      "en",
+    );
+    const next = decodeURIComponent(out.split("next=")[1]);
+    expect(next).toContain("utm_source=newsletter");
+    expect(next).not.toContain("duplicate");
+    expect(next).toContain("ref=alice");
+  });
+
+  it("drops empty / undefined params (no junk in URL)", () => {
+    const out = buildAuthRedirect(
+      "/wallet",
+      {
+        utm_source: "",
+        utm_medium: undefined,
+        ref: "alice",
+      },
+      "pt",
+    );
+    const next = decodeURIComponent(out.split("next=")[1]);
+    expect(next).toContain("ref=alice");
+    expect(next).not.toContain("utm_source=");
+    expect(next).not.toContain("utm_medium=");
+  });
+
+  it("works with URLSearchParams input shape", () => {
+    const sp = new URLSearchParams("utm_source=twitter&ref=alice");
+    const out = buildAuthRedirect("/wallet", sp, "pt");
+    const next = decodeURIComponent(out.split("next=")[1]);
+    expect(next).toContain("utm_source=twitter");
+    expect(next).toContain("ref=alice");
+  });
+
+  it("supports a custom loginPath (e.g. /sso vs /login)", () => {
+    const out = buildAuthRedirect("/wallet", {}, "pt", "/sso");
+    expect(out.startsWith("/pt/sso?next=")).toBe(true);
+  });
+
+  it("handles bare params (no params at all)", () => {
+    expect(buildAuthRedirect("/wallet", null, "en")).toBe(
+      "/en/login?next=" + encodeURIComponent("/en/wallet"),
+    );
+    expect(buildAuthRedirect("/wallet", undefined, "en")).toBe(
+      "/en/login?next=" + encodeURIComponent("/en/wallet"),
+    );
+  });
+
+  it("the `next=` target is double-encoded-safe (decode roundtrips)", () => {
+    const out = buildAuthRedirect(
+      "/wallet",
+      { utm_campaign: "Q2 Launch (Final)" },
+      "pt",
+    );
+    const next = decodeURIComponent(out.split("next=")[1]);
+    // The inner param value with a space + parens roundtrips intact.
+    expect(next).toContain("utm_campaign=Q2+Launch+%28Final%29");
   });
 });
 
