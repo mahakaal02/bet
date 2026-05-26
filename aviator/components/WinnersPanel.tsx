@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from '@/lib/store';
 import { tierFor } from '@/lib/tiers';
 import { formatCoins } from '@/lib/format';
+import { useTranslation } from '@/lib/i18n/client';
 
 /**
  * Recent winners ticker. Cross-round persistent (unlike the roster
@@ -15,6 +16,7 @@ import { formatCoins } from '@/lib/format';
  */
 export default function WinnersPanel() {
   const winners = useGame((s) => s.recentWinners);
+  const { t } = useTranslation();
 
   return (
     <aside
@@ -23,7 +25,7 @@ export default function WinnersPanel() {
     >
       <header className="px-4 pt-4 pb-3 border-b border-divider flex items-center justify-between">
         <h2 className="text-xs font-bold uppercase tracking-[0.20em] text-text-secondary">
-          Recent winners
+          {t('game.recentWinners')}
         </h2>
         <span className="font-mono text-xs text-text-secondary">
           {winners.length}
@@ -33,7 +35,7 @@ export default function WinnersPanel() {
       <div className="flex-1 overflow-y-auto scroll-cool px-2 py-2 space-y-1 max-h-[300px]">
         {winners.length === 0 ? (
           <p className="text-text-muted text-xs px-2 py-3">
-            No cashouts yet this session.
+            {t('game.noCashoutsYet')}
           </p>
         ) : (
           <AnimatePresence initial={false}>

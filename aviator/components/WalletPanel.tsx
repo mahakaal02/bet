@@ -3,6 +3,7 @@
 import { useGame } from '@/lib/store';
 import { getToken } from '@/lib/auth';
 import { formatCoins } from '@/lib/format';
+import { useTranslation } from '@/lib/i18n/client';
 
 /**
  * Wallet quick-actions panel — premium glass card with two CTAs.
@@ -51,6 +52,7 @@ function exchangeUrl(path: string): string {
 export default function WalletPanel() {
   const walletBalance = useGame((s) => s.walletBalance);
   const canWithdraw = (walletBalance ?? 0) >= WITHDRAW_MIN;
+  const { t } = useTranslation();
   const remaining = Math.max(0, WITHDRAW_MIN - (walletBalance ?? 0));
   const pct = canWithdraw
     ? 100
@@ -70,7 +72,7 @@ export default function WalletPanel() {
       <div className="flex items-center justify-between">
         <div>
           <div className="text-[10px] font-bold uppercase tracking-[0.20em] text-text-secondary">
-            Wallet balance
+            {t('wallet.balance')}
           </div>
           <div className="font-mono text-2xl lg:text-3xl font-black leading-tight text-text-primary tabular-nums">
             {formatCoins(walletBalance)}
@@ -81,19 +83,19 @@ export default function WalletPanel() {
             onClick={clickPay}
             className="px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-gradient-to-br from-aurora-violet to-[#5C2BFF] hover:brightness-110 transition chip-press shadow-card"
           >
-            + Top up
+            {t('wallet.topUp')}
           </button>
           <button
             onClick={clickWithdraw}
             disabled={!canWithdraw}
             title={
               canWithdraw
-                ? 'Withdraw to your bank / UPI'
-                : `Reach ${formatCoins(WITHDRAW_MIN)} to enable withdrawals`
+                ? t('wallet.encashTooltipUnlocked')
+                : t('wallet.encashTooltipLocked', { min: formatCoins(WITHDRAW_MIN) })
             }
             className="px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-gradient-to-br from-success to-[#10A38A] hover:brightness-110 transition chip-press shadow-card disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:brightness-100"
           >
-            Encash
+            {t('wallet.encash')}
           </button>
         </div>
       </div>
@@ -107,7 +109,7 @@ export default function WalletPanel() {
             />
           </div>
           <p className="text-[11px] text-text-secondary">
-            Encash unlocks at {formatCoins(WITHDRAW_MIN)} — {formatCoins(remaining)} to go.
+            {t('wallet.encashUnlocks', { min: formatCoins(WITHDRAW_MIN), remaining: formatCoins(remaining) })}
           </p>
         </div>
       )}

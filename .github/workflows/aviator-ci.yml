@@ -1,0 +1,63 @@
+# Aviator (Kalki Aviator / crash game) — CI. Mirrors `bet-ci.yml` for
+# the aviator app: typecheck + production build on every push to main
+# and every PR that touches the `aviator/` tree.
+name: Aviator CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "aviator/**"
+      - ".github/workflows/aviator-ci.yml"
+  pull_request:
+    paths:
+      - "aviator/**"
+      - ".github/workflows/aviator-ci.yml"
+
+concurrency:
+  group: aviator-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: aviator
+
+    # Mirror the env the production build receives (build-and-push.yml).
+    # `NEXT_PUBLIC_AVIATOR_ROCKET=1` selects the rocket art stage; the
+    # canvas-only fallback path is also typechecked at build time
+    # regardless of the flag value, so this just keeps CI close to prod.
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      NEXT_PUBLIC_AUCTIONS_URL: http://localhost:3200
+      NEXT_PUBLIC_EXCHANGE_URL: http://localhost:3100
+      NEXT_PUBLIC_AVIATOR_ROCKET: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: aviator/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Next build
+        run: npm run build
+
+      # Advisory lint — same rationale as bet/auctions: aviator doesn't
+      # ship an .eslintrc so `next lint` drops into the interactive
+      # setup. Warnings surface without blocking.
+      - name: Lint
+        continue-on-error: true
+        run: npx next lint --max-warnings 0

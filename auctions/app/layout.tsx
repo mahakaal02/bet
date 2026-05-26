@@ -1,6 +1,14 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { SessionHeartbeat } from "@/components/SessionHeartbeat";
+import {
+  DEFAULT_LOCALE,
+  LOCALE_HEADER,
+  dirForLocale,
+  isLocale,
+  type Locale,
+} from "@/lib/i18n";
 
 export const metadata: Metadata = {
   title: "Kalki Auctions",
@@ -25,13 +33,34 @@ export const viewport: Viewport = {
   themeColor: "#0B1020",
 };
 
-export default function RootLayout({
+/**
+ * Root layout — wraps EVERY route (localized + non-localized).
+ *
+ * `<html lang>` + `<html dir>` are resolved per-request from the
+ * `x-auctions-locale` request header that middleware sets when a
+ * locale-prefixed URL flows through. For paths outside the
+ * `[locale]/` tree (e.g. `/share/*` or unmatched 404s) the header is
+ * absent and we fall back to DEFAULT_LOCALE. This is the single
+ * source of truth for the document language announcement —
+ * assistive tech keys off it.
+ *
+ * Why server-resolve instead of e.g. a `<HtmlLangSetter>` client
+ * component? Screen readers read the initial `<html lang>` value
+ * the moment the document loads; flipping it from JS post-hydration
+ * is too late.
+ */
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const hdrs = await headers();
+  const raw = hdrs.get(LOCALE_HEADER);
+  const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  const dir = dirForLocale(locale);
+
   return (
-    <html lang="en" className="dark">
+    <html lang={locale} dir={dir} className="dark">
       <head>
         {/* PR-LOGIN-REDESIGN — Space Grotesk (display/UI) + JetBrains
             Mono (live numbers, tickers) for the hub landing/login.

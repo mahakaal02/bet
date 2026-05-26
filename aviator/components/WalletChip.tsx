@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useGame } from '@/lib/store';
 import { getToken } from '@/lib/auth';
 import { formatCoins } from '@/lib/format';
+import { useTranslation } from '@/lib/i18n/client';
 
 /**
  * Compact wallet chip in the navbar. Tap → Exchange top-up at
@@ -29,6 +30,7 @@ export default function WalletChip() {
   const balance = useGame((s) => s.balance);
   const [busy, setBusy] = useState(false);
   const empty = balance == null || balance <= 0;
+  const { t } = useTranslation();
 
   function open() {
     setBusy(true);
@@ -44,7 +46,7 @@ export default function WalletChip() {
       type="button"
       onClick={open}
       disabled={busy}
-      title={empty ? 'Top up your wallet' : 'Manage wallet'}
+      title={empty ? t('wallet.topUpTitle') : t('wallet.manageWallet')}
       className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-bold border chip-press transition disabled:opacity-60 ${
         empty
           ? 'border-warning/40 bg-warning/15 text-warning hover:bg-warning/25'

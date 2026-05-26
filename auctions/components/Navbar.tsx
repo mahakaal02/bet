@@ -1,8 +1,18 @@
 import Image from "next/image";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSessionToken } from "@/lib/session";
 import { backend, BackendUnauthorized } from "@/lib/backend";
+import {
+  DEFAULT_LOCALE,
+  LOCALE_HEADER,
+  isLocale,
+  localizedPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import { TopupChip } from "./TopupChip";
 
 /** Inline bell glyph — avoids pulling lucide-react into the auctions
@@ -85,6 +95,15 @@ function UserIcon() {
  */
 export async function Navbar() {
   const token = await getSessionToken();
+  // Locale comes from the request header set by middleware. The
+  // navbar renders inside the [locale]/ tree, so the header is
+  // always present in practice — but fall back defensively so a
+  // misconfigured edge doesn't blow the page up.
+  const hdrs = await headers();
+  const raw = hdrs.get(LOCALE_HEADER);
+  const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  const tr = (k: string) => t(k, locale);
+  const lp = (path: string) => localizedPath(path, locale);
   let me: {
     username: string;
     email: string | null;
@@ -109,7 +128,7 @@ export async function Navbar() {
       if (meResp.status === "fulfilled") {
         me = meResp.value;
       } else if (meResp.reason instanceof BackendUnauthorized) {
-        redirect("/login");
+        redirect(lp("/login"));
       }
       if (badgeResp.status === "fulfilled") {
         unreadCount = badgeResp.value.count;
@@ -117,7 +136,7 @@ export async function Navbar() {
     } catch (err) {
       // Transient errors land users on a stale balance for a beat — only
       // redirect when the upstream actively rejects the JWT.
-      if (err instanceof BackendUnauthorized) redirect("/login");
+      if (err instanceof BackendUnauthorized) redirect(lp("/login"));
     }
   }
 
@@ -125,7 +144,7 @@ export async function Navbar() {
     <header className="sticky top-0 z-40 border-b border-[var(--color-divider)] bg-[var(--color-bg)]/85 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
-          <Link href="/" className="flex items-center gap-2">
+          <Link href={lp("/")} className="flex items-center gap-2">
             <Image
               src="/kalki-logo.png"
               alt="Kalki"
@@ -144,10 +163,10 @@ export async function Navbar() {
               and the pill doubles as a "back to game picker" affordance
               from any auctions sub-page. */}
           <Link
-            href="/"
+            href={lp("/")}
             className="hidden text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200 sm:inline"
           >
-            Games
+            {tr("nav.games")}
           </Link>
         </div>
         <div className="flex items-center gap-2 text-sm">
@@ -158,18 +177,18 @@ export async function Navbar() {
             <>
               <TopupChip balance={me.coinBalance} />
               <Link
-                href="/me/watchlist"
-                aria-label="My watchlist"
+                href={lp("/me/watchlist")}
+                aria-label={tr("nav.watchlist")}
                 className="grid h-9 w-9 place-items-center rounded-lg border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/80 hover:border-amber-400/40 hover:text-amber-200 transition"
               >
                 <StarIcon />
               </Link>
               <Link
-                href="/notifications"
+                href={lp("/notifications")}
                 aria-label={
                   unreadCount > 0
-                    ? `Notifications (${unreadCount} unread)`
-                    : "Notifications"
+                    ? `${tr("nav.notifications")} (${unreadCount})`
+                    : tr("nav.notifications")
                 }
                 className="relative grid h-9 w-9 place-items-center rounded-lg border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/80 hover:border-cyan-500/40 transition"
               >
@@ -184,21 +203,25 @@ export async function Navbar() {
                 )}
               </Link>
               <Link
-                href="/profile"
-                aria-label="Profile"
+                href={lp("/profile")}
+                aria-label={tr("nav.profile")}
                 className="grid h-9 w-9 place-items-center rounded-lg border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/80 hover:border-cyan-500/40 transition"
-                title={me.username ? `@${me.username}` : "Profile"}
+                title={me.username ? `@${me.username}` : tr("nav.profile")}
               >
                 <UserIcon />
               </Link>
+              <LanguageSwitcher currentLocale={locale} />
             </>
           ) : (
-            <Link
-              href="/login"
-              className="rounded-md border border-cyan-500/40 bg-cyan-500/10 px-3 py-1 text-cyan-200 hover:bg-cyan-500/15"
-            >
-              Sign in
-            </Link>
+            <>
+              <Link
+                href={lp("/login")}
+                className="rounded-md border border-cyan-500/40 bg-cyan-500/10 px-3 py-1 text-cyan-200 hover:bg-cyan-500/15"
+              >
+                {tr("nav.signIn")}
+              </Link>
+              <LanguageSwitcher currentLocale={locale} />
+            </>
           )}
         </div>
       </div>

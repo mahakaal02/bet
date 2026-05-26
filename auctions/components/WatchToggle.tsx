@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "@/lib/i18n/client";
 
 /**
  * Star-shaped watch toggle for an auction. Renders nothing if the
@@ -27,6 +28,7 @@ export function WatchToggle({
   compact?: boolean;
 }) {
   const router = useRouter();
+  const { t } = useTranslation();
   const [watching, setWatching] = useState(initialWatching);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +47,7 @@ export function WatchToggle({
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.message ?? "Couldn't update watchlist.");
+        throw new Error(body?.message ?? t("auction.watchToggleError"));
       }
       // Refresh server components reading watchlist counts (e.g. the
       // /me/watchlist page if the user navigates back).
@@ -53,16 +55,16 @@ export function WatchToggle({
     } catch (e) {
       // Revert optimistic state.
       setWatching(!next);
-      setError(e instanceof Error ? e.message : "Couldn't update watchlist.");
+      setError(
+        e instanceof Error ? e.message : t("auction.watchToggleError"),
+      );
     } finally {
       setBusy(false);
     }
   }
 
-  const label = watching ? "Watching" : "Watch";
-  const ariaLabel = watching
-    ? `Stop watching this auction`
-    : `Watch this auction`;
+  const label = watching ? t("auction.watching") : t("auction.watch");
+  const ariaLabel = label;
 
   if (compact) {
     return (
