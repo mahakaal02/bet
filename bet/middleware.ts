@@ -1,63 +1,179 @@
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  DEFAULT_LOCALE,
+  GEO_ROUTED_COOKIE,
+  GEO_ROUTED_COOKIE_MAX_AGE_SECONDS,
+  PREFERRED_LOCALE_COOKIE,
+  PREFERRED_LOCALE_COOKIE_MAX_AGE_SECONDS,
+  isLikelyBot,
+  isLocale,
+  localeForCountry,
+  parseAcceptLanguage,
+  splitLocaleFromPath,
+} from "@/lib/i18n";
 
 /**
- * Universal SSO entry for Bet. Any request that arrives with `?token=…`
- * gets bounced to `/api/auth/sso?token=…&next=<original>` — the route
- * handler verifies the JWT, mints a NextAuth session, and redirects
- * back to the original URL with the user signed in.
+ * Bet middleware (edge runtime) — two responsibilities:
  *
- * Why middleware + route handler instead of just the existing
- * `TokenBridge` client component:
+ *   1. SSO bridge (existing): `?token=…` → /api/auth/sso path.
+ *   2. i18n routing (PR-BET-I18N): inject the appropriate locale
+ *      segment into every user-facing URL so the SEO tree is
+ *      `/{en|pt|es|fr}/...`.
  *
- *   - `TokenBridge` only renders on `/`. Deep links like
- *     `/wallet?token=…` (used by the auctions app's "Top up" chip)
- *     never get a chance to consume the token because `/wallet`
- *     server-side `redirect(/login)`s before any client code runs.
- *   - Middleware fires before the page handler, so we can divert to
- *     the sso route handler regardless of which page the user landed
- *     on.
+ * Locale resolution order (only applied when the path doesn't
+ * already carry a locale prefix):
  *
- * Edge-runtime constraint: middleware can't talk to Prisma, so the
- * actual user-find + JWT-mint lives in the Node-runtime route handler
- * (`app/api/auth/sso/route.ts`). Middleware does the URL surgery only.
+ *   1. Manual preference cookie (`preferred_language`). Sticks
+ *      for a year — manual choice ALWAYS wins.
+ *   2. Edge geolocation header (`x-vercel-ip-country`, `cf-ipcountry`,
+ *      `x-real-country`). First-visit auto-routing.
+ *   3. `Accept-Language` HTTP header (third-fallback so a French
+ *      user on a US VPN still lands on /fr/ if their browser
+ *      advertises French).
+ *   4. `DEFAULT_LOCALE` (English).
+ *
+ * Anti-loop guard: a `kalki_geo_routed` cookie is set the first
+ * time we geo-route a visitor. On subsequent visits where the path
+ * is non-localized, we skip the auto-route and default to the
+ * cookie or English. That way a Brazilian user who deliberately
+ * pastes /en/ into the URL bar isn't perpetually slingshot back to
+ * /pt/ — they get what they asked for.
+ *
+ * Bots (User-Agent match) NEVER get redirected. Crawler sees the
+ * exact URL it requested; no surprise 302s skew the index.
+ *
+ * 302 (Found) not 301 — geo state can change (VPN, travel), so the
+ * redirect must not be cached as permanent by intermediate proxies.
  */
+export const config = {
+  // Match every path EXCEPT:
+  //   - /_next/* (Next.js internals + static assets)
+  //   - /api/*   (HTTP API routes, not user-facing)
+  //   - /admin/* (operator surface, English-only by policy)
+  //   - file extensions (favicon.ico, sitemap.xml, robots.txt,
+  //                       opengraph-image.png, etc.)
+  matcher: [
+    "/((?!_next|api|admin|favicon\\.ico|sitemap\\.xml|robots\\.txt|kalki-logo\\.png|logo\\.png|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|js|css|woff2?)).*)",
+  ],
+};
+
 export function middleware(req: NextRequest) {
+  /* ----- existing SSO bridge ----- */
   const token = req.nextUrl.searchParams.get("token");
-  if (!token) return NextResponse.next();
-  // Don't intercept the sso route itself — that's where we're going.
-  if (req.nextUrl.pathname.startsWith("/api/auth/sso")) {
+  if (token && !req.nextUrl.pathname.startsWith("/api/auth/sso")) {
+    // PR-WEB-LOGOUT-FIX — refuse to re-establish a NextAuth session
+    // from a `?token=` URL param if the user just signed out.
+    const justLoggedOut = req.cookies.get("kalki_logged_out")?.value === "1";
+    if (justLoggedOut) {
+      const cleanUrl = req.nextUrl.clone();
+      cleanUrl.searchParams.delete("token");
+      return NextResponse.redirect(cleanUrl);
+    }
+    const cleanUrl = req.nextUrl.clone();
+    cleanUrl.searchParams.delete("token");
+    const sso = req.nextUrl.clone();
+    sso.pathname = "/api/auth/sso";
+    sso.searchParams.set("next", cleanUrl.pathname + cleanUrl.search);
+    return NextResponse.redirect(sso);
+  }
+
+  /* ----- i18n routing (PR-BET-I18N) ----- */
+  const { locale: pathLocale, rest } = splitLocaleFromPath(req.nextUrl.pathname);
+
+  if (pathLocale) {
+    // URL already has a locale prefix. Trust it as the user's intent
+    // and let it through unchanged. No cookie writes here — that's
+    // owned by the language switcher (explicit user action) so a
+    // user landing on /en/ via a shared link doesn't accidentally
+    // overwrite their /pt/ preference.
     return NextResponse.next();
   }
 
-  // PR-WEB-LOGOUT-FIX — refuse to re-establish a NextAuth session from
-  // a `?token=…` URL param if the user just signed out (within the
-  // last 60s, see bet/app/api/auth/sso-logout/route.ts). Symptom we
-  // fix: "I signed out, clicked a Kalki hub tile that carries
-  // `?token=` from a stale page render, and got silently signed back
-  // in." Token stripped from URL, no session minted.
-  const justLoggedOut = req.cookies.get("kalki_logged_out")?.value === "1";
-  if (justLoggedOut) {
-    const cleanUrl = req.nextUrl.clone();
-    cleanUrl.searchParams.delete("token");
-    return NextResponse.redirect(cleanUrl);
+  // PR-BET-I18N — phased migration guard.
+  //
+  // Only redirect paths we've actually migrated under `app/[locale]/`.
+  // Otherwise a request for `/wallet` would be redirected to
+  // `/en/wallet`, which 404s until that page is moved into the
+  // locale tree. Keeping the allowlist explicit means each
+  // page-migration PR is a single safe additive change to this
+  // array.
+  //
+  // Migrated so far:
+  //   • "/"  (app/[locale]/page.tsx)
+  //
+  // As pages move (wallet, markets, profile, login, register, …),
+  // add their paths here. The README in lib/i18n explains the
+  // mechanical 6-step migration.
+  const MIGRATED_PATHS = new Set<string>(["/"]);
+  if (!MIGRATED_PATHS.has(rest)) {
+    return NextResponse.next();
   }
 
-  const cleanUrl = req.nextUrl.clone();
-  cleanUrl.searchParams.delete("token");
+  // Non-localized path — figure out where to send the user.
+  const userAgent = req.headers.get("user-agent");
+  if (isLikelyBot(userAgent)) {
+    // Bot — redirect to the default locale unconditionally so the
+    // crawler's index keys off the canonical localized URL, not the
+    // bare path. 302 because the bare path may host different
+    // content in the future (e.g. a redirect to a locale picker).
+    const url = req.nextUrl.clone();
+    url.pathname = rest === "/" ? `/${DEFAULT_LOCALE}` : `/${DEFAULT_LOCALE}${rest}`;
+    return NextResponse.redirect(url);
+  }
 
-  const sso = req.nextUrl.clone();
-  sso.pathname = "/api/auth/sso";
-  sso.searchParams.set("next", cleanUrl.pathname + cleanUrl.search);
-  // `token` stays as a query param on the sso URL.
+  // Step 1 — manual preference cookie (most authoritative for
+  // returning humans).
+  const cookiePref = req.cookies.get(PREFERRED_LOCALE_COOKIE)?.value;
+  if (isLocale(cookiePref)) {
+    const url = req.nextUrl.clone();
+    url.pathname = rest === "/" ? `/${cookiePref}` : `/${cookiePref}${rest}`;
+    return NextResponse.redirect(url);
+  }
 
-  return NextResponse.redirect(sso);
+  // Step 2 — already-geo-routed sentinel. If we've routed this
+  // visitor before AND they haven't set a manual preference (would
+  // have hit step 1), they've been navigating without picking — send
+  // them to the default rather than re-running geo logic on every
+  // page load.
+  const alreadyRouted = req.cookies.get(GEO_ROUTED_COOKIE)?.value === "1";
+  let chosen = DEFAULT_LOCALE;
+  if (!alreadyRouted) {
+    // First visit. Try geo, then Accept-Language, then default.
+    const country =
+      req.headers.get("x-vercel-ip-country") ??
+      req.headers.get("cf-ipcountry") ??
+      req.headers.get("x-real-country") ??
+      null;
+    const geoLocale = country ? localeForCountry(country) : DEFAULT_LOCALE;
+    if (geoLocale !== DEFAULT_LOCALE) {
+      chosen = geoLocale;
+    } else {
+      const acceptPrefs = parseAcceptLanguage(
+        req.headers.get("accept-language"),
+      );
+      if (acceptPrefs.length > 0) chosen = acceptPrefs[0];
+    }
+  }
+
+  const url = req.nextUrl.clone();
+  url.pathname = rest === "/" ? `/${chosen}` : `/${chosen}${rest}`;
+  const res = NextResponse.redirect(url);
+  // Stamp the geo-routed sentinel so we don't re-run the geo
+  // resolution on every subsequent non-localized request. Also
+  // refresh the TTL if the cookie already exists.
+  res.cookies.set(GEO_ROUTED_COOKIE, "1", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: GEO_ROUTED_COOKIE_MAX_AGE_SECONDS,
+  });
+  return res;
 }
 
-export const config = {
-  // Skip Next.js internals + static assets — only intercept user-facing
-  // routes. NextAuth's own /api/auth/* routes are excluded so the
-  // standard signin/signout/session-token endpoints work normally.
-  matcher: [
-    "/((?!_next|favicon.ico|kalki-logo.png|logo.png|api/auth(?!/sso)).*)",
-  ],
+// Re-export for clarity — middleware adjacent code that needs the
+// cookie names imports them straight from `lib/i18n`.
+export {
+  PREFERRED_LOCALE_COOKIE,
+  PREFERRED_LOCALE_COOKIE_MAX_AGE_SECONDS,
 };
