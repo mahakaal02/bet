@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signOut } from "next-auth/react";
 import { Card } from "@/components/ui/Card";
+import { useTranslation } from "@/lib/i18n/client";
 
 /**
  * Cross-app sign-out card. Used from the Bet profile page (and any
@@ -49,6 +50,7 @@ function resolveBase(fromEnv: string | undefined, svcPrefix: string, devFallback
 
 export function SignOutCard() {
   const [busy, setBusy] = useState(false);
+  const { t } = useTranslation();
 
   async function signOutEverywhere() {
     setBusy(true);
@@ -68,11 +70,10 @@ export function SignOutCard() {
   return (
     <Card>
       <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-        Sign out
+        {t("auth.signOut")}
       </h2>
       <p className="mb-3 text-sm text-slate-300">
-        Signs you out of all three Kalki games and clears your session on
-        this device.
+        {t("auth.signOutAll")}
       </p>
       <button
         type="button"
@@ -80,7 +81,7 @@ export function SignOutCard() {
         disabled={busy}
         className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-500/20 disabled:opacity-50"
       >
-        {busy ? "Signing out…" : "Sign out of all games"}
+        {busy ? t("auth.signingOutButton") : t("auth.signOutButton")}
       </button>
     </Card>
   );

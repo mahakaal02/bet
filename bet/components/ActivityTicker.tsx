@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Activity } from "lucide-react";
 import { cn, fmtCoins, fmtPrice, timeAgo } from "@/lib/utils";
+import {
+  localizedPath,
+  useTranslation,
+} from "@/lib/i18n/client";
 
 interface ActivityEvent {
   id: number;
@@ -28,6 +32,8 @@ const MAX_EVENTS = 12;
 export function ActivityTicker() {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const counterRef = useRef(0);
+
+  const { t, locale } = useTranslation();
 
   useEffect(() => {
     const src = new EventSource("/api/activity/stream");
@@ -63,8 +69,8 @@ export function ActivityTicker() {
   if (events.length === 0) {
     return (
       <div className="glass rounded-xl px-4 py-3 text-xs text-slate-500">
-        <Activity className="mr-1 inline h-3 w-3" />
-        Waiting for live trades…
+        <Activity className="me-1 inline h-3 w-3" />
+        {t("activity.waitingForTrades")}
       </div>
     );
   }
@@ -72,8 +78,8 @@ export function ActivityTicker() {
   return (
     <div className="glass rounded-xl px-2 py-1">
       <div className="border-b border-white/5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-        <Activity className="mr-1 inline h-3 w-3 text-emerald-400" />
-        Live activity
+        <Activity className="me-1 inline h-3 w-3 text-emerald-400" />
+        {t("activity.liveActivity")}
       </div>
       <ul className="max-h-72 overflow-y-auto">
         {events.map((e) => (
@@ -97,7 +103,7 @@ export function ActivityTicker() {
               {e.action} {e.outcome}
             </span>
             <Link
-              href={`/markets/${e.marketSlug}`}
+              href={localizedPath(`/markets/${e.marketSlug}`, locale)}
               className="line-clamp-1 text-slate-300 hover:text-slate-100"
             >
               <span className="font-mono text-[10px] text-slate-500">
@@ -105,7 +111,7 @@ export function ActivityTicker() {
               </span>{" "}
               · {e.marketTitle}
             </Link>
-            <div className="text-right">
+            <div className="text-end">
               <div className="font-mono text-[11px]">
                 {fmtCoins(e.coins)} <span className="text-slate-500">@</span>{" "}
                 {fmtPrice(e.price)}

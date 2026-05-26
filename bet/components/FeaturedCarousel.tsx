@@ -106,7 +106,7 @@ export function FeaturedCarousel({ markets }: Props) {
                   )}
                   {/* Bottom-fade so the banner blends into the card body. */}
                   <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-slate-900 to-transparent" />
-                  <div className="absolute left-3 top-3 flex gap-1.5">
+                  <div className="absolute start-3 top-3 flex gap-1.5">
                     <Badge tone="warn">
                       <Sparkles className="h-3 w-3" /> Featured
                     </Badge>
@@ -127,7 +127,7 @@ export function FeaturedCarousel({ markets }: Props) {
                         {fmtPrice(yes)}
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-end">
                       <div className="text-[10px] uppercase tracking-wider text-slate-500">
                         NO
                       </div>

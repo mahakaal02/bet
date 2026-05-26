@@ -6,6 +6,7 @@ import { Camera, X } from "lucide-react";
 import { Avatar } from "@/components/Avatar";
 import { toast } from "@/components/ui/Toaster";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n/client";
 
 interface Props {
   /** Current avatar URL — null/undefined for the gradient initial fallback. */
@@ -34,12 +35,13 @@ export function AvatarUploader({ image, name, size = 56 }: Props) {
   // has (server replaces the URL on every upload, but defensive).
   const [bust, setBust] = useState<number>(0);
   const [, startTransition] = useTransition();
+  const { t: tr } = useTranslation();
 
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
-      toast("Image too large — keep it under 2 MB.", "err");
+      toast(tr("avatar.tooLarge"), "err");
       return;
     }
     const localUrl = URL.createObjectURL(file);
@@ -53,10 +55,10 @@ export function AvatarUploader({ image, name, size = 56 }: Props) {
       if (!res.ok) {
         URL.revokeObjectURL(localUrl);
         setOptimistic(null);
-        toast(prettyError(body.error), "err");
+        toast(prettyError(body.error, tr), "err");
         return;
       }
-      toast("Avatar updated.", "ok");
+      toast(tr("avatar.updated"), "ok");
       setBust(Date.now());
       startTransition(() => router.refresh());
     } finally {
@@ -75,15 +77,15 @@ export function AvatarUploader({ image, name, size = 56 }: Props) {
 
   async function onRemove() {
     if (!image) return;
-    if (!confirm("Remove your avatar?")) return;
+    if (!confirm(tr("avatar.removeConfirm"))) return;
     setBusy(true);
     const res = await fetch("/api/me/avatar", { method: "DELETE" });
     setBusy(false);
     if (!res.ok) {
-      toast("Could not remove avatar.", "err");
+      toast(tr("avatar.removeFailed"), "err");
       return;
     }
-    toast("Avatar removed.", "ok");
+    toast(tr("avatar.removed"), "ok");
     startTransition(() => router.refresh());
   }
 
@@ -106,7 +108,7 @@ export function AvatarUploader({ image, name, size = 56 }: Props) {
           "hover:bg-black/55 hover:text-white focus-visible:bg-black/55 focus-visible:text-white focus:outline-none",
           busy && "bg-black/55 text-white",
         )}
-        aria-label="Change avatar"
+        aria-label={tr("avatar.changeAria")}
       >
         <Camera className="h-5 w-5" />
       </button>
@@ -115,8 +117,8 @@ export function AvatarUploader({ image, name, size = 56 }: Props) {
         <button
           type="button"
           onClick={onRemove}
-          className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full border border-slate-700 bg-slate-900 text-slate-300 opacity-0 transition group-hover:opacity-100 hover:bg-slate-800 hover:text-rose-300"
-          aria-label="Remove avatar"
+          className="absolute -end-1 -top-1 grid h-5 w-5 place-items-center rounded-full border border-slate-700 bg-slate-900 text-slate-300 opacity-0 transition group-hover:opacity-100 hover:bg-slate-800 hover:text-rose-300"
+          aria-label={tr("avatar.removeAria")}
         >
           <X className="h-3 w-3" />
         </button>
@@ -133,19 +135,22 @@ export function AvatarUploader({ image, name, size = 56 }: Props) {
   );
 }
 
-function prettyError(code?: string): string {
+function prettyError(
+  code: string | undefined,
+  tr: (k: string, vars?: Record<string, string | number>) => string,
+): string {
   switch (code) {
     case "unsupported_type":
-      return "Only PNG / JPEG / WebP / GIF are supported.";
+      return tr("avatar.errUnsupportedType");
     case "too_large":
-      return "Image too large — keep it under 2 MB.";
+      return tr("avatar.tooLarge");
     case "bad_image":
-      return "That file doesn't look like a valid image.";
+      return tr("avatar.errBadImage");
     case "rate_limited":
-      return "You're changing avatar too fast. Wait a minute.";
+      return tr("avatar.errRateLimited");
     case "no_file":
-      return "Pick a file first.";
+      return tr("avatar.errNoFile");
     default:
-      return "Upload failed.";
+      return tr("avatar.errUploadFailed");
   }
 }

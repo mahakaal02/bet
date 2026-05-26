@@ -212,11 +212,53 @@ model Market {
   watchlist   Watchlist[]
   orders      Order[]
   orderMatches OrderMatch[]
+  translations MarketTranslation[]
 
   @@index([status, endsAt])
   @@index([category, status])
   @@index([trendingScore(sort: Desc)])
   @@index([featured])
+}
+
+// ───── Localized market content (PR-BET-I18N) ─────────────────────────────
+//
+// Sidecar table holding per-locale translations of Market.title and
+// Market.description. Design choices:
+//
+//   • One row per (marketId, locale) — only inserted when a translation
+//     actually exists. A market with no rows here falls back to the
+//     canonical Market.title/description (authoring language). No row
+//     duplication for untranslated markets; the table stays small.
+//   • title/description columns are nullable so a translator can fill
+//     only one without producing an empty placeholder for the other.
+//     The display helper (`lib/i18n/market-content.ts::getLocalizedMarket`)
+//     handles per-field fallback: prefers the translation, falls back
+//     to canonical when the translation field is null.
+//   • Cascade-delete on Market — orphan translations are useless and
+//     would prevent admin deletion otherwise.
+//   • Unique (marketId, locale) ensures we never accumulate duplicate
+//     rows for the same (market, locale) pair under concurrent admin
+//     edits.
+//
+// Lifecycle: admin UI (out-of-scope follow-up) writes rows here. The
+// reader-side fallback is already in place via the helper, so adding
+// translations is purely additive — no client deploy needed.
+model MarketTranslation {
+  id          String   @id @default(cuid())
+  marketId    String
+  locale      String   // "en" | "pt" | "es" | "fr" — see lib/i18n/config.ts
+  title       String?
+  description String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+  // Admin operator who created/last-edited this translation. Optional —
+  // machine-translated rows have no human author.
+  authorId    String?
+
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@unique([marketId, locale])
+  @@index([locale])
 }
 
 // Snapshot of mid price after each trade — used to draw the price chart on

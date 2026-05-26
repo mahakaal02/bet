@@ -99,7 +99,7 @@ export function ReportButton({ targetType, targetId, hidden }: Props) {
         <Flag className="h-3 w-3" />
       </button>
       {open && (
-        <div className="fade-up absolute right-0 z-20 mt-1 w-64 overflow-hidden rounded-lg border border-slate-800 bg-slate-950/95 p-3 text-xs shadow-xl backdrop-blur">
+        <div className="fade-up absolute end-0 z-20 mt-1 w-64 overflow-hidden rounded-lg border border-slate-800 bg-slate-950/95 p-3 text-xs shadow-xl backdrop-blur">
           <div className="mb-2 font-semibold text-slate-200">Report — why?</div>
           <div className="space-y-1.5">
             {PRESETS.map((p) => (

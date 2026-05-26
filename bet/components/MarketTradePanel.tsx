@@ -13,6 +13,11 @@ import { quoteBuy, quoteSell, priceYes } from "@/lib/amm";
 import { fmtCoins, fmtPrice, cn } from "@/lib/utils";
 import { toast } from "@/components/ui/Toaster";
 import { useMarketStream } from "@/lib/useMarketStream";
+import {
+  localizedPath,
+  useTranslation,
+  type TranslateFunction,
+} from "@/lib/i18n/client";
 
 interface Props {
   marketId: string;
@@ -36,6 +41,7 @@ export function MarketTradePanel({
   positions,
 }: Props) {
   const router = useRouter();
+  const { t: tr, locale } = useTranslation();
   const [action, setAction] = useState<Action>("BUY");
   const [outcome, setOutcome] = useState<"YES" | "NO">("YES");
   const [coinsInput, setCoinsInput] = useState("100");
@@ -123,7 +129,7 @@ export function MarketTradePanel({
       });
       const responseBody = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast(prettyTradeError(responseBody.error), "err");
+        toast(prettyTradeError(responseBody.error, tr), "err");
         return;
       }
       const plan = responseBody.plan as TradePlan | undefined;
@@ -135,18 +141,26 @@ export function MarketTradePanel({
       }
       if (action === "BUY" && plan) {
         toast(
-          `Bought ${plan.totalShares.toFixed(1)} ${outcome} for ${fmtCoins(Math.round(plan.totalCoins))} coins`,
+          tr("market.boughtToast", {
+            shares: plan.totalShares.toFixed(1),
+            outcome,
+            coins: fmtCoins(Math.round(plan.totalCoins)),
+          }),
           "ok",
         );
       } else if (action === "SELL" && plan) {
         toast(
-          `Sold ${plan.totalShares.toFixed(1)} ${outcome} for ${fmtCoins(Math.round(plan.totalCoins))} coins`,
+          tr("market.soldToast", {
+            shares: plan.totalShares.toFixed(1),
+            outcome,
+            coins: fmtCoins(Math.round(plan.totalCoins)),
+          }),
           "ok",
         );
       }
       startTransition(() => router.refresh());
     } catch {
-      toast("Network error. Try again.", "err");
+      toast(tr("errors.network"), "err");
     } finally {
       setSubmitting(false);
     }
@@ -210,7 +224,7 @@ export function MarketTradePanel({
       {action === "BUY" ? (
         <>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-            Coins to spend
+            {tr("market.coinsToSpend")}
           </label>
           <Input
             type="number"
@@ -237,9 +251,9 @@ export function MarketTradePanel({
       ) : (
         <>
           <label className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-500">
-            <span>Shares to sell</span>
+            <span>{tr("market.sharesToSell")}</span>
             <span className="font-mono text-[10px] text-slate-400">
-              you hold {myShares.toFixed(1)}
+              {tr("market.youHold", { amount: myShares.toFixed(1) })}
             </span>
           </label>
           <Input
@@ -267,7 +281,10 @@ export function MarketTradePanel({
           </div>
           {sellOverflow && (
             <Badge tone="warn" className="mb-2">
-              You hold only {myShares.toFixed(1)} {outcome}
+              {tr("market.youHoldOnly", {
+                amount: myShares.toFixed(1),
+                outcome,
+              })}
             </Badge>
           )}
         </>
@@ -275,11 +292,17 @@ export function MarketTradePanel({
 
       {!tradeOpen ? (
         <Badge tone="warn" className="mb-2">
-          Trading closed
+          {tr("market.tradingClosed")}
         </Badge>
       ) : !authed ? (
-        <Link href={`/login?next=/markets/${slug}`}>
-          <Button className="w-full">Sign in to trade</Button>
+        <Link
+          href={
+            localizedPath("/login", locale) +
+            "?next=" +
+            encodeURIComponent(localizedPath(`/markets/${slug}`, locale))
+          }
+        >
+          <Button className="w-full">{tr("market.signInToTrade")}</Button>
         </Link>
       ) : (
         <Button
@@ -289,10 +312,10 @@ export function MarketTradePanel({
           onClick={submit}
         >
           {submitting
-            ? "Placing…"
+            ? tr("market.placing")
             : action === "BUY"
-              ? `Buy ${outcome}`
-              : `Sell ${outcome}`}
+              ? tr("market.buyOutcome", { outcome })
+              : tr("market.sellOutcome", { outcome })}
         </Button>
       )}
 
@@ -301,41 +324,41 @@ export function MarketTradePanel({
           buyQuote ? (
             <>
               <Row
-                label="You receive"
-                value={`${buyQuote.sharesOut.toFixed(2)} ${outcome} shares`}
+                label={tr("market.youReceive")}
+                value={`${buyQuote.sharesOut.toFixed(2)} ${outcome} ${tr("market.shares")}`}
               />
-              <Row label="Avg price" value={fmtPrice(buyQuote.avgPrice)} />
-              <Row label="Price after" value={fmtPrice(buyQuote.newYesPrice)} />
+              <Row label={tr("market.avgPrice")} value={fmtPrice(buyQuote.avgPrice)} />
+              <Row label={tr("market.priceAfter")} value={fmtPrice(buyQuote.newYesPrice)} />
               <Row
-                label="Max payout"
-                value={`${fmtCoins(Math.floor(buyQuote.sharesOut))} coins`}
-                hint="If resolved in your favor"
+                label={tr("market.maxPayout")}
+                value={`${fmtCoins(Math.floor(buyQuote.sharesOut))} ${tr("toast.coins")}`}
+                hint={tr("market.maxPayoutHint")}
               />
             </>
           ) : (
-            <Row label="Enter coins" value="—" />
+            <Row label={tr("market.enterCoins")} value="—" />
           )
         ) : sellQuote ? (
           <>
             <Row
-              label="You receive"
-              value={`${fmtCoins(Math.floor(sellQuote.coinsOut))} coins`}
+              label={tr("market.youReceive")}
+              value={`${fmtCoins(Math.floor(sellQuote.coinsOut))} ${tr("toast.coins")}`}
             />
-            <Row label="Avg price" value={fmtPrice(sellQuote.avgPrice)} />
-            <Row label="Price after" value={fmtPrice(sellQuote.newYesPrice)} />
+            <Row label={tr("market.avgPrice")} value={fmtPrice(sellQuote.avgPrice)} />
+            <Row label={tr("market.priceAfter")} value={fmtPrice(sellQuote.newYesPrice)} />
             {myPos && shares <= myShares && (
               <Row
-                label="Realised P/L (this trade)"
+                label={tr("market.realisedPL")}
                 value={`${
                   Math.floor(sellQuote.coinsOut) -
                   Math.round((myPos.costBasis * shares) / Math.max(1, myPos.shares))
-                } coins`}
+                } ${tr("toast.coins")}`}
               />
             )}
           </>
         ) : (
           <Row
-            label={myShares === 0 ? "No shares to sell" : "Enter shares"}
+            label={myShares === 0 ? tr("market.noSharesToSell") : tr("market.enterShares")}
             value="—"
           />
         )}
@@ -352,7 +375,7 @@ export function MarketTradePanel({
       {positions.length > 0 && (
         <div className="mt-3 border-t border-slate-800 pt-3">
           <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-            Your position
+            {tr("market.yourPosition")}
           </div>
           {positions.map((p) => (
             <div
@@ -361,7 +384,7 @@ export function MarketTradePanel({
             >
               <Badge tone={p.outcome === "YES" ? "yes" : "no"}>{p.outcome}</Badge>
               <span className="font-mono">
-                {p.shares.toFixed(1)} sh · {fmtCoins(p.costBasis)} cost
+                {p.shares.toFixed(1)} {tr("market.sharesAbbrev")} · {fmtCoins(p.costBasis)} {tr("market.cost")}
               </span>
             </div>
           ))}
@@ -403,22 +426,27 @@ function RoutingDisclosure({
   open: boolean;
   onToggle: () => void;
 }) {
+  const { t: tr } = useTranslation();
   const bookLegs = plan.legs.filter((l) => l.kind === "book");
   const ammLegs = plan.legs.filter((l) => l.kind === "amm");
   const usedBook = bookLegs.length > 0;
   const summary = usedBook
-    ? `Mixed · ${bookLegs.length} book leg${bookLegs.length === 1 ? "" : "s"}${ammLegs.length > 0 ? " + AMM" : ""}`
-    : "AMM only";
+    ? tr("market.routingMixed", {
+        bookLegs: bookLegs.length,
+        s: bookLegs.length === 1 ? "" : "s",
+        amm: ammLegs.length > 0 ? tr("market.routingMixedAMM") : "",
+      })
+    : tr("market.routingAMMOnly");
 
   return (
     <div className="mt-3 overflow-hidden rounded-lg border border-slate-800 bg-slate-950/40">
       <button
         onClick={onToggle}
-        className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-slate-900/40"
+        className="flex w-full items-center justify-between px-3 py-2 text-start text-xs hover:bg-slate-900/40"
       >
         <span className="flex items-center gap-1.5">
           <Sparkles className="h-3 w-3 text-cyan-400" />
-          <span className="font-semibold text-slate-300">Routing</span>
+          <span className="font-semibold text-slate-300">{tr("market.routing")}</span>
           <span className="text-slate-500">· {summary}</span>
         </span>
         {open ? (
@@ -434,10 +462,10 @@ function RoutingDisclosure({
               return (
                 <div key={i} className="flex justify-between py-0.5">
                   <span>
-                    <Badge tone="info" className="mr-1">
-                      Book
+                    <Badge tone="info" className="me-1">
+                      {tr("market.book")}
                     </Badge>
-                    {(l.shares ?? 0).toFixed(2)} sh @ {fmtPrice(l.price ?? 0)}
+                    {(l.shares ?? 0).toFixed(2)} {tr("market.sharesAbbrev")} @ {fmtPrice(l.price ?? 0)}
                   </span>
                   <span>{fmtCoins(Math.round(l.coins ?? 0))}</span>
                 </div>
@@ -448,17 +476,17 @@ function RoutingDisclosure({
             return (
               <div key={i} className="flex justify-between py-0.5">
                 <span>
-                  <Badge tone="default" className="mr-1">
-                    AMM
+                  <Badge tone="default" className="me-1">
+                    {tr("market.amm")}
                   </Badge>
-                  {sharesOut.toFixed(2)} sh
+                  {sharesOut.toFixed(2)} {tr("market.sharesAbbrev")}
                 </span>
                 <span>{fmtCoins(Math.round(coins))}</span>
               </div>
             );
           })}
           <div className="mt-2 flex justify-between border-t border-slate-800 pt-1.5 text-slate-300">
-            <span>Avg price</span>
+            <span>{tr("market.avgPrice")}</span>
             <span>{fmtPrice(plan.avgPrice)}</span>
           </div>
         </div>
@@ -473,7 +501,7 @@ function Row({ label, value, hint }: { label: string; value: string; hint?: stri
       <span>
         {label}
         {hint && (
-          <span className="ml-1 text-[10px] text-slate-600">({hint})</span>
+          <span className="ms-1 text-[10px] text-slate-600">({hint})</span>
         )}
       </span>
       <span className="font-mono text-slate-200">{value}</span>
@@ -481,24 +509,27 @@ function Row({ label, value, hint }: { label: string; value: string; hint?: stri
   );
 }
 
-function prettyTradeError(code?: string): string {
+function prettyTradeError(
+  code: string | undefined,
+  t: TranslateFunction,
+): string {
   switch (code) {
     case "insufficient_coins":
-      return "Not enough coins. Top up your wallet to keep trading.";
+      return t("market.errInsufficientCoins");
     case "insufficient_shares":
-      return "You don't have enough shares to sell that much.";
+      return t("market.errInsufficientShares");
     case "market_not_open":
     case "market_ended":
-      return "This market is no longer accepting trades.";
+      return t("market.errMarketNotOpen");
     case "market_not_found":
-      return "Market vanished.";
+      return t("market.errMarketNotFound");
     case "rate_limited":
-      return "Slow down — wait a moment before trading again.";
+      return t("market.errRateLimited");
     case "quote_failed":
-      return "Trade size too large for current liquidity.";
+      return t("market.errQuoteFailed");
     case "unauthorized":
-      return "Please sign in.";
+      return t("market.errUnauthorized");
     default:
-      return "Could not place trade.";
+      return t("market.errTradeGeneric");
   }
 }

@@ -9,6 +9,10 @@ import { NotificationsBell } from "@/components/NotificationsBell";
 import { Brand } from "@/components/Brand";
 import { Avatar } from "@/components/Avatar";
 import { HubLogoLink } from "@/components/HubLogoLink";
+import {
+  localizedPath,
+  useTranslation,
+} from "@/lib/i18n/client";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -25,6 +29,8 @@ export function Navbar() {
     { refreshInterval: 10_000, revalidateOnFocus: true }
   );
 
+  const { t, locale } = useTranslation();
+
   return (
     <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/85 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
@@ -37,23 +43,43 @@ export function Navbar() {
         </HubLogoLink>
 
         <nav className="hidden gap-1 md:flex">
-          <NavLink href="/markets" icon={<Home className="h-4 w-4" />} label="Markets" />
-          <NavLink href="/portfolio" icon={<BarChart3 className="h-4 w-4" />} label="Portfolio" />
+          <NavLink
+            href={localizedPath("/markets", locale)}
+            icon={<Home className="h-4 w-4" />}
+            label={t("nav.markets")}
+          />
+          <NavLink
+            href={localizedPath("/portfolio", locale)}
+            icon={<BarChart3 className="h-4 w-4" />}
+            label={t("nav.portfolio")}
+          />
           {data?.user && (
-            <NavLink href="/watchlist" icon={<Star className="h-4 w-4" />} label="Watchlist" />
+            <NavLink
+              href={localizedPath("/watchlist", locale)}
+              icon={<Star className="h-4 w-4" />}
+              label={t("nav.watchlist")}
+            />
           )}
-          <NavLink href="/leaderboard" icon={<Trophy className="h-4 w-4" />} label="Leaderboard" />
+          <NavLink
+            href={localizedPath("/leaderboard", locale)}
+            icon={<Trophy className="h-4 w-4" />}
+            label={t("nav.leaderboard")}
+          />
           {data?.user.isAdmin && (
-            <NavLink href="/admin" icon={<ShieldCheck className="h-4 w-4" />} label="Admin" />
+            <NavLink
+              href="/admin"
+              icon={<ShieldCheck className="h-4 w-4" />}
+              label={t("nav.admin")}
+            />
           )}
         </nav>
 
         <div className="flex items-center gap-2">
           {data?.wallet ? (
             <Link
-              href="/wallet"
+              href={localizedPath("/wallet", locale)}
               className="flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-sm font-semibold text-cyan-200 hover:bg-cyan-500/20"
-              title="Wallet — tap to top up"
+              title={t("wallet.tapToTopup")}
             >
               <Coins className="h-4 w-4" />
               {fmtCoins(data.wallet.balance)}
@@ -68,10 +94,10 @@ export function Navbar() {
             <>
               <NotificationsBell />
               <Link
-                href="/profile"
+                href={localizedPath("/profile", locale)}
                 className="flex items-center gap-1.5 rounded-lg p-1 text-slate-300 hover:bg-slate-800"
-                aria-label="Profile"
-                title={data?.user?.username ? `@${data.user.username}` : "Profile"}
+                aria-label={t("nav.profile")}
+                title={data?.user?.username ? `@${data.user.username}` : t("nav.profile")}
               >
                 {data?.user.image ? (
                   <Avatar
@@ -86,10 +112,10 @@ export function Navbar() {
             </>
           ) : (
             <Link
-              href="/login"
+              href={localizedPath("/login", locale)}
               className="rounded-lg bg-gradient-to-br from-cyan-400 to-indigo-500 px-3 py-1.5 text-sm font-semibold text-slate-950"
             >
-              Sign in
+              {t("nav.signIn")}
             </Link>
           )}
         </div>
@@ -97,11 +123,27 @@ export function Navbar() {
 
       {/* Mobile nav row */}
       <div className="flex justify-between border-t border-slate-800 px-4 py-1.5 md:hidden">
-        <NavLink href="/markets" icon={<Home className="h-4 w-4" />} label="Markets" />
-        <NavLink href="/portfolio" icon={<BarChart3 className="h-4 w-4" />} label="Portfolio" />
-        <NavLink href="/leaderboard" icon={<Trophy className="h-4 w-4" />} label="Top" />
+        <NavLink
+          href={localizedPath("/markets", locale)}
+          icon={<Home className="h-4 w-4" />}
+          label={t("nav.markets")}
+        />
+        <NavLink
+          href={localizedPath("/portfolio", locale)}
+          icon={<BarChart3 className="h-4 w-4" />}
+          label={t("nav.portfolio")}
+        />
+        <NavLink
+          href={localizedPath("/leaderboard", locale)}
+          icon={<Trophy className="h-4 w-4" />}
+          label={t("nav.leaderboardMobile")}
+        />
         {data?.user.isAdmin && (
-          <NavLink href="/admin" icon={<ShieldCheck className="h-4 w-4" />} label="Admin" />
+          <NavLink
+            href="/admin"
+            icon={<ShieldCheck className="h-4 w-4" />}
+            label={t("nav.admin")}
+          />
         )}
       </div>
     </header>

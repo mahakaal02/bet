@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { toast } from "@/components/ui/Toaster";
 import { cn, fmtCoins } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n/client";
 
 interface Props {
   available: number;
@@ -35,6 +36,7 @@ export function WithdrawForm({ available, min }: Props) {
   const [beneficiaryName, setBeneficiaryName] = useState("");
   const [busy, setBusy] = useState(false);
   const [, startTransition] = useTransition();
+  const { t: tr } = useTranslation();
 
   const amt = Number(amount);
   const amountValid =
@@ -74,10 +76,10 @@ export function WithdrawForm({ available, min }: Props) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast(prettyError(data.error), "err");
+        toast(prettyError(data.error, tr), "err");
         return;
       }
-      toast("Withdrawal submitted — we'll email when admin decides.", "ok");
+      toast(tr("withdrawForm.submitSuccess"), "ok");
       // Clear form for the next request and refresh server-rendered list.
       setUpiId("");
       setAccountNumber("");
@@ -112,7 +114,7 @@ export function WithdrawForm({ available, min }: Props) {
 
       <div>
         <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-          Amount (coins · ₹1 each)
+          {tr("withdrawForm.amountLabel")}
         </label>
         <Input
           type="number"
@@ -125,17 +127,22 @@ export function WithdrawForm({ available, min }: Props) {
         />
         <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
           <span>
-            min {fmtCoins(min)} · max {fmtCoins(available)}
+            {tr("withdrawForm.amountMinMax", {
+              min: fmtCoins(min),
+              max: fmtCoins(available),
+            })}
           </span>
           {amountValid ? (
-            <span className="text-emerald-300">≈ ₹{fmtCoins(amt)} payout</span>
+            <span className="text-emerald-300">
+              {tr("withdrawForm.amountPayout", { amount: fmtCoins(amt) })}
+            </span>
           ) : (
             <span className="text-rose-300">
               {amt > available
-                ? "Exceeds wallet balance"
+                ? tr("withdrawForm.amountExceeds")
                 : amt < min
-                  ? `Min ${fmtCoins(min)}`
-                  : "Enter a whole number"}
+                  ? tr("withdrawForm.amountMin", { min: fmtCoins(min) })
+                  : tr("withdrawForm.amountInteger")}
             </span>
           )}
         </div>
@@ -144,12 +151,12 @@ export function WithdrawForm({ available, min }: Props) {
       {method === "UPI" ? (
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-            UPI ID
+            {tr("withdrawForm.upiLabel")}
           </label>
           <Input
             value={upiId}
             onChange={(e) => setUpiId(e.target.value.trim())}
-            placeholder="name@bank"
+            placeholder={tr("withdrawForm.upiPlaceholder")}
             disabled={busy}
             autoCapitalize="off"
             autoCorrect="off"
@@ -160,12 +167,12 @@ export function WithdrawForm({ available, min }: Props) {
         <>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Account number
+              {tr("withdrawForm.accountNumberLabel")}
             </label>
             <Input
               value={accountNumber}
               onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))}
-              placeholder="6-20 digits"
+              placeholder={tr("withdrawForm.accountNumberPlaceholder")}
               maxLength={20}
               disabled={busy}
               inputMode="numeric"
@@ -173,12 +180,12 @@ export function WithdrawForm({ available, min }: Props) {
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-              IFSC
+              {tr("withdrawForm.ifscLabel")}
             </label>
             <Input
               value={ifsc}
               onChange={(e) => setIfsc(e.target.value.toUpperCase())}
-              placeholder="HDFC0001234"
+              placeholder={tr("withdrawForm.ifscPlaceholder")}
               maxLength={11}
               disabled={busy}
               autoCapitalize="characters"
@@ -188,7 +195,7 @@ export function WithdrawForm({ available, min }: Props) {
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Beneficiary name (as on the bank account)
+              {tr("withdrawForm.beneficiaryLabel")}
             </label>
             <Input
               value={beneficiaryName}
@@ -201,25 +208,32 @@ export function WithdrawForm({ available, min }: Props) {
       )}
 
       <Button onClick={submit} disabled={!valid || busy} className="w-full">
-        {busy ? "Submitting…" : `Request ₹${amountValid ? fmtCoins(amt) : "—"} withdrawal`}
+        {busy
+          ? tr("withdrawForm.submitting")
+          : amountValid
+            ? tr("withdrawForm.submitButton", { amount: fmtCoins(amt) })
+            : tr("withdrawForm.submitButtonEmpty")}
       </Button>
     </div>
   );
 }
 
-function prettyError(code?: string): string {
+function prettyError(
+  code: string | undefined,
+  tr: (k: string, vars?: Record<string, string | number>) => string,
+): string {
   switch (code) {
     case "insufficient_coins":
-      return "Not enough coins in your wallet.";
+      return tr("withdrawForm.errInsufficientCoins");
     case "email_not_verified":
-      return "Verify your email before withdrawing.";
+      return tr("withdrawForm.errEmailNotVerified");
     case "rate_limited":
-      return "Too many requests — wait before trying again.";
+      return tr("withdrawForm.errRateLimited");
     case "forbidden":
-      return "Account isn't allowed to withdraw.";
+      return tr("withdrawForm.errForbidden");
     case "invalid_input":
-      return "Check the form — something looks off.";
+      return tr("withdrawForm.errInvalidInput");
     default:
-      return "Couldn't submit the request.";
+      return tr("withdrawForm.errGeneric");
   }
 }

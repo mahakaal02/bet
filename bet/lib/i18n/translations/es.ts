@@ -1,0 +1,632 @@
+import type { Dictionary } from "./en";
+
+/**
+ * Spanish (es, broad-LatAm baseline). Same fallback semantics as
+ * pt.ts — missing keys defer to en.ts via the deep walker.
+ *
+ * Style choices: neutral LatAm Spanish (no "vosotros", no
+ * country-specific slang) so it reads naturally across MX/AR/CO/CL.
+ * Castilian users in Spain will recognise everything; the trade-off
+ * is intentional since LatAm dominates the platform's Spanish-
+ * speaking traffic.
+ */
+const es: Partial<Dictionary> = {
+  meta: {
+    siteName: "Kalki Exchange",
+    tagline:
+      "Negocia SÍ/NO en eventos del mundo real con tus monedas Kalki Bet — la misma billetera que alimenta las subastas y Aviator.",
+    description:
+      "Mercados de predicción, subastas en vivo y crash-game — una billetera, tres productos, todo con monedas demo.",
+    homeTitle: "Predice, opera y gana en eventos del mundo real",
+    homeDescription:
+      "Opera mercados de predicción SÍ/NO sobre noticias, política, deportes y cripto. Monedas iniciales gratis; retira en cualquier momento antes de que el evento se resuelva.",
+    marketsTitle: "Mercados de predicción — opera eventos reales",
+    marketsDescription:
+      "Explora los mercados de predicción abiertos, observa cómo se mueven los precios en tiempo real y opera con tus monedas Kalki Bet.",
+    walletTitle: "Tu billetera · monedas Kalki Bet",
+    walletDescription:
+      "Recarga, retira y registra cada movimiento de monedas. Un solo saldo en Mercados, Subastas y Aviator.",
+    profileTitle: "Tu perfil",
+    profileDescription:
+      "Gestiona tu cuenta, referidos, logros y estado de verificación.",
+    portfolioTitle: "Tu portafolio",
+    portfolioDescription:
+      "Valoración a mercado de tus posiciones SÍ/NO abiertas en todos los mercados de predicción.",
+    watchlistTitle: "Favoritos",
+    watchlistDescription:
+      "Tus mercados favoritos — acceso rápido a los mercados de predicción que sigues.",
+    notificationsTitle: "Notificaciones",
+    notificationsDescription:
+      "Ejecuciones de órdenes, resoluciones de mercado, menciones y recompensas — tu bandeja para todo lo que ocurrió mientras estabas fuera.",
+    leaderboardTitle: "Clasificación — mejores traders",
+    leaderboardDescription:
+      "Mejores traders ordenados por XP. Gana XP operando en mercados de predicción — 1 XP por cada 20 monedas gastadas.",
+    achievementsTitle: "Logros — insignias de trader",
+    achievementsDescription:
+      "Desbloquea insignias operando, invitando amigos y alcanzando hitos. Gana XP y monedas extra.",
+    kycTitle: "Verificación de identidad",
+    kycDescription:
+      "Envía tus documentos de identidad para desbloquear límites de retiro más altos. Cifrados en reposo y revisados por un especialista de compliance.",
+    loginTitle: "Inicia sesión en Kalki Exchange",
+    loginDescription:
+      "Inicia sesión para operar en mercados de predicción, gestionar tu billetera y seguir tu portafolio.",
+    registerTitle: "Crea tu cuenta Kalki",
+    registerDescription:
+      "Regístrate en segundos y recibe 10.000 monedas iniciales. Opera mercados de predicción sobre noticias, deportes y cripto.",
+    forgotTitle: "Restablecer tu contraseña",
+    forgotDescription:
+      "¿Olvidaste tu contraseña? Ingresa tu correo para recibir un enlace de restablecimiento.",
+    resetTitle: "Elige una nueva contraseña",
+    resetDescription:
+      "Define una nueva contraseña para tu cuenta Kalki Exchange.",
+    verifyTitle: "Verifica tu correo",
+    verifyDescription:
+      "Confirma tu dirección de correo para desbloquear retiros y funciones de la cuenta.",
+    withdrawTitle: "Retirar monedas",
+    withdrawDescription:
+      "Retira tus monedas Kalki Bet a UPI o cuenta bancaria. Cada retiro pasa por revisión antes del pago.",
+  },
+
+  nav: {
+    home: "Inicio",
+    markets: "Mercados",
+    portfolio: "Portafolio",
+    wallet: "Billetera",
+    profile: "Perfil",
+    leaderboard: "Clasificación",
+    leaderboardMobile: "Top",
+    watchlist: "Favoritos",
+    achievements: "Logros",
+    notifications: "Notificaciones",
+    admin: "Admin",
+    signIn: "Iniciar sesión",
+    signOut: "Cerrar sesión",
+    register: "Registrarse",
+  },
+
+  landing: {
+    heroKicker: "Predice. Negocia. Gana.",
+    heroTitle: "Eventos reales. Opiniones reales. Apuestas reales.",
+    heroDescription:
+      "Elige un lado, define tu precio, observa cómo se mueve el mercado. Retira en cualquier momento antes de que el evento se resuelva.",
+    ctaPrimary: "Ver mercados",
+    ctaSecondary: "Cómo funciona",
+    statsMarkets: "Mercados activos",
+    statsUsers: "Jugadores",
+    statsTrades: "Negociaciones realizadas",
+    trendingHeader: "Mercados destacados",
+    leaderboardHeader: "Mejores traders",
+  },
+
+  forms: {
+    required: "Obligatorio",
+    optional: "Opcional",
+    save: "Guardar",
+    cancel: "Cancelar",
+    submit: "Enviar",
+    edit: "Editar",
+    delete: "Eliminar",
+    back: "← Atrás",
+    loading: "Cargando…",
+    sending: "Enviando…",
+  },
+
+  loading: {
+    generic: "Cargando…",
+    markets: "Cargando mercados…",
+    wallet: "Cargando billetera…",
+    portfolio: "Cargando portafolio…",
+    profile: "Cargando perfil…",
+    leaderboard: "Cargando clasificación…",
+  },
+
+  validation: {
+    required: "Campo obligatorio.",
+    emailInvalid: "Ingresa un correo válido.",
+    passwordMinLength: "La contraseña debe tener al menos 8 caracteres.",
+    passwordsDontMatch: "Las contraseñas no coinciden.",
+    invalidInput: "Revisa los campos del formulario.",
+  },
+
+  toast: {
+    saved: "Guardado.",
+    copied: "Copiado.",
+    error: "Algo salió mal.",
+    submitted: "Enviado para revisión.",
+    coins: "monedas",
+  },
+
+  switcher: {
+    label: "Idioma",
+    chooseLanguage: "Elige tu idioma",
+  },
+
+  banner: {
+    geoSuggest: "¿Ver este sitio en {language}?",
+    geoSuggestYes: "Sí, cambiar",
+    geoSuggestNo: "Seguir en inglés",
+  },
+
+  errors: {
+    notFound: "Página no encontrada",
+    notFoundDescription: "La página que buscas no existe o fue movida.",
+    backHome: "Volver al inicio",
+    generic: "Algo salió mal.",
+    network: "Error de red. Intenta de nuevo.",
+    unauthorized: "Inicia sesión para continuar.",
+  },
+
+  auth: {
+    emailLabel: "Correo",
+    passwordLabel: "Contraseña",
+    usernameLabel: "Nombre de usuario",
+    usernamePlaceholder: "3–20 caracteres, letras/números/guion bajo",
+    referralCodeLabel: "Código de referido (opcional)",
+    referralCodePlaceholder: "ABC123",
+    forgotEmailPlaceholder: "tu@ejemplo.com",
+    backButton: "← Atrás",
+    backToSignIn: "← Volver a iniciar sesión",
+
+    signInTitle: "Inicia sesión en Kalki Exchange",
+    welcomeHeading: "Bienvenido de vuelta",
+    welcomeSubtext:
+      "Inicia sesión para operar en mercados de predicción con tus monedas Kalki Bet.",
+    signInButton: "Iniciar sesión",
+    signingInButton: "Iniciando sesión…",
+    googleSignIn: "Continuar con Google",
+    forgotPasswordLink: "¿Olvidaste tu contraseña?",
+    needAccount: "¿No tienes cuenta?",
+    registerLink: "Crea una",
+    invalidCredentials: "Correo o contraseña incorrectos.",
+
+    registerTitle: "Crea tu cuenta Kalki",
+    createAccountHeading: "Crea tu cuenta",
+    createSubtext:
+      "Te acreditamos 10.000 monedas iniciales al instante — funcionan en mercados, subastas y Aviator.",
+    createAccountButton: "Crear cuenta",
+    creatingAccountButton: "Creando cuenta…",
+    alreadyRegistered: "¿Ya estás registrado?",
+    signInLink: "Iniciar sesión",
+    signUpSuccess: "¡Bienvenido! 10.000 monedas iniciales están en tu billetera.",
+
+    forgotPasswordHeading: "Olvidé mi contraseña",
+    forgotPasswordSubtext:
+      "Ingresa tu correo; te enviaremos un enlace de restablecimiento si hay una cuenta asociada.",
+    forgotSendButton: "Enviar enlace",
+    forgotSendingButton: "Enviando…",
+    forgotSuccess:
+      "✅ Si {email} está registrado, recibirás un enlace en breve. El enlace expira en 1 hora.",
+    forgotDevNote: "Dev: revisa la consola del servidor Next.js para el enlace.",
+    couldntSendLink: "No se pudo enviar el enlace.",
+
+    chooseNewPasswordHeading: "Elige una nueva contraseña",
+    newPasswordLabel: "Nueva contraseña",
+    confirmPasswordLabel: "Confirmar contraseña",
+    updatePasswordButton: "Actualizar contraseña",
+    updatingPasswordButton: "Actualizando…",
+    invalidOrExpiredLink: "Este enlace es inválido o ha expirado.",
+    couldntResetPassword: "No se pudo restablecer la contraseña.",
+    passwordUpdatedSignedIn: "Contraseña actualizada. Ya estás conectado.",
+    passwordUpdatedSignIn: "Contraseña actualizada. Inicia sesión.",
+    missingResetToken: "Falta el token de restablecimiento.",
+    requestNewLink: "Solicitar un nuevo enlace →",
+
+    emailVerificationHeading: "Verificación de correo",
+    verifyingLink: "Verificando tu enlace…",
+    verifySuccess: "✅ Tu correo está verificado. Bienvenido a bordo.",
+    continueProfileButton: "Continuar al perfil",
+    verifyInvalidLink: "Este enlace es inválido o ha expirado.",
+    requestNewVerifyLink: "Solicitar uno nuevo →",
+
+    signOut: "Cerrar sesión",
+    signOutAll:
+      "Cierra sesión en los tres juegos Kalki y borra tu sesión en este dispositivo.",
+    signOutButton: "Cerrar sesión en todos los juegos",
+    signingOutButton: "Cerrando sesión…",
+    signingYouIn: "Iniciando tu sesión…",
+    bridgingSession:
+      "Conectando tu sesión Kalki Bet — esto solo ocurre una vez por inicio.",
+
+    emailTaken: "Ese correo ya está registrado.",
+    usernameTaken: "Ese nombre de usuario ya está en uso.",
+    rateLimited: "Demasiados intentos — espera un minuto.",
+    tooManyRequests: "Demasiadas solicitudes — espera un poco.",
+    invalidInput: "Revisa los campos del formulario.",
+    createError: "No se pudo crear la cuenta.",
+    weakPassword: "Usa 8+ caracteres con letras y números.",
+  },
+
+  market: {
+    yes: "SÍ",
+    no: "NO",
+    volume: "Volumen",
+    liquidity: "Liquidez",
+    midPrice: "Precio medio",
+    ends: "Termina",
+    endsDate: "Termina el {date}",
+    created: "Creado",
+    resolved: "Resuelto",
+    resolvedOutcome: "Resuelto {outcome}",
+    cancelled: "Cancelado",
+    featured: "Destacado",
+    placeBet: "Apostar",
+    cashOut: "Retirar",
+    orderBook: "Libro de órdenes",
+    trades: "Negociaciones",
+    recentTrades: "Operaciones recientes",
+    noTrades: "Aún no hay operaciones.",
+    totalTrades: "{count} en total",
+    comments: "Comentarios",
+    commentsCount: "{count} comentarios",
+    discussion: "Discusión",
+    marketStats: "Estadísticas del mercado",
+    priceHistory: "Historial de precios",
+    resolutionSource: "Fuente de resolución:",
+    resolution: "Resolución:",
+    heading: "Mercados",
+    searchPlaceholder: "Buscar mercados…",
+    sortTrending: "Destacados",
+    sortVolume: "Volumen",
+    sortEnding: "Terminando pronto",
+    sortNewest: "Más nuevos",
+    filterOpen: "Abiertos",
+    filterResolved: "Resueltos",
+    filterAll: "Todos",
+    applyButton: "Aplicar",
+    categoryAll: "Todas",
+    categoryPolitics: "Política",
+    categorySports: "Deportes",
+    categoryCrypto: "Cripto",
+    categoryTech: "Tecnología",
+    categoryEnt: "Entret.",
+    noMatches: "Ningún mercado coincide con estos filtros.",
+    marketCount: "{count} mercado{s} {status}",
+    notFound: "Mercado no encontrado",
+    shares: "acciones",
+    vol: "Vol",
+    liq: "liq.",
+    statusOpen: "abierto",
+    statusResolved: "resuelto",
+    statusClosed: "cerrado",
+    statusCancelled: "cancelado",
+    buy: "COMPRAR",
+    sell: "VENDER",
+    coinsToSpend: "Monedas a gastar",
+    sharesToSell: "Acciones a vender",
+    youHold: "tienes {amount}",
+    youHoldOnly: "Solo tienes {amount} {outcome}",
+    tradingClosed: "Negociación cerrada",
+    signInToTrade: "Inicia sesión para operar",
+    placing: "Enviando…",
+    buyOutcome: "Comprar {outcome}",
+    sellOutcome: "Vender {outcome}",
+    youReceive: "Recibes",
+    avgPrice: "Precio medio",
+    priceAfter: "Precio después",
+    maxPayout: "Pago máximo",
+    maxPayoutHint: "Si se resuelve a tu favor",
+    realisedPL: "P/L realizado (esta operación)",
+    enterCoins: "Ingresa las monedas",
+    enterShares: "Ingresa las acciones",
+    noSharesToSell: "Sin acciones para vender",
+    yourPosition: "Tu posición",
+    cost: "costo",
+    routing: "Enrutamiento",
+    routingAMMOnly: "Solo AMM",
+    routingMixed: "Mixto · {bookLegs} pierna{s} book{amm}",
+    routingMixedAMM: " + AMM",
+    book: "Book",
+    amm: "AMM",
+    boughtToast: "Compradas {shares} {outcome} por {coins} monedas",
+    soldToast: "Vendidas {shares} {outcome} por {coins} monedas",
+    errInsufficientCoins: "Monedas insuficientes. Recarga tu billetera para seguir operando.",
+    errInsufficientShares: "No tienes suficientes acciones para vender.",
+    errMarketNotOpen: "Este mercado ya no acepta operaciones.",
+    errMarketNotFound: "El mercado desapareció.",
+    errRateLimited: "Más despacio — espera un momento antes de operar de nuevo.",
+    errQuoteFailed: "Tamaño de operación demasiado grande para la liquidez actual.",
+    errUnauthorized: "Inicia sesión para continuar.",
+    errTradeGeneric: "No se pudo realizar la operación.",
+    yourOrders: "Tus órdenes",
+    noOrdersPlaced: "Aún no hay órdenes colocadas.",
+    filledLabel: "{filled} llenadas / {remaining} restantes",
+    sharesAbbrev: "ac",
+    cancel: "Cancelar",
+    cancelling: "…",
+    orderCancelledToast: "Orden cancelada.",
+    couldNotCancelToast: "No se pudo cancelar.",
+    orderUpdatedToast: "Orden actualizada.",
+    editAtPrice: "editar al precio ×",
+    newPriceLabel: "Nuevo precio",
+    newSizeLabel: "Nuevo tamaño (máx {max})",
+    repositionNote:
+      "Solo reposicionamiento — el tamaño puede reducirse pero no aumentar. Para aumentar, cancela esta orden y crea una nueva.",
+    saveAriaLabel: "Guardar",
+    cancelEditAriaLabel: "Cancelar edición",
+    editAriaLabel: "Editar",
+    errReplaceInsufficientCoins: "Monedas insuficientes para el nuevo tamaño a este precio.",
+    errReplaceInsufficientShares: "Acciones libres insuficientes para el nuevo tamaño.",
+    errSizeIncreaseNew: "No se puede agrandar la orden — cancela y crea una nueva.",
+    errOrderClosed: "Orden ya ejecutada o cancelada.",
+    errMarketEnded: "El mercado ya no acepta cambios.",
+    errInvalidPriceSize: "Revisa el nuevo precio (0,01–0,99) y el tamaño.",
+    errReplaceGeneric: "No se pudo actualizar la orden.",
+  },
+
+  wallet: {
+    heading: "Billetera",
+    title: "Tu billetera",
+    subtext: "Un solo saldo en mercados, subastas y Aviator.",
+    currentBalance: "Saldo actual",
+    balance: "Saldo de monedas",
+    coins: "monedas",
+    coinRate: "1 moneda = ₹1",
+    unified: "Unificado",
+    unifiedNote: "La misma billetera en todos los juegos Kalki Bet.",
+    unifiedPromise:
+      "Un solo saldo en Mercados, Subastas y Aviator. Cada recarga aparece en tu historial.",
+    securityNote:
+      "Un solo saldo en Mercados, Subastas y Aviator. Cada recarga aparece en tu historial.",
+    buyCoins: "Comprar monedas",
+    withdraw: "Retirar",
+    minWithdraw: "mín. {amount} monedas",
+    withdrawSubtext:
+      "Retira tus monedas a tu cuenta UPI o bancaria. Cada solicitud pasa por revisión antes del pago.",
+    requestWithdrawal: "Solicitar retiro",
+    verifyEmailNote:
+      "Verifica tu correo antes de solicitar un retiro. Abre la página de perfil y haz clic en \"Enviar enlace\".",
+    inReview: "En revisión",
+    recentActivity: "Actividad reciente",
+    fullLedger: "Historial completo →",
+    noActivity: "Sin actividad aún.",
+    tapToTopup: "Billetera — toca para recargar",
+    payWithCrypto:
+      "Paga con cripto — BTC, ETH, USDT, USDC y 200 más. Tus monedas se acreditan automáticamente al confirmarse el pago en la cadena.",
+    askAdmin: "Habla con un administrador en Secure Kalki Chat para pagos",
+    downloadChatApp: "Descarga Secured Chat App ahora",
+    chatAppMessage: "Habla con un administrador en Secure Kalki Chat para pagos",
+    chatAppDownload:
+      "Para recargas de monedas, escribe a un administrador en Secured Kalki Chat. Descarga Secured Chat App ahora ↓",
+    chatAppNoUrl:
+      "Para recargas de monedas, escribe a un administrador en Secured Kalki Chat. (Enlace de descarga no configurado — pide al super admin que lo defina en /admin/settings.)",
+    paymentWidgetError: "El widget de pago no cargó. Recarga e inténtalo de nuevo.",
+    alreadyCredited: "Ya acreditado.",
+    creditsBalance: "+{coins} monedas · saldo {balance}",
+    alreadyCreditedPack: "Ya acreditado — prueba otro paquete.",
+    unknownPack: "Ese paquete no está disponible.",
+    slowDown: "Más despacio — espera un minuto antes de comprar de nuevo.",
+    noPaymentConfig: "Pagos no configurados. Habla con un administrador.",
+    orderCreateFailed: "No se pudo crear la orden de pago. Inténtalo de nuevo.",
+    badSignature:
+      "Falló la verificación del pago. Contacta a soporte si se cobró el dinero.",
+    instantDisabled: "Recarga instantánea desactivada. Usa el flujo de pago.",
+    unauthorized: "Inicia sesión para continuar.",
+    topUpFailed: "La recarga falló. Inténtalo de nuevo.",
+  },
+
+  withdraw: {
+    heading: "Retirar monedas",
+    subtext:
+      "1 moneda = ₹1. Retiro mínimo de {amount} monedas. La revisión del admin suele ser el mismo día.",
+    submitRequest: "Enviar solicitud",
+    available: "{amount} monedas disponibles",
+    verifyEmail:
+      "Verifica tu correo primero. Abre la página de perfil y toca \"Enviar enlace\" — al hacer clic en el enlace de tu bandeja se desbloquean los retiros.",
+    coinLocked:
+      "Las monedas se bloquean al enviar — salen de tu saldo disponible para que no las gastes en un mercado durante la revisión. Cancela una solicitud pendiente en cualquier momento para liberar el bloqueo.",
+    yourWithdrawals: "Tus retiros",
+    noWithdrawals: "Sin retiros aún.",
+    backToWallet: "← Volver a la billetera",
+    notePlaceholder: "Nota (visible para el usuario, opcional)",
+    approve: "Aprobar",
+    reject: "Rechazar",
+    razorpayId: "ID de pago Razorpay (obligatorio)",
+    markPaid: "Marcar como pagado",
+    approvedNote: "Aprobado — procesa el pago en Razorpay y luego marca como pagado.",
+    rejectedNote: "Rechazado — monedas reembolsadas.",
+    paidNote: "Marcado como pagado.",
+    invalidState: "Ya decidido — recarga la página.",
+    missingReference: "Pega primero el ID de pago Razorpay.",
+    notFound: "Este retiro desapareció.",
+    actionFailed: "La acción falló.",
+  },
+
+  profile: {
+    heading: "Perfil",
+    wallet: "Billetera",
+    buyCoinButton: "Comprar monedas",
+    referral: "Referido",
+    referralSubtext:
+      "Comparte tu código — cuando alguien se registre con él, ambos reciben monedas extra.",
+    achievements: "Logros",
+    walletCoins: "monedas Kalki Bet",
+    levelBadge: "Nv {level}",
+    adminBadge: "Admin",
+    streakBadge: "{days}d de racha",
+    xpLabel: "{xp} XP",
+    xpToNext: "{xp} XP al nivel {level}",
+  },
+
+  portfolio: {
+    heading: "Portafolio",
+    subtext: "Valoración a mercado de tus posiciones abiertas.",
+    wallet: "Billetera",
+    atCost: "Al costo",
+    valueNow: "Valor actual",
+    pl: "P/L",
+    openPositions: "Posiciones abiertas",
+    noPositions: "Sin posiciones aún. Ver mercados →",
+    recentTrades: "Operaciones recientes",
+    noTrades: "Sin operaciones aún.",
+  },
+
+  watchlist: {
+    heading: "Favoritos",
+    emptyState:
+      "Aún no has marcado ningún mercado. Toca el {icon} en un mercado para agregarlo.",
+    watching: "Siguiendo",
+    watch: "Seguir",
+    couldntUpdate: "No se pudo actualizar favoritos.",
+  },
+
+  comments: {
+    placeholder: "Comparte tu opinión…",
+    postButton: "Publicar",
+    cancelButton: "Cancelar",
+    couldntPost: "No se pudo publicar el comentario.",
+    signInPrompt: "Inicia sesión para unirte a la discusión.",
+    emptyState: "Aún no hay comentarios.",
+  },
+
+  share: {
+    button: "Compartir",
+    copied: "Copiado",
+    shared: "Compartido.",
+    linkCopied: "Enlace copiado al portapapeles.",
+    couldntCopy: "No se pudo copiar — tu navegador bloqueó el acceso al portapapeles.",
+    ariaLabel: "Compartir este mercado",
+  },
+
+  avatar: {
+    changeAria: "Cambiar avatar",
+    removeAria: "Quitar avatar",
+    removeConfirm: "¿Quitar tu avatar?",
+    updated: "Avatar actualizado.",
+    removed: "Avatar eliminado.",
+    removeFailed: "No se pudo quitar el avatar.",
+    tooLarge: "Imagen demasiado grande — mantenla por debajo de 2 MB.",
+    errUnsupportedType: "Solo se admiten PNG / JPEG / WebP / GIF.",
+    errBadImage: "Ese archivo no parece una imagen válida.",
+    errRateLimited: "Estás cambiando el avatar demasiado rápido. Espera un minuto.",
+    errNoFile: "Elige un archivo primero.",
+    errUploadFailed: "Falló la carga.",
+  },
+
+  verifyBanner: {
+    message: "Verifica {email} para confirmar tu cuenta.",
+    sendLink: "Enviar enlace",
+    sending: "Enviando…",
+    sent: "Correo de verificación enviado. Revisa tu bandeja de entrada (o consola dev).",
+    sentBanner:
+      "Enviado. Haz clic en el enlace del correo (o tu terminal dev) para terminar de verificar {email}.",
+    rateLimited: "Espera un poco antes de solicitar de nuevo.",
+    couldntSend: "No se pudo enviar el correo.",
+  },
+
+  withdrawForm: {
+    amountLabel: "Monto (monedas · ₹1 cada una)",
+    amountMinMax: "mín. {min} · máx. {max}",
+    amountPayout: "≈ ₹{amount} a recibir",
+    amountExceeds: "Excede el saldo de la billetera",
+    amountMin: "Mín. {min}",
+    amountInteger: "Ingresa un número entero",
+    upiLabel: "ID UPI",
+    upiPlaceholder: "nombre@banco",
+    accountNumberLabel: "Número de cuenta",
+    accountNumberPlaceholder: "6-20 dígitos",
+    ifscLabel: "IFSC",
+    ifscPlaceholder: "HDFC0001234",
+    beneficiaryLabel: "Nombre del beneficiario (como en la cuenta bancaria)",
+    submitting: "Enviando…",
+    submitButton: "Solicitar retiro de ₹{amount}",
+    submitButtonEmpty: "Solicitar retiro de ₹—",
+    submitSuccess: "Retiro enviado — te avisaremos por correo cuando el admin decida.",
+    errInsufficientCoins: "Monedas insuficientes en tu billetera.",
+    errEmailNotVerified: "Verifica tu correo antes de retirar.",
+    errRateLimited: "Demasiadas solicitudes — espera antes de intentar de nuevo.",
+    errForbidden: "Esta cuenta no puede retirar.",
+    errInvalidInput: "Revisa el formulario — algo está mal.",
+    errGeneric: "No se pudo enviar la solicitud.",
+  },
+
+  notifications: {
+    heading: "Notificaciones",
+    unreadCount: "{count} sin leer.",
+    allRead: "Todo leído.",
+    emptyState:
+      "Estás al día. Haz una operación para empezar a recibir notificaciones.",
+  },
+
+  leaderboard: {
+    heading: "Clasificación",
+    subtext:
+      "Mejores traders por XP total. Gana XP operando — 1 XP por cada 20 monedas gastadas.",
+    emptyState: "Aún no hay traders.",
+  },
+
+  achievements: {
+    heading: "Logros",
+    subtext:
+      "Gana insignias operando, invitando amigos y alcanzando hitos. XP por cada desbloqueo.",
+    unlockedCount: "{count}/{total} desbloqueados",
+    recentlyUnlocked: "Desbloqueados recientemente",
+    allAchievements: "Todos los logros",
+    unlocksAcrossUsers: "{count} desbloqueos entre todos los usuarios",
+    badge: "Desbloqueado",
+    locked: "Bloqueado",
+    reward: "+{coins} 🪙 · +{xp} XP",
+    earned: "{count} obtenidos",
+    beFirst: "Sé el primero",
+    unlockedTime: "Desbloqueado {time}",
+    signInNote: "Inicia sesión para empezar a ganar logros.",
+    createAccount: "Crear cuenta",
+  },
+
+  kyc: {
+    heading: "Verificación de identidad",
+    subtext:
+      "Obligatorio para retiros por encima del límite de la plataforma. Los documentos enviados se cifran en reposo y solo son visibles para un revisor de compliance.",
+    statusLabel: "Estado actual",
+    approved: "Aprobado ✓",
+    approvedNote: "Límites de retiro completos desbloqueados. No se requiere ninguna acción más.",
+    approvedFormNote:
+      "Tu identidad está verificada. No se necesitan más documentos en este momento. Si cambia tu nombre o dirección, contacta a soporte para actualizar.",
+    rejected: "Rechazado",
+    rejectionCodeLabel: "Código: {code}",
+    resubmitNote: "Puedes reenviar con el formulario debajo.",
+    requestMore: "Se solicitan más documentos",
+    pending: "En revisión",
+    pendingNote:
+      "El plazo típico es 1 día hábil. Recibirás una notificación en la app cuando se tome la decisión.",
+    pendingFormNote:
+      "Tus documentos están con el revisor. Te notificaremos cuando se tome una decisión. Para reemplazar un documento, contacta a soporte.",
+    panLabel: "Tarjeta PAN (frente)",
+    panHint: "Foto nítida de la tarjeta. JPG/PNG/PDF hasta 5 MB.",
+    aadhaarLabel: "Tarjeta Aadhaar (frente + reverso)",
+    aadhaarHint:
+      "Puedes ocultar los primeros 8 dígitos del número Aadhaar — los últimos 4 son suficientes para la verificación.",
+    selfieLabel: "Selfie",
+    selfieHint:
+      "Cara claramente visible, sin lentes oscuros ni gorra. Se usa para comparar contra el PAN.",
+    submitButton: "Enviar para revisión",
+    resubmitButton: "Reenviar",
+    uploadingButton: "Subiendo…",
+    securityNote:
+      "Los documentos están cifrados en reposo con AES-256-GCM utilizando la clave de datos envuelta por KMS. Solo el revisor de compliance asignado puede descifrarlos, y el acceso queda registrado en la auditoría del admin.",
+  },
+
+  activity: {
+    waitingForTrades: "Esperando operaciones en vivo…",
+    liveActivity: "Actividad en vivo",
+  },
+
+  transaction: {
+    signupBonus: "Bono de registro",
+    dailyReward: "Recompensa diaria",
+    boughtShares: "Compra de acciones",
+    boughtSharesBook: "Compra de acciones · pierna book",
+    boughtSharesAmm: "Compra de acciones · pierna AMM",
+    soldSharesBook: "Venta de acciones · pierna book",
+    soldSharesAmm: "Venta de acciones · pierna AMM",
+    limitOrderFilled: "Orden límite ejecutada",
+    sellOrderFilled: "Orden de venta ejecutada",
+    marketPayout: "Pago de mercado",
+    marketRefund: "Mercado cancelado — reembolsado",
+    adminGrant: "Concesión administrativa",
+    referralBonus: "Bono de referido",
+    achievementReward: "Recompensa de logro",
+    topUp: "Recarga de billetera",
+  },
+};
+
+export default es;

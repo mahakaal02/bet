@@ -10,11 +10,15 @@ import { Badge } from "@/components/ui/Badge";
 import { toast } from "@/components/ui/Toaster";
 import { cn, fmtCoins } from "@/lib/utils";
 import type { CoinPack } from "@/lib/coin-packs";
+import { useTranslation, type Locale } from "@/lib/i18n/client";
 
 interface Props {
   packs: CoinPack[];
   /** Current user — only the username and email pre-fill Razorpay Checkout. */
   user: { username: string; email: string };
+  /** Active locale, passed from the server-rendered wallet page so
+   *  all error toasts / inline copy match the rest of the page. */
+  locale: Locale;
 }
 
 interface TopupConfig {
@@ -48,10 +52,35 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
  * Razorpay's checkout.js is loaded lazily so cold page loads aren't taxed
  * by a script users may not need.
  */
-export function BuyCoinsGrid({ packs, user }: Props) {
+export function BuyCoinsGrid({ packs, user, locale: _locale }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const { t } = useTranslation();
+  // Locally-scoped error-code → translation mapper. Closes over `t`
+  // via lexical scope so we don't have to thread `TranslateFunction`
+  // through a free function — sidesteps a CI-only TS inference
+  // quirk where passing `t` as a parameter widened its type.
+  function prettyError(code: string | undefined): string {
+    switch (code) {
+      case "unknown_pack":
+        return t("wallet.unknownPack");
+      case "rate_limited":
+        return t("wallet.slowDown");
+      case "razorpay_not_configured":
+        return t("wallet.noPaymentConfig");
+      case "order_create_failed":
+        return t("wallet.orderCreateFailed");
+      case "bad_signature":
+        return t("wallet.badSignature");
+      case "instant_topup_disabled":
+        return t("wallet.instantDisabled");
+      case "unauthorized":
+        return t("wallet.unauthorized");
+      default:
+        return t("wallet.topUpFailed");
+    }
+  }
   const { data: config } = useSWR<TopupConfig>(
     "/api/wallet/topup/config",
     fetcher,
@@ -89,7 +118,7 @@ export function BuyCoinsGrid({ packs, user }: Props) {
       return;
     }
     if (!window.Razorpay) {
-      toast("Payment widget didn't load. Refresh and try again.", "err");
+      toast(t("wallet.paymentWidgetError"), "err");
       return;
     }
 
@@ -122,8 +151,11 @@ export function BuyCoinsGrid({ packs, user }: Props) {
             }
             toast(
               body.duplicate
-                ? "Already credited."
-                : `+${fmtCoins(body.credited)} coins · balance ${fmtCoins(body.balance)}`,
+                ? t("wallet.alreadyCredited")
+                : t("wallet.creditsBalance", {
+                    coins: fmtCoins(body.credited),
+                    balance: fmtCoins(body.balance),
+                  }),
               "ok",
             );
             startTransition(() => router.refresh());
@@ -150,8 +182,11 @@ export function BuyCoinsGrid({ packs, user }: Props) {
     }
     toast(
       body.duplicate
-        ? "Already credited — try a different pack."
-        : `+${fmtCoins(body.credited)} coins · balance ${fmtCoins(body.balance)}`,
+        ? t("wallet.alreadyCreditedPack")
+        : t("wallet.creditsBalance", {
+            coins: fmtCoins(body.credited),
+            balance: fmtCoins(body.balance),
+          }),
       "ok",
     );
     startTransition(() => router.refresh());
@@ -207,7 +242,7 @@ export function BuyCoinsGrid({ packs, user }: Props) {
         // Kalki Chat App path (super-admin sets the URL in
         // /admin/settings). Copy added in PR-BET-ADMIN-FOLLOWUPS.
         toast(
-          "Ask an Admin on Secure Kalki Chat for payments",
+          t("wallet.askAdmin"),
           "err",
         );
       }
@@ -219,7 +254,7 @@ export function BuyCoinsGrid({ packs, user }: Props) {
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {packs.map((p) => {
+        {packs.map((p: CoinPack) => {
           const ratio = p.coins / p.priceInr;
           const bonusPct = Math.round(((ratio - baseline) / baseline) * 100);
           const showBonus = bonusPct >= 5;
@@ -237,7 +272,7 @@ export function BuyCoinsGrid({ packs, user }: Props) {
               )}
             >
               {p.highlight && (
-                <Badge tone="info" className="absolute -top-2 left-3">
+                <Badge tone="info" className="absolute -top-2 start-3">
                   {p.highlight}
                 </Badge>
               )}
@@ -248,7 +283,7 @@ export function BuyCoinsGrid({ packs, user }: Props) {
                 </span>
               </div>
               <div className="mt-1 text-xs uppercase tracking-wider text-slate-500">
-                coins
+                {t("toast.coins")}
               </div>
               <div className="mt-3 text-lg font-semibold text-slate-100">
                 ₹{fmtCoins(p.priceInr)}
@@ -294,48 +329,23 @@ export function BuyCoinsGrid({ packs, user }: Props) {
         <div className="mt-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-xs">
           {config.chatAppDownloadUrl ? (
             <p className="text-cyan-200">
-              For coin top-ups, message an Admin on Secured Kalki Chat.{" "}
+              {t("wallet.chatAppMessage")}{" "}
               <a
                 href={config.chatAppDownloadUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-semibold text-cyan-300 underline decoration-cyan-500/40 underline-offset-2 hover:text-cyan-200 hover:decoration-cyan-300"
               >
-                Download Secured Chat App now ↓
+                {t("wallet.downloadChatApp")}
               </a>
             </p>
           ) : (
             <p className="text-cyan-200">
-              For coin top-ups, message an Admin on Secured Kalki Chat.
-              <span className="ml-1 text-[10px] text-cyan-400/70">
-                (Download link not configured — ask the super admin to set it
-                in /admin/settings.)
-              </span>
+              {t("wallet.chatAppNoUrl")}
             </p>
           )}
         </div>
       )}
     </>
   );
-}
-
-function prettyError(code?: string): string {
-  switch (code) {
-    case "unknown_pack":
-      return "That pack isn't available.";
-    case "rate_limited":
-      return "Slow down — wait a minute before buying again.";
-    case "razorpay_not_configured":
-      return "Payments aren't configured. Ask an admin.";
-    case "order_create_failed":
-      return "Couldn't create a payment order. Try again.";
-    case "bad_signature":
-      return "Payment verification failed. Contact support if money was charged.";
-    case "instant_topup_disabled":
-      return "Instant top-up is disabled. Use the payment flow.";
-    case "unauthorized":
-      return "Please sign in.";
-    default:
-      return "Top-up failed. Try again.";
-  }
 }

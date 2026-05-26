@@ -1,8 +1,16 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 import "@/lib/boot";
 import { SessionProvider } from "@/components/SessionProvider";
 import { Toaster } from "@/components/ui/Toaster";
+import {
+  DEFAULT_LOCALE,
+  LOCALE_HEADER,
+  dirForLocale,
+  isLocale,
+  type Locale,
+} from "@/lib/i18n";
 
 /** Mobile viewport. Without this, Next.js doesn't emit a viewport meta
  *  and iOS Safari falls back to the 980px virtual viewport — every page
@@ -44,13 +52,33 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+/**
+ * Root layout — wraps EVERY route (localized + non-localized).
+ *
+ * `<html lang>` + `<html dir>` are resolved per-request from the
+ * `x-bet-locale` request header that middleware sets when a locale-
+ * prefixed URL flows through. For paths outside the `[locale]/` tree
+ * (e.g. `/admin/*` or `/share/*`) the header is absent and we fall
+ * back to DEFAULT_LOCALE. This is the single source of truth for
+ * the document language announcement — assistive tech keys off it.
+ *
+ * Why server-resolve instead of e.g. a `<HtmlLangSetter>` client
+ * component? Screen readers read the initial `<html lang>` value
+ * the moment the document loads; flipping it from JS post-hydration
+ * is too late.
+ */
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const hdrs = await headers();
+  const raw = hdrs.get(LOCALE_HEADER);
+  const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  const dir = dirForLocale(locale);
+
   return (
-    <html lang="en" className="dark">
+    <html lang={locale} dir={dir} className="dark">
       <body className="min-h-screen">
         <SessionProvider>
           {children}
