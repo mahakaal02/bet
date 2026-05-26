@@ -195,7 +195,7 @@ export function BuyCoinsGrid({ packs, user, locale: _locale }: Props) {
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {packs.map((p) => {
+        {packs.map((p: CoinPack) => {
           const ratio = p.coins / p.priceInr;
           const bonusPct = Math.round(((ratio - baseline) / baseline) * 100);
           const showBonus = bonusPct >= 5;
