@@ -10,11 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { toast } from "@/components/ui/Toaster";
 import { cn, fmtCoins } from "@/lib/utils";
 import type { CoinPack } from "@/lib/coin-packs";
-import {
-  useTranslation,
-  type Locale,
-  type TranslateFunction,
-} from "@/lib/i18n/client";
+import { useTranslation, type Locale } from "@/lib/i18n/client";
 
 interface Props {
   packs: CoinPack[];
@@ -58,6 +54,30 @@ export function BuyCoinsGrid({ packs, user, locale: _locale }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const { t } = useTranslation();
+  // Locally-scoped error-code → translation mapper. Closes over `t`
+  // via lexical scope so we don't have to thread `TranslateFunction`
+  // through a free function — sidesteps a CI-only TS inference
+  // quirk where passing `t` as a parameter widened its type.
+  function prettyError(code: string | undefined): string {
+    switch (code) {
+      case "unknown_pack":
+        return t("wallet.unknownPack");
+      case "rate_limited":
+        return t("wallet.slowDown");
+      case "razorpay_not_configured":
+        return t("wallet.noPaymentConfig");
+      case "order_create_failed":
+        return t("wallet.orderCreateFailed");
+      case "bad_signature":
+        return t("wallet.badSignature");
+      case "instant_topup_disabled":
+        return t("wallet.instantDisabled");
+      case "unauthorized":
+        return t("wallet.unauthorized");
+      default:
+        return t("wallet.topUpFailed");
+    }
+  }
   const { data: config } = useSWR<TopupConfig>(
     "/api/wallet/topup/config",
     fetcher,
@@ -91,7 +111,7 @@ export function BuyCoinsGrid({ packs, user, locale: _locale }: Props) {
     });
     const order = await orderRes.json().catch(() => ({}));
     if (!orderRes.ok) {
-      toast(prettyError(order.error, t), "err");
+      toast(prettyError(order.error), "err");
       return;
     }
     if (!window.Razorpay) {
@@ -123,7 +143,7 @@ export function BuyCoinsGrid({ packs, user, locale: _locale }: Props) {
             });
             const body = await verify.json().catch(() => ({}));
             if (!verify.ok) {
-              toast(prettyError(body.error, t), "err");
+              toast(prettyError(body.error), "err");
               return;
             }
             toast(
@@ -154,7 +174,7 @@ export function BuyCoinsGrid({ packs, user, locale: _locale }: Props) {
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      toast(prettyError(body.error, t), "err");
+      toast(prettyError(body.error), "err");
       return;
     }
     toast(
@@ -278,28 +298,4 @@ export function BuyCoinsGrid({ packs, user, locale: _locale }: Props) {
       )}
     </>
   );
-}
-
-function prettyError(
-  code: string | undefined,
-  t: TranslateFunction,
-): string {
-  switch (code) {
-    case "unknown_pack":
-      return t("wallet.unknownPack");
-    case "rate_limited":
-      return t("wallet.slowDown");
-    case "razorpay_not_configured":
-      return t("wallet.noPaymentConfig");
-    case "order_create_failed":
-      return t("wallet.orderCreateFailed");
-    case "bad_signature":
-      return t("wallet.badSignature");
-    case "instant_topup_disabled":
-      return t("wallet.instantDisabled");
-    case "unauthorized":
-      return t("wallet.unauthorized");
-    default:
-      return t("wallet.topUpFailed");
-  }
 }
