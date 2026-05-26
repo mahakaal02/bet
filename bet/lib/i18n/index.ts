@@ -227,30 +227,101 @@ export function alternatesFor(
 }
 
 /**
- * Parse the `Accept-Language` HTTP header into a preference-ordered
- * list of locale codes. Used as the third-fallback in middleware
- * when both the cookie and the geo header miss.
+ * Robust `Accept-Language` parser (RFC 7231 §5.3.5).
  *
- *   "fr-CA,fr;q=0.9,en;q=0.5"  →  ['fr', 'en']
+ * Returns a preference-ordered list of supported locale codes after:
+ *
+ *   • Splitting on `,` and trimming each entry.
+ *   • Lower-casing tags.
+ *   • Parsing `;q=…` weights (default 1.0, clamped to [0, 1]).
+ *   • Dropping entries with q=0 (RFC says "not acceptable").
+ *   • Tolerating whitespace inside parameters (`fr ; q = 0.9`).
+ *   • Region stripping: `fr-CA` and `fr_CA` both match `fr`.
+ *   • Wildcard handling: `*` is skipped (no info — falls through to
+ *     later resolution steps).
+ *   • Deduping: only the first occurrence of a base language wins.
+ *   • Stable sort: equal q-values preserve original-header order so
+ *     `fr-CA,en-US` (both default q=1) keeps fr first, matching what
+ *     the user's browser intended.
+ *
+ * Examples
+ *   "fr-CA,fr;q=0.9,en;q=0.5"  → ["fr", "en"]
+ *   "pt-BR,pt;q=0.8,*;q=0.5"   → ["pt"]
+ *   "en;q=0,fr;q=0.9"           → ["fr"]           (en explicitly rejected)
+ *   "  fr ; q = 0.9 , en "      → ["en", "fr"]     (en defaults to q=1)
+ *   "zh-CN,ja"                  → []               (none supported)
+ *   ""                          → []
+ *   null/undefined              → []
  */
-export function parseAcceptLanguage(header: string | null | undefined): Locale[] {
+export function parseAcceptLanguage(
+  header: string | null | undefined,
+): Locale[] {
   if (!header) return [];
-  const parts = header
-    .split(",")
-    .map((p) => {
-      const [tag, ...params] = p.trim().split(";");
-      const qParam = params.find((x) => x.startsWith("q="));
-      const q = qParam ? Number(qParam.slice(2)) : 1;
-      return { tag: tag.toLowerCase().split("-")[0], q: isFinite(q) ? q : 0 };
-    })
-    .filter((p) => p.tag)
-    .sort((a, b) => b.q - a.q);
+
+  interface Entry {
+    tag: string;
+    q: number;
+    /** Original index in the header — used as the secondary sort key
+     *  so equal q-values preserve browser-supplied order. */
+    order: number;
+  }
+  const entries: Entry[] = [];
+
+  header.split(",").forEach((rawPart, idx) => {
+    const part = rawPart.trim();
+    if (!part) return;
+
+    // Split tag from parameters: "fr-CA; q=0.9" → ["fr-CA", " q=0.9"]
+    // — note we trim each side so "fr ; q = 0.9" still parses cleanly.
+    const segments = part.split(";").map((s) => s.trim());
+    const tag = segments[0].toLowerCase();
+    if (!tag) return;
+
+    // Walk parameters looking for q=… (case-insensitive). Anything else
+    // is ignored. Default q=1 if absent.
+    let q = 1;
+    for (let i = 1; i < segments.length; i++) {
+      const param = segments[i];
+      const eq = param.indexOf("=");
+      if (eq < 0) continue;
+      const name = param.slice(0, eq).trim().toLowerCase();
+      const value = param.slice(eq + 1).trim();
+      if (name !== "q") continue;
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        // RFC bounds are [0, 1]; clamp defensively so a misconfigured
+        // client sending q=2 doesn't outrank a well-behaved q=1.
+        q = Math.max(0, Math.min(1, parsed));
+      }
+      break;
+    }
+
+    // q=0 is the RFC-defined way to say "do not give me this" — skip.
+    // Also catches NaN clamped to 0 above.
+    if (q <= 0) return;
+
+    entries.push({ tag, q, order: idx });
+  });
+
+  // Stable sort: q descending; ties broken by original order.
+  entries.sort((a, b) => b.q - a.q || a.order - b.order);
+
   const out: Locale[] = [];
-  const seen = new Set<string>();
-  for (const p of parts) {
-    if (isLocale(p.tag) && !seen.has(p.tag)) {
-      seen.add(p.tag);
-      out.push(p.tag);
+  const seen = new Set<Locale>();
+  for (const entry of entries) {
+    // Wildcard `*` carries no signal — let the next-tier resolver
+    // (geo / default) decide. Skip and continue.
+    if (entry.tag === "*") continue;
+
+    // Strip region/script subtags to the base language. We support
+    // 2-letter codes only (`en`, `pt`, `es`, `fr`), so `fr-CA`, `fr_FR`,
+    // `pt-BR`, `pt-PT` all collapse to their base. This matches what
+    // a Brazilian Portuguese browser wants when "pt-BR" is sent —
+    // we serve "pt" and that's fine.
+    const baseLang = entry.tag.split(/[-_]/)[0];
+    if (isLocale(baseLang) && !seen.has(baseLang)) {
+      seen.add(baseLang);
+      out.push(baseLang);
     }
   }
   return out;

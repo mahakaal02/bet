@@ -26,48 +26,82 @@ Exchange. Shipped as PR-BET-I18N.
 
 ## Redirect flow
 
+The resolution chain runs top-to-bottom; first match wins.
+
 ```
 Request lands → middleware (edge)
   │
-  ├─ URL has /{locale}/... prefix?
-  │     YES → pass through unchanged.
+  ├─ /_next/* / /api/* / /admin/* / static asset?
+  │     YES → pass through (matcher excludes these).
   │
-  ├─ URL is /api/* or /admin/* or static asset?
-  │     YES → pass through unchanged (excluded via matcher).
+  ├─ 1️⃣  EXPLICIT URL — path is /{locale}/...
+  │     YES → pass through unchanged. No cookie writes.
+  │
+  ├─ Non-localized carve-out (/share, etc.)?
+  │     YES → pass through.
   │
   ├─ User-Agent looks like a bot?
   │     YES → 302 → /{DEFAULT_LOCALE}{path}. No cookie writes.
   │
-  ├─ `preferred_language` cookie set?
-  │     YES → 302 → /{cookie}{path}.  ★ MANUAL CHOICE WINS
+  ├─ 2️⃣  preferred_language COOKIE set?
+  │     YES → 302 → /{cookie}{path}.       ★ MANUAL CHOICE WINS
   │
-  ├─ `kalki_geo_routed` sentinel cookie set?
-  │     YES → 302 → /{DEFAULT_LOCALE}{path}. (Already geo-routed
-  │                  once; subsequent navigation defaults to English
-  │                  unless they manually pick.)
+  ├─ 3️⃣  ACCEPT-LANGUAGE header yields a supported locale?
+  │     YES → 302 → /{accept-language[0]}{path}.
+  │              (Robust q-value parser handles q=0 rejections,
+  │               region stripping fr-CA→fr, wildcards, ties.)
   │
-  └─ First visit:
-        a. x-vercel-ip-country / cf-ipcountry / x-real-country
-              → country code → COUNTRY_TO_LOCALE → 302 + write sentinel.
-        b. Accept-Language → first supported locale → 302 + sentinel.
-        c. DEFAULT_LOCALE → 302 + sentinel.
+  ├─ 4️⃣  GEO-IP from edge headers (only if sentinel NOT set)?
+  │     YES → 302 → /{country→locale}{path}. Write sentinel.
+  │
+  └─ 5️⃣  DEFAULT_LOCALE → 302 → /{en}{path}.
 ```
 
-Key invariants:
+### Why this order
+
+| Step | Signal | Why it ranks here |
+|---|---|---|
+| 1 | Explicit URL | The user (or their inbound link) literally typed the locale. Highest signal possible. |
+| 2 | Cookie | Set by the in-app language switcher — an explicit, persistent user choice. Beats any heuristic. |
+| 3 | Accept-Language | The user's *own browser* configuration. Deterministic per-request, no network-position guesswork. A French traveller in Brazil still gets /fr/. |
+| 4 | Geo-IP | Best-effort guess from network position. Used only when the user hasn't told us anything directly. |
+| 5 | Default | Final fallback. |
+
+### Key invariants
 
 - **Manual choice always wins.** The `preferred_language` cookie is
-  the first check, set only by the language switcher.
-- **No repeated geo prompts.** The `kalki_geo_routed` sentinel flips
-  to "1" on the first redirect and stays for 30 days. Without it,
-  a Brazilian user who deliberately navigates to `/en/wallet`
-  would be perpetually slingshot back to `/pt/`.
+  checked before any heuristic, set only by the language switcher.
+- **Browser config beats geography.** Accept-Language now ranks
+  *above* Geo-IP (per W3C best practice — the user's own browser
+  setting is a more reliable signal than where their packets exit).
+- **No repeated geo prompts.** The `kalki_geo_routed` sentinel
+  flips to "1" the first time geo fires and stays 30 days. A user
+  whose Accept-Language doesn't match any supported locale isn't
+  re-geo-routed on every subsequent click.
 - **No client-side JS redirects.** All locale routing happens at
   the edge before any HTML ships. Bots see the canonical URL on
   the first hit; users see their language without a flash.
-- **302, not 301.** Geo state can change (VPN, travel) and the
-  user's preference can change. Caching as permanent would break
-  language switching for any client behind a proxy that respects
-  301s.
+- **302, not 301.** Geo state can change (VPN, travel), browser
+  settings can change, and the user's preference can change.
+  Caching as permanent would break language switching for any
+  client behind a proxy that respects 301s.
+
+### Accept-Language parser semantics
+
+`parseAcceptLanguage()` in `index.ts` implements RFC 7231 §5.3.5:
+
+- Parses `;q=…` weights (default 1.0, clamped to [0, 1]).
+- Drops entries with `q=0` (RFC: "not acceptable").
+- Strips region/script subtags — `fr-CA`, `fr_CA`, `fr-Latn-CA` all
+  collapse to `fr`. Matches our 2-letter locale codes.
+- Skips wildcard `*` (no signal — falls through to step 4/5).
+- Stable sort: equal q-values preserve browser-supplied order so
+  `fr-CA,en-US` (both default q=1) keeps `fr` first.
+- Tolerates whitespace inside parameters (`fr ; q = 0.9`).
+- Dedupes — first occurrence of a base language wins.
+- Returns `[]` for null/undefined/empty/garbage headers.
+
+Tested in `__tests__/i18n-accept-language.test.ts`.
 
 ## Migrating an existing page into `[locale]/`
 
