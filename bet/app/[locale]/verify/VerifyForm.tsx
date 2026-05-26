@@ -1,30 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
-  DEFAULT_LOCALE,
-  isLocale,
   localizedPath,
-  t,
-  type Locale,
-} from "@/lib/i18n";
+  useTranslation,
+} from "@/lib/i18n/client";
 
 type State = "loading" | "ok" | "invalid";
 
 export function VerifyForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const routeParams = useParams<{ locale: string }>();
-  const locale: Locale = isLocale(routeParams.locale)
-    ? routeParams.locale
-    : DEFAULT_LOCALE;
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const { t: tr, locale } = useTranslation();
   const lp = (h: string) => localizedPath(h, locale);
   const [state, setState] = useState<State>("loading");
 

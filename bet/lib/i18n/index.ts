@@ -84,6 +84,13 @@ export {
  * Dictionary registry. Keyed by locale; English is the only one
  * required to be complete — others are typed `Partial<Dictionary>`
  * and resolved through `walkDeep` below.
+ *
+ * Server-only — this module statically imports every dictionary so
+ * `t()` and `dictionaryFor()` can return any locale on demand. The
+ * client-side surface (`./client.tsx`) deliberately does NOT import
+ * this module; it receives a pre-merged dictionary via the
+ * `<I18nProvider>` prop, so bundlers never include the dictionary
+ * files in any client chunk.
  */
 const DICTIONARIES: Record<Locale, Partial<Dictionary>> = {
   en,
@@ -91,6 +98,74 @@ const DICTIONARIES: Record<Locale, Partial<Dictionary>> = {
   es,
   fr,
 };
+
+/**
+ * Deep-merge a partial dictionary onto a complete fallback. The
+ * primary wins on every key it defines; missing keys take their
+ * value from the fallback. Arrays and other non-object values are
+ * replaced wholesale (we don't currently use either in the dicts).
+ *
+ * Used to pre-resolve the active locale's dictionary on the server
+ * before handing it to the client provider — so the client never
+ * needs the fallback dictionary at all.
+ */
+export function mergeDictionaries(
+  primary: Partial<Dictionary>,
+  fallback: Dictionary,
+): Dictionary {
+  const out: Dictionary = {};
+  for (const key of Object.keys(fallback)) {
+    const f = fallback[key];
+    const p = (primary as Record<string, unknown>)[key];
+    if (
+      typeof f === "object" &&
+      f !== null &&
+      typeof p === "object" &&
+      p !== null
+    ) {
+      // Both nested — recurse.
+      out[key] = mergeDictionaries(
+        p as Partial<Dictionary>,
+        f as Dictionary,
+      );
+    } else if (typeof p === "string") {
+      // Primary defines this leaf — use it.
+      out[key] = p;
+    } else {
+      // Primary missing or non-string — fall back.
+      out[key] = f as string | Dictionary;
+    }
+  }
+  // Surface any extra keys the primary defines but fallback doesn't
+  // (shouldn't happen since en is the canonical contract, but if a
+  // translator adds a key ahead of the contract we don't drop it).
+  for (const key of Object.keys(primary)) {
+    if (!(key in out)) {
+      const p = (primary as Record<string, unknown>)[key];
+      if (typeof p === "string" || (typeof p === "object" && p !== null)) {
+        out[key] = p as string | Dictionary;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Resolve the fully-merged dictionary for a locale (primary + English
+ * fallback). Server-only — called by the localized root layout
+ * before mounting the client provider.
+ *
+ *   import { dictionaryFor } from "@/lib/i18n";
+ *   <I18nProvider locale={locale} dictionary={dictionaryFor(locale)}>
+ *
+ * For English this is a near-no-op (the merge sees no partial-side
+ * leaves and just returns the same shape). For pt/es/fr the merge
+ * fills any unsubmitted strings from English.
+ */
+export function dictionaryFor(locale: Locale): Dictionary {
+  if (locale === "en") return en;
+  return mergeDictionaries(DICTIONARIES[locale], en);
+}
 
 /**
  * Translation accessor.

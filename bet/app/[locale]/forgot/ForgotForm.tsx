@@ -2,27 +2,18 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toaster";
 import {
-  DEFAULT_LOCALE,
-  isLocale,
   localizedPath,
-  t,
-  type Locale,
-} from "@/lib/i18n";
+  useTranslation,
+} from "@/lib/i18n/client";
 
 export function ForgotForm() {
-  const routeParams = useParams<{ locale: string }>();
-  const locale: Locale = isLocale(routeParams.locale)
-    ? routeParams.locale
-    : DEFAULT_LOCALE;
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const { t: tr, locale } = useTranslation();
   const lp = (h: string) => localizedPath(h, locale);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);

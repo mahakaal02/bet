@@ -8,10 +8,10 @@ import {
   PREFERRED_LOCALE_COOKIE,
   PREFERRED_LOCALE_COOKIE_MAX_AGE_SECONDS,
   localizedPath,
-  t,
+  useTranslation,
   withPreservedParams,
   type Locale,
-} from "@/lib/i18n";
+} from "@/lib/i18n/client";
 
 /**
  * Language switcher (PR-BET-I18N).
@@ -63,6 +63,7 @@ export function LanguageSwitcher({
   // English ends up on `/en/wallet?utm_campaign=launch`, not
   // /en/wallet (which would shred attribution).
   const searchParams = useSearchParams();
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   /** Index of the option that's currently keyboard-highlighted
    *  inside the open menu. Drives aria-activedescendant. Defaults
@@ -259,7 +260,7 @@ export function LanguageSwitcher({
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
         aria-activedescendant={open ? optionIdFor(activeIdx) : undefined}
-        aria-label={t("switcher.label", currentLocale)}
+        aria-label={t("switcher.label")}
         onClick={() => setOpen((v) => !v)}
         onKeyDown={onTriggerKeyDown}
         className={`inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-900/70 ${sizeCls} font-semibold text-slate-200 hover:border-slate-500 hover:bg-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60`}
@@ -281,7 +282,7 @@ export function LanguageSwitcher({
         <ul
           id={listboxId}
           role="listbox"
-          aria-label={t("switcher.chooseLanguage", currentLocale)}
+          aria-label={t("switcher.chooseLanguage")}
           aria-activedescendant={optionIdFor(activeIdx)}
           tabIndex={-1}
           onKeyDown={onListboxKeyDown}

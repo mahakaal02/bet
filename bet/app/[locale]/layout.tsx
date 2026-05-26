@@ -4,10 +4,12 @@ import {
   DEFAULT_LOCALE,
   LOCALES,
   buildLocalizedMetadata,
+  dictionaryFor,
   isLocale,
   t,
   type Locale,
 } from "@/lib/i18n";
+import { I18nProvider } from "@/lib/i18n/client";
 
 /**
  * Localized route layout (PR-BET-I18N).
@@ -87,9 +89,18 @@ export default async function LocaleLayout({
 }: LocaleLayoutProps) {
   const { locale: raw } = await params;
   if (!isLocale(raw)) notFound();
-  // No <html> / <body> here — the root layout owns those. We just
-  // render the children; the `<html lang>` comes from metadata.
-  // (Next.js merges the locale into the root `<html>` via the
-  // metadata API.)
-  return <>{children}</>;
+  const locale: Locale = raw;
+  // Resolve the dictionary on the server, pre-merged with the English
+  // fallback. This single dictionary travels to the client via the
+  // RSC payload (as data) and lands in the I18nProvider context.
+  // The bundler never sees a static import of any dictionary file
+  // from a client module, so the dictionaries DON'T get bundled into
+  // shared client chunks — only the active locale's data ships per
+  // request.
+  const dictionary = dictionaryFor(locale);
+  return (
+    <I18nProvider locale={locale} dictionary={dictionary}>
+      {children}
+    </I18nProvider>
+  );
 }

@@ -1,18 +1,12 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { useParams, usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Camera, X } from "lucide-react";
 import { Avatar } from "@/components/Avatar";
 import { toast } from "@/components/ui/Toaster";
 import { cn } from "@/lib/utils";
-import {
-  DEFAULT_LOCALE,
-  isLocale,
-  splitLocaleFromPath,
-  t,
-  type Locale,
-} from "@/lib/i18n";
+import { useTranslation } from "@/lib/i18n/client";
 
 interface Props {
   /** Current avatar URL — null/undefined for the gradient initial fallback. */
@@ -41,14 +35,7 @@ export function AvatarUploader({ image, name, size = 56 }: Props) {
   // has (server replaces the URL on every upload, but defensive).
   const [bust, setBust] = useState<number>(0);
   const [, startTransition] = useTransition();
-  const params = useParams<{ locale?: string }>();
-  const pathname = usePathname();
-  const fromPath = splitLocaleFromPath(pathname ?? "/").locale;
-  const locale: Locale = isLocale(params?.locale)
-    ? params.locale
-    : (fromPath ?? DEFAULT_LOCALE);
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const { t: tr } = useTranslation();
 
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];

@@ -2,17 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
 import { Activity } from "lucide-react";
 import { cn, fmtCoins, fmtPrice, timeAgo } from "@/lib/utils";
 import {
-  DEFAULT_LOCALE,
-  isLocale,
   localizedPath,
-  splitLocaleFromPath,
-  t,
-  type Locale,
-} from "@/lib/i18n";
+  useTranslation,
+} from "@/lib/i18n/client";
 
 interface ActivityEvent {
   id: number;
@@ -38,12 +33,7 @@ export function ActivityTicker() {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const counterRef = useRef(0);
 
-  const params = useParams<{ locale?: string }>();
-  const pathname = usePathname();
-  const fromPath = splitLocaleFromPath(pathname ?? "/").locale;
-  const locale: Locale = isLocale(params?.locale)
-    ? params.locale
-    : (fromPath ?? DEFAULT_LOCALE);
+  const { t, locale } = useTranslation();
 
   useEffect(() => {
     const src = new EventSource("/api/activity/stream");
@@ -80,7 +70,7 @@ export function ActivityTicker() {
     return (
       <div className="glass rounded-xl px-4 py-3 text-xs text-slate-500">
         <Activity className="me-1 inline h-3 w-3" />
-        {t("activity.waitingForTrades", locale)}
+        {t("activity.waitingForTrades")}
       </div>
     );
   }
@@ -89,7 +79,7 @@ export function ActivityTicker() {
     <div className="glass rounded-xl px-2 py-1">
       <div className="border-b border-white/5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
         <Activity className="me-1 inline h-3 w-3 text-emerald-400" />
-        {t("activity.liveActivity", locale)}
+        {t("activity.liveActivity")}
       </div>
       <ul className="max-h-72 overflow-y-auto">
         {events.map((e) => (

@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toaster";
-import { DEFAULT_LOCALE, isLocale, t, type Locale } from "@/lib/i18n";
+import { useTranslation } from "@/lib/i18n/client";
 
 /**
  * KYC document upload form (PR-BET-ADMIN-FOLLOWUPS).
@@ -26,12 +25,7 @@ export function KycForm({
   hasSubmission: boolean;
   status: string | null;
 }) {
-  const params = useParams<{ locale: string }>();
-  const locale: Locale = isLocale(params.locale)
-    ? params.locale
-    : DEFAULT_LOCALE;
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const { t: tr } = useTranslation();
 
   const [busy, setBusy] = useState(false);
 

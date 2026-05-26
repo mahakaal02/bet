@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { toast } from "@/components/ui/Toaster";
 import { cn, fmtCoins } from "@/lib/utils";
 import type { CoinPack } from "@/lib/coin-packs";
-import { t, type Locale } from "@/lib/i18n";
+import { useTranslation, type Locale } from "@/lib/i18n/client";
 
 interface Props {
   packs: CoinPack[];
@@ -49,10 +49,11 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
  * Razorpay's checkout.js is loaded lazily so cold page loads aren't taxed
  * by a script users may not need.
  */
-export function BuyCoinsGrid({ packs, user, locale }: Props) {
+export function BuyCoinsGrid({ packs, user, locale: _locale }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const { t } = useTranslation();
   const { data: config } = useSWR<TopupConfig>(
     "/api/wallet/topup/config",
     fetcher,
@@ -86,11 +87,11 @@ export function BuyCoinsGrid({ packs, user, locale }: Props) {
     });
     const order = await orderRes.json().catch(() => ({}));
     if (!orderRes.ok) {
-      toast(prettyError(order.error, locale), "err");
+      toast(prettyError(order.error, t), "err");
       return;
     }
     if (!window.Razorpay) {
-      toast(t("wallet.paymentWidgetError", locale), "err");
+      toast(t("wallet.paymentWidgetError"), "err");
       return;
     }
 
@@ -118,13 +119,13 @@ export function BuyCoinsGrid({ packs, user, locale }: Props) {
             });
             const body = await verify.json().catch(() => ({}));
             if (!verify.ok) {
-              toast(prettyError(body.error, locale), "err");
+              toast(prettyError(body.error, t), "err");
               return;
             }
             toast(
               body.duplicate
-                ? t("wallet.alreadyCredited", locale)
-                : t("wallet.creditsBalance", locale, {
+                ? t("wallet.alreadyCredited")
+                : t("wallet.creditsBalance", {
                     coins: fmtCoins(body.credited),
                     balance: fmtCoins(body.balance),
                   }),
@@ -149,13 +150,13 @@ export function BuyCoinsGrid({ packs, user, locale }: Props) {
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      toast(prettyError(body.error, locale), "err");
+      toast(prettyError(body.error, t), "err");
       return;
     }
     toast(
       body.duplicate
-        ? t("wallet.alreadyCreditedPack", locale)
-        : t("wallet.creditsBalance", locale, {
+        ? t("wallet.alreadyCreditedPack")
+        : t("wallet.creditsBalance", {
             coins: fmtCoins(body.credited),
             balance: fmtCoins(body.balance),
           }),
@@ -178,7 +179,7 @@ export function BuyCoinsGrid({ packs, user, locale }: Props) {
         // The old "payments aren't configured" copy leaked the
         // developer reality.
         toast(
-          t("wallet.askAdmin", locale),
+          t("wallet.askAdmin"),
           "err",
         );
       }
@@ -219,7 +220,7 @@ export function BuyCoinsGrid({ packs, user, locale }: Props) {
                 </span>
               </div>
               <div className="mt-1 text-xs uppercase tracking-wider text-slate-500">
-                {t("toast.coins", locale)}
+                {t("toast.coins")}
               </div>
               <div className="mt-3 text-lg font-semibold text-slate-100">
                 ₹{fmtCoins(p.priceInr)}
@@ -254,19 +255,19 @@ export function BuyCoinsGrid({ packs, user, locale }: Props) {
         <div className="mt-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-xs">
           {config.chatAppDownloadUrl ? (
             <p className="text-cyan-200">
-              {t("wallet.chatAppMessage", locale)}{" "}
+              {t("wallet.chatAppMessage")}{" "}
               <a
                 href={config.chatAppDownloadUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-semibold text-cyan-300 underline decoration-cyan-500/40 underline-offset-2 hover:text-cyan-200 hover:decoration-cyan-300"
               >
-                {t("wallet.downloadChatApp", locale)}
+                {t("wallet.downloadChatApp")}
               </a>
             </p>
           ) : (
             <p className="text-cyan-200">
-              {t("wallet.chatAppNoUrl", locale)}
+              {t("wallet.chatAppNoUrl")}
             </p>
           )}
         </div>
@@ -275,23 +276,26 @@ export function BuyCoinsGrid({ packs, user, locale }: Props) {
   );
 }
 
-function prettyError(code: string | undefined, locale: Locale): string {
+function prettyError(
+  code: string | undefined,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string {
   switch (code) {
     case "unknown_pack":
-      return t("wallet.unknownPack", locale);
+      return t("wallet.unknownPack");
     case "rate_limited":
-      return t("wallet.slowDown", locale);
+      return t("wallet.slowDown");
     case "razorpay_not_configured":
-      return t("wallet.noPaymentConfig", locale);
+      return t("wallet.noPaymentConfig");
     case "order_create_failed":
-      return t("wallet.orderCreateFailed", locale);
+      return t("wallet.orderCreateFailed");
     case "bad_signature":
-      return t("wallet.badSignature", locale);
+      return t("wallet.badSignature");
     case "instant_topup_disabled":
-      return t("wallet.instantDisabled", locale);
+      return t("wallet.instantDisabled");
     case "unauthorized":
-      return t("wallet.unauthorized", locale);
+      return t("wallet.unauthorized");
     default:
-      return t("wallet.topUpFailed", locale);
+      return t("wallet.topUpFailed");
   }
 }

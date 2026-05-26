@@ -1,17 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useParams, usePathname } from "next/navigation";
 import { Check, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/Toaster";
-import {
-  DEFAULT_LOCALE,
-  isLocale,
-  splitLocaleFromPath,
-  t,
-  type Locale,
-} from "@/lib/i18n";
+import { useTranslation } from "@/lib/i18n/client";
 
 interface Props {
   /** URL to share. If omitted, the current location is used at click time. */
@@ -39,14 +32,7 @@ export function ShareButton({
   className,
 }: Props) {
   const [copied, setCopied] = useState(false);
-  const params = useParams<{ locale?: string }>();
-  const pathname = usePathname();
-  const fromPath = splitLocaleFromPath(pathname ?? "/").locale;
-  const locale: Locale = isLocale(params?.locale)
-    ? params.locale
-    : (fromPath ?? DEFAULT_LOCALE);
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const { t: tr } = useTranslation();
 
   async function onClick() {
     const href = url ?? (typeof window !== "undefined" ? window.location.href : "");

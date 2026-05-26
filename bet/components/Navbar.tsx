@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Coins, Star, User, Trophy, BarChart3, ShieldCheck, Home } from "lucide-react";
 import useSWR from "swr";
@@ -11,13 +10,9 @@ import { Brand } from "@/components/Brand";
 import { Avatar } from "@/components/Avatar";
 import { HubLogoLink } from "@/components/HubLogoLink";
 import {
-  DEFAULT_LOCALE,
-  isLocale,
   localizedPath,
-  splitLocaleFromPath,
-  t,
-  type Locale,
-} from "@/lib/i18n";
+  useTranslation,
+} from "@/lib/i18n/client";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -34,14 +29,7 @@ export function Navbar() {
     { refreshInterval: 10_000, revalidateOnFocus: true }
   );
 
-  // useParams may not return locale if not under [locale] segment;
-  // fall back to the pathname-derived locale, then DEFAULT_LOCALE.
-  const params = useParams<{ locale?: string }>();
-  const pathname = usePathname();
-  const fromPath = splitLocaleFromPath(pathname ?? "/").locale;
-  const locale: Locale = isLocale(params?.locale)
-    ? params.locale
-    : (fromPath ?? DEFAULT_LOCALE);
+  const { t, locale } = useTranslation();
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/85 backdrop-blur-xl">
@@ -58,30 +46,30 @@ export function Navbar() {
           <NavLink
             href={localizedPath("/markets", locale)}
             icon={<Home className="h-4 w-4" />}
-            label={t("nav.markets", locale)}
+            label={t("nav.markets")}
           />
           <NavLink
             href={localizedPath("/portfolio", locale)}
             icon={<BarChart3 className="h-4 w-4" />}
-            label={t("nav.portfolio", locale)}
+            label={t("nav.portfolio")}
           />
           {data?.user && (
             <NavLink
               href={localizedPath("/watchlist", locale)}
               icon={<Star className="h-4 w-4" />}
-              label={t("nav.watchlist", locale)}
+              label={t("nav.watchlist")}
             />
           )}
           <NavLink
             href={localizedPath("/leaderboard", locale)}
             icon={<Trophy className="h-4 w-4" />}
-            label={t("nav.leaderboard", locale)}
+            label={t("nav.leaderboard")}
           />
           {data?.user.isAdmin && (
             <NavLink
               href="/admin"
               icon={<ShieldCheck className="h-4 w-4" />}
-              label={t("nav.admin", locale)}
+              label={t("nav.admin")}
             />
           )}
         </nav>
@@ -91,7 +79,7 @@ export function Navbar() {
             <Link
               href={localizedPath("/wallet", locale)}
               className="flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-sm font-semibold text-cyan-200 hover:bg-cyan-500/20"
-              title={t("wallet.tapToTopup", locale)}
+              title={t("wallet.tapToTopup")}
             >
               <Coins className="h-4 w-4" />
               {fmtCoins(data.wallet.balance)}
@@ -108,8 +96,8 @@ export function Navbar() {
               <Link
                 href={localizedPath("/profile", locale)}
                 className="flex items-center gap-1.5 rounded-lg p-1 text-slate-300 hover:bg-slate-800"
-                aria-label={t("nav.profile", locale)}
-                title={data?.user?.username ? `@${data.user.username}` : t("nav.profile", locale)}
+                aria-label={t("nav.profile")}
+                title={data?.user?.username ? `@${data.user.username}` : t("nav.profile")}
               >
                 {data?.user.image ? (
                   <Avatar
@@ -127,7 +115,7 @@ export function Navbar() {
               href={localizedPath("/login", locale)}
               className="rounded-lg bg-gradient-to-br from-cyan-400 to-indigo-500 px-3 py-1.5 text-sm font-semibold text-slate-950"
             >
-              {t("nav.signIn", locale)}
+              {t("nav.signIn")}
             </Link>
           )}
         </div>
@@ -138,23 +126,23 @@ export function Navbar() {
         <NavLink
           href={localizedPath("/markets", locale)}
           icon={<Home className="h-4 w-4" />}
-          label={t("nav.markets", locale)}
+          label={t("nav.markets")}
         />
         <NavLink
           href={localizedPath("/portfolio", locale)}
           icon={<BarChart3 className="h-4 w-4" />}
-          label={t("nav.portfolio", locale)}
+          label={t("nav.portfolio")}
         />
         <NavLink
           href={localizedPath("/leaderboard", locale)}
           icon={<Trophy className="h-4 w-4" />}
-          label={t("nav.leaderboardMobile", locale)}
+          label={t("nav.leaderboardMobile")}
         />
         {data?.user.isAdmin && (
           <NavLink
             href="/admin"
             icon={<ShieldCheck className="h-4 w-4" />}
-            label={t("nav.admin", locale)}
+            label={t("nav.admin")}
           />
         )}
       </div>

@@ -1,29 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useParams, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toaster";
 import { MailWarning } from "lucide-react";
-import {
-  DEFAULT_LOCALE,
-  isLocale,
-  splitLocaleFromPath,
-  t,
-  type Locale,
-} from "@/lib/i18n";
+import { useTranslation } from "@/lib/i18n/client";
 
 export function VerifyEmailBanner({ email }: { email: string }) {
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
-  const params = useParams<{ locale?: string }>();
-  const pathname = usePathname();
-  const fromPath = splitLocaleFromPath(pathname ?? "/").locale;
-  const locale: Locale = isLocale(params?.locale)
-    ? params.locale
-    : (fromPath ?? DEFAULT_LOCALE);
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const { t: tr } = useTranslation();
 
   async function request() {
     setBusy(true);

@@ -1,16 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useParams, usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Star } from "lucide-react";
 import { toast } from "@/components/ui/Toaster";
-import {
-  DEFAULT_LOCALE,
-  isLocale,
-  splitLocaleFromPath,
-  t,
-  type Locale,
-} from "@/lib/i18n";
+import { useTranslation } from "@/lib/i18n/client";
 
 export function WatchToggle({
   marketId,
@@ -22,14 +16,7 @@ export function WatchToggle({
   const [on, setOn] = useState(initial);
   const [busy, setBusy] = useState(false);
   const router = useRouter();
-  const params = useParams<{ locale?: string }>();
-  const pathname = usePathname();
-  const fromPath = splitLocaleFromPath(pathname ?? "/").locale;
-  const locale: Locale = isLocale(params?.locale)
-    ? params.locale
-    : (fromPath ?? DEFAULT_LOCALE);
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const { t: tr } = useTranslation();
   const [, startTransition] = useTransition();
 
   async function toggle() {

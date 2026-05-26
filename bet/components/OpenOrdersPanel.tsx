@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { useParams, usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { Pencil, X, Check } from "lucide-react";
 import { useMarketStream } from "@/lib/useMarketStream";
@@ -9,13 +9,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { fmtCoins, fmtPrice, timeAgo, cn } from "@/lib/utils";
 import { toast } from "@/components/ui/Toaster";
-import {
-  DEFAULT_LOCALE,
-  isLocale,
-  splitLocaleFromPath,
-  t,
-  type Locale,
-} from "@/lib/i18n";
+import { useTranslation } from "@/lib/i18n/client";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -35,14 +29,7 @@ interface Order {
 
 export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
   const router = useRouter();
-  const params = useParams<{ locale?: string }>();
-  const pathname = usePathname();
-  const fromPath = splitLocaleFromPath(pathname ?? "/").locale;
-  const locale: Locale = isLocale(params?.locale)
-    ? params.locale
-    : (fromPath ?? DEFAULT_LOCALE);
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const { t: tr } = useTranslation();
   const [, startTransition] = useTransition();
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -96,7 +83,7 @@ export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      toast(prettyReplaceError(body.error, locale), "err");
+      toast(prettyReplaceError(body.error, tr), "err");
       return false;
     }
     toast(tr("market.orderUpdatedToast"), "ok");
@@ -129,7 +116,6 @@ export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
               {isEditing ? (
                 <EditRow
                   order={o}
-                  locale={locale}
                   onCancel={() => setEditingId(null)}
                   onApply={(price, shares) => applyEdit(o.id, price, shares)}
                 />
@@ -197,17 +183,14 @@ export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
  */
 function EditRow({
   order,
-  locale,
   onCancel,
   onApply,
 }: {
   order: Order;
-  locale: Locale;
   onCancel: () => void;
   onApply: (limitPrice: number, shares: number) => Promise<boolean>;
 }) {
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const { t: tr } = useTranslation();
   const [price, setPrice] = useState(order.limitPrice.toFixed(2));
   const [shares, setShares] = useState(order.remaining.toFixed(2));
   const [busy, setBusy] = useState(false);
@@ -298,22 +281,25 @@ function EditRow({
   );
 }
 
-function prettyReplaceError(code: string | undefined, locale: Locale): string {
+function prettyReplaceError(
+  code: string | undefined,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string {
   switch (code) {
     case "insufficient_coins":
-      return t("market.errReplaceInsufficientCoins", locale);
+      return t("market.errReplaceInsufficientCoins");
     case "insufficient_shares":
-      return t("market.errReplaceInsufficientShares", locale);
+      return t("market.errReplaceInsufficientShares");
     case "size_increase_requires_new_order":
-      return t("market.errSizeIncreaseNew", locale);
+      return t("market.errSizeIncreaseNew");
     case "order_closed":
-      return t("market.errOrderClosed", locale);
+      return t("market.errOrderClosed");
     case "market_not_open":
     case "market_ended":
-      return t("market.errMarketEnded", locale);
+      return t("market.errMarketEnded");
     case "invalid_input":
-      return t("market.errInvalidPriceSize", locale);
+      return t("market.errInvalidPriceSize");
     default:
-      return t("market.errReplaceGeneric", locale);
+      return t("market.errReplaceGeneric");
   }
 }

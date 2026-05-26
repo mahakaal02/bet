@@ -2,19 +2,12 @@
 
 import useSWR from "swr";
 import { useState } from "react";
-import { useParams, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { toast } from "@/components/ui/Toaster";
 import { Button } from "@/components/ui/Button";
 import { ReportButton } from "@/components/ReportButton";
 import { timeAgo } from "@/lib/utils";
-import {
-  DEFAULT_LOCALE,
-  isLocale,
-  splitLocaleFromPath,
-  t,
-  type Locale,
-} from "@/lib/i18n";
+import { useTranslation } from "@/lib/i18n/client";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -33,14 +26,7 @@ export function Comments({
   canPost: boolean;
 }) {
   const { data: session } = useSession();
-  const params = useParams<{ locale?: string }>();
-  const pathname = usePathname();
-  const fromPath = splitLocaleFromPath(pathname ?? "/").locale;
-  const locale: Locale = isLocale(params?.locale)
-    ? params.locale
-    : (fromPath ?? DEFAULT_LOCALE);
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const { t: tr } = useTranslation();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const myUsername = (session?.user as any)?.username as string | undefined;
   const { data, mutate, isLoading } = useSWR<{ comments: CommentRow[] }>(

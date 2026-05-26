@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -10,12 +10,9 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { toast } from "@/components/ui/Toaster";
 import {
-  DEFAULT_LOCALE,
-  isLocale,
   localizedPath,
-  t,
-  type Locale,
-} from "@/lib/i18n";
+  useTranslation,
+} from "@/lib/i18n/client";
 
 const googleEnabled =
   typeof process !== "undefined" &&
@@ -24,12 +21,7 @@ const googleEnabled =
 export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const routeParams = useParams<{ locale: string }>();
-  const locale: Locale = isLocale(routeParams.locale)
-    ? routeParams.locale
-    : DEFAULT_LOCALE;
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const { t: tr, locale } = useTranslation();
   const lp = (h: string) => localizedPath(h, locale);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

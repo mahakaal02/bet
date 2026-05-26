@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { useParams, usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
@@ -14,13 +14,9 @@ import { fmtCoins, fmtPrice, cn } from "@/lib/utils";
 import { toast } from "@/components/ui/Toaster";
 import { useMarketStream } from "@/lib/useMarketStream";
 import {
-  DEFAULT_LOCALE,
-  isLocale,
   localizedPath,
-  splitLocaleFromPath,
-  t,
-  type Locale,
-} from "@/lib/i18n";
+  useTranslation,
+} from "@/lib/i18n/client";
 
 interface Props {
   marketId: string;
@@ -44,14 +40,7 @@ export function MarketTradePanel({
   positions,
 }: Props) {
   const router = useRouter();
-  const params = useParams<{ locale?: string }>();
-  const pathname = usePathname();
-  const fromPath = splitLocaleFromPath(pathname ?? "/").locale;
-  const locale: Locale = isLocale(params?.locale)
-    ? params.locale
-    : (fromPath ?? DEFAULT_LOCALE);
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const { t: tr, locale } = useTranslation();
   const [action, setAction] = useState<Action>("BUY");
   const [outcome, setOutcome] = useState<"YES" | "NO">("YES");
   const [coinsInput, setCoinsInput] = useState("100");
@@ -139,7 +128,7 @@ export function MarketTradePanel({
       });
       const responseBody = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast(prettyTradeError(responseBody.error, locale), "err");
+        toast(prettyTradeError(responseBody.error, tr), "err");
         return;
       }
       const plan = responseBody.plan as TradePlan | undefined;
@@ -379,7 +368,6 @@ export function MarketTradePanel({
           plan={lastPlan}
           open={showRouting}
           onToggle={() => setShowRouting((v) => !v)}
-          locale={locale}
         />
       )}
 
@@ -432,15 +420,12 @@ function RoutingDisclosure({
   plan,
   open,
   onToggle,
-  locale,
 }: {
   plan: TradePlan;
   open: boolean;
   onToggle: () => void;
-  locale: Locale;
 }) {
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const { t: tr } = useTranslation();
   const bookLegs = plan.legs.filter((l) => l.kind === "book");
   const ammLegs = plan.legs.filter((l) => l.kind === "amm");
   const usedBook = bookLegs.length > 0;
@@ -523,24 +508,27 @@ function Row({ label, value, hint }: { label: string; value: string; hint?: stri
   );
 }
 
-function prettyTradeError(code: string | undefined, locale: Locale): string {
+function prettyTradeError(
+  code: string | undefined,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string {
   switch (code) {
     case "insufficient_coins":
-      return t("market.errInsufficientCoins", locale);
+      return t("market.errInsufficientCoins");
     case "insufficient_shares":
-      return t("market.errInsufficientShares", locale);
+      return t("market.errInsufficientShares");
     case "market_not_open":
     case "market_ended":
-      return t("market.errMarketNotOpen", locale);
+      return t("market.errMarketNotOpen");
     case "market_not_found":
-      return t("market.errMarketNotFound", locale);
+      return t("market.errMarketNotFound");
     case "rate_limited":
-      return t("market.errRateLimited", locale);
+      return t("market.errRateLimited");
     case "quote_failed":
-      return t("market.errQuoteFailed", locale);
+      return t("market.errQuoteFailed");
     case "unauthorized":
-      return t("market.errUnauthorized", locale);
+      return t("market.errUnauthorized");
     default:
-      return t("market.errTradeGeneric", locale);
+      return t("market.errTradeGeneric");
   }
 }

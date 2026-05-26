@@ -1,15 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn, useSession } from "next-auth/react";
-import {
-  DEFAULT_LOCALE,
-  isLocale,
-  splitLocaleFromPath,
-  t,
-  type Locale,
-} from "@/lib/i18n";
+import { useTranslation } from "@/lib/i18n/client";
 
 /**
  * Single-sign-on bridge from the auctions backend → Bet (Kalki Exchange).
@@ -42,15 +36,7 @@ export function TokenBridge() {
   const handled = useRef(false);
   const [working, setWorking] = useState(false);
 
-  // Locale for the i18n'd overlay copy. URL-prefix first, then
-  // pathname fallback (we may be rendered before the [locale] route
-  // segment resolves).
-  const routeParams = useParams<{ locale?: string }>();
-  const pathname = usePathname();
-  const fromPath = splitLocaleFromPath(pathname ?? "/").locale;
-  const locale: Locale = isLocale(routeParams?.locale)
-    ? routeParams.locale
-    : (fromPath ?? DEFAULT_LOCALE);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (handled.current) return;
@@ -87,9 +73,9 @@ export function TokenBridge() {
         aria-hidden
         className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500/30 border-t-cyan-300"
       />
-      <p className="text-sm font-semibold text-slate-300">{t("auth.signingYouIn", locale)}</p>
+      <p className="text-sm font-semibold text-slate-300">{t("auth.signingYouIn")}</p>
       <p className="text-xs text-slate-500">
-        {t("auth.bridgingSession", locale)}
+        {t("auth.bridgingSession")}
       </p>
     </div>
   );

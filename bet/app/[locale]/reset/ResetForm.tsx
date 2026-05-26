@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -10,22 +10,14 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toaster";
 import {
-  DEFAULT_LOCALE,
-  isLocale,
   localizedPath,
-  t,
-  type Locale,
-} from "@/lib/i18n";
+  useTranslation,
+} from "@/lib/i18n/client";
 
 export function ResetForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const routeParams = useParams<{ locale: string }>();
-  const locale: Locale = isLocale(routeParams.locale)
-    ? routeParams.locale
-    : DEFAULT_LOCALE;
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const { t: tr, locale } = useTranslation();
   const lp = (h: string) => localizedPath(h, locale);
   const token = params.get("token") ?? "";
   const [password, setPassword] = useState("");

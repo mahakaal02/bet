@@ -526,6 +526,152 @@ from server components and client components alike.
 - `localeDimension` / `localeAnalyticsContext` shape for every
   supported locale
 
+## Translation loading — bundle / hydration cost
+
+### The problem (before optimization)
+
+`lib/i18n/index.ts` statically imported every locale dictionary:
+
+```ts
+import en from "./translations/en";
+import pt from "./translations/pt";
+import es from "./translations/es";
+import fr from "./translations/fr";
+```
+
+When a client component did `import { t } from "@/lib/i18n"`, the
+bundler followed the import graph and pulled all four dictionaries
+(~640 LoC of strings each, ~94 KB unminified total) into shared
+client chunks. **Every visitor downloaded all four languages** even
+though only one is rendered.
+
+Measured baseline: a single chunk (`4515-…js`) at 93,737 bytes
+contained the merged dictionary registry. Confirmed by string-grep
+finding `"Mercados de previsão"` (pt), `"Mercados de predicción"`
+(es), and `"Marchés de prédiction"` (fr) inside one client chunk.
+
+### The fix — split server vs. client surface
+
+Two entry points now:
+
+```
+lib/i18n/index.ts   — SERVER ONLY. Imports all 4 dictionaries.
+                      Exposes `t()`, `dictionaryFor()`,
+                      `mergeDictionaries()`, `buildLocalizedMetadata()`,
+                      `alternatesFor()`, etc.
+
+lib/i18n/client.tsx — CLIENT-SAFE. NO static dictionary imports.
+                      Exposes `<I18nProvider>` + `useTranslation()`,
+                      plus pure helpers (path, analytics, locale-format)
+                      that have no dict dependency.
+```
+
+The localized layout (`app/[locale]/layout.tsx`) calls
+`dictionaryFor(locale)` on the server, pre-merges with the English
+fallback, and passes the result as a `<I18nProvider dictionary={...}>`
+prop. Because the provider is a `"use client"` boundary that
+*receives* the dictionary (not imports it), the bundler does NOT
+include any dictionary file in any client chunk — the dictionary
+travels as data in the RSC payload, scoped to the active locale.
+
+```tsx
+// app/[locale]/layout.tsx — server component
+import { I18nProvider } from "@/lib/i18n/client";
+import { dictionaryFor } from "@/lib/i18n";
+
+export default async function LocaleLayout({ children, params }) {
+  const { locale } = await params;
+  const dict = dictionaryFor(locale);  // server-side merge
+  return (
+    <I18nProvider locale={locale} dictionary={dict}>
+      {children}
+    </I18nProvider>
+  );
+}
+```
+
+```tsx
+// Any client component — never imports a dict
+"use client";
+import { useTranslation } from "@/lib/i18n/client";
+
+export function Navbar() {
+  const { t, locale, dir } = useTranslation();
+  return <nav>{t("nav.markets")}</nav>;
+}
+```
+
+### Measured after-state
+
+Bundle audit (regex-grep against every `.next/static/chunks/*.js`
+file for distinctive strings from each dictionary):
+
+| Locale | Marker scanned | Hits in client chunks |
+|---|---|---|
+| EN | `Real-world events. Real opinions. Real stakes` | **0** |
+| EN | `Pick a side, set your price` | **0** |
+| PT | `Mercados de previsão` | **0** |
+| ES | `Mercados de predicción` | **0** |
+| FR | `Marchés de prédiction` | **0** |
+
+The 93 KB dictionary chunk is gone. The dictionary now ships only
+in the RSC payload for the active locale.
+
+### SSR-friendly
+
+Server rendering still uses `t(key, locale)` directly — fast, no
+context plumbing. The provider is an "is React" client boundary so
+during SSR it runs once to push the context, and the SSR'd HTML
+already has the translated strings inlined. The hydration step
+re-runs the provider on the client, reading the dictionary from the
+RSC payload — no second fetch.
+
+### Hydration cost
+
+- `useTranslation()` only reads from context — no state, no
+  effects, no subscriptions.
+- The returned `t` is `useCallback`-memoised on the dictionary
+  identity, which is stable across renders (the provider builds
+  it once via `useMemo`). So `t` is referentially stable too —
+  React's bailout machinery skips re-render of any child that
+  depends on it.
+- Total client-side i18n code: ~150 lines (walker + interpolator +
+  context). Compare to ~640 lines per locale × 4 locales = 2,560
+  lines previously shipped to every visitor.
+
+### Lazy loading? Not needed here
+
+We considered async `import('./translations/' + locale)` at module
+boundary, but it's strictly worse than the current design for our
+case:
+
+- The dictionary is needed for the first render — async-importing
+  forces a suspense boundary that adds a network round-trip on
+  first paint.
+- With the RSC-payload approach, the dictionary is already inlined
+  into the HTML response. Zero extra round-trips.
+- Per-locale chunks (`build/locales/pt.[hash].js`) would still
+  trigger a network fetch when switching languages — vs. the
+  current behaviour where `router.refresh()` swaps the entire
+  RSC payload (including the new dictionary) in one round-trip.
+
+### When you DO want dynamic imports
+
+If the dictionary ever grows to a size where shipping it inline is
+expensive (e.g., adding 20+ locales with rich content), wrap the
+provider in a `<Suspense>` boundary and async-import the dictionary
+in a server component:
+
+```ts
+const dict = await import(`@/lib/i18n/translations/${locale}`).then(
+  (m) => m.default,
+);
+```
+
+Today's volume (4 locales × ~640 LoC) is small enough that
+inlining is cheaper than the round-trip cost. Document the
+threshold; revisit when LOCALES.length ≥ 10.
+
 ## What's NOT in this PR
 
 - **Full translation coverage** — the dictionary keys for nav,

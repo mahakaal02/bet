@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -10,21 +10,13 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { toast } from "@/components/ui/Toaster";
 import {
-  DEFAULT_LOCALE,
-  isLocale,
   localizedPath,
-  t,
-  type Locale,
-} from "@/lib/i18n";
+  useTranslation,
+} from "@/lib/i18n/client";
 
 export function RegisterForm() {
   const router = useRouter();
-  const routeParams = useParams<{ locale: string }>();
-  const locale: Locale = isLocale(routeParams.locale)
-    ? routeParams.locale
-    : DEFAULT_LOCALE;
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const { t: tr, locale } = useTranslation();
   const lp = (h: string) => localizedPath(h, locale);
   const [form, setForm] = useState({
     email: "",
@@ -45,7 +37,7 @@ export function RegisterForm() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        toast(prettyError(body.error, locale), "err");
+        toast(prettyError(body.error, tr), "err");
         setBusy(false);
         return;
       }
@@ -145,17 +137,20 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function prettyError(code: string | undefined, locale: Locale): string {
+function prettyError(
+  code: string | undefined,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string {
   switch (code) {
     case "email_taken":
-      return t("auth.emailTaken", locale);
+      return t("auth.emailTaken");
     case "username_taken":
-      return t("auth.usernameTaken", locale);
+      return t("auth.usernameTaken");
     case "rate_limited":
-      return t("auth.rateLimited", locale);
+      return t("auth.rateLimited");
     case "invalid_input":
-      return t("auth.invalidInput", locale);
+      return t("auth.invalidInput");
     default:
-      return t("auth.createError", locale);
+      return t("auth.createError");
   }
 }

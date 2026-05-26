@@ -1,18 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useParams, usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { toast } from "@/components/ui/Toaster";
 import { cn, fmtCoins } from "@/lib/utils";
-import {
-  DEFAULT_LOCALE,
-  isLocale,
-  splitLocaleFromPath,
-  t,
-  type Locale,
-} from "@/lib/i18n";
+import { useTranslation } from "@/lib/i18n/client";
 
 interface Props {
   available: number;
@@ -42,14 +36,7 @@ export function WithdrawForm({ available, min }: Props) {
   const [beneficiaryName, setBeneficiaryName] = useState("");
   const [busy, setBusy] = useState(false);
   const [, startTransition] = useTransition();
-  const params = useParams<{ locale?: string }>();
-  const pathname = usePathname();
-  const fromPath = splitLocaleFromPath(pathname ?? "/").locale;
-  const locale: Locale = isLocale(params?.locale)
-    ? params.locale
-    : (fromPath ?? DEFAULT_LOCALE);
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const { t: tr } = useTranslation();
 
   const amt = Number(amount);
   const amountValid =
