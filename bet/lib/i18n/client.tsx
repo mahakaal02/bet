@@ -52,7 +52,6 @@
 
 import {
   createContext,
-  useCallback,
   useContext,
   useMemo,
   type ReactNode,
@@ -172,20 +171,21 @@ export function useTranslation(): {
   t: TranslateFunction;
 } {
   const ctx = useContext(I18nContext);
-
-  // We hoist `dict` (or undefined) into a stable identity for the
-  // useCallback dep. If ctx is null (no provider), dict is undefined
-  // and the callback below falls through to `key`.
+  // Memoise the `t` function so its reference stays stable across
+  // renders unless the provider's dictionary changes. useMemo + an
+  // explicit `TranslateFunction` annotation keeps the type signature
+  // pinned (with optional `vars`) regardless of TS inference quirks
+  // — the same callback declared via useCallback historically
+  // occasionally inferred `vars` as required when threaded through
+  // generic helper types in some Node / lib.d.ts combinations.
   const dict = ctx?.dict;
-  // Explicit generic on useCallback locks the function signature so
-  // downstream consumers (e.g. `prettyError(code, t)`) see a stable
-  // `(key, vars?) => string` shape rather than an inferred variant.
-  const t = useCallback<TranslateFunction>(
-    (key, vars) => {
-      const val = walkDeep(dict, key);
-      const str = typeof val === "string" ? val : key;
-      return interpolate(str, vars);
-    },
+  const t = useMemo<TranslateFunction>(
+    () =>
+      (key: string, vars?: Record<string, string | number>): string => {
+        const val = walkDeep(dict, key);
+        const str = typeof val === "string" ? val : key;
+        return interpolate(str, vars);
+      },
     [dict],
   );
 
