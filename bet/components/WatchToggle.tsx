@@ -1,9 +1,16 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { Star } from "lucide-react";
 import { toast } from "@/components/ui/Toaster";
+import {
+  DEFAULT_LOCALE,
+  isLocale,
+  splitLocaleFromPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 export function WatchToggle({
   marketId,
@@ -15,6 +22,14 @@ export function WatchToggle({
   const [on, setOn] = useState(initial);
   const [busy, setBusy] = useState(false);
   const router = useRouter();
+  const params = useParams<{ locale?: string }>();
+  const pathname = usePathname();
+  const fromPath = splitLocaleFromPath(pathname ?? "/").locale;
+  const locale: Locale = isLocale(params?.locale)
+    ? params.locale
+    : (fromPath ?? DEFAULT_LOCALE);
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
   const [, startTransition] = useTransition();
 
   async function toggle() {
@@ -31,7 +46,7 @@ export function WatchToggle({
       startTransition(() => router.refresh());
     } catch {
       setOn(!next); // rollback
-      toast("Couldn't update watchlist.", "err");
+      toast(tr("watchlist.couldntUpdate"), "err");
     } finally {
       setBusy(false);
     }
@@ -48,7 +63,7 @@ export function WatchToggle({
       }`}
     >
       <Star className={`h-3 w-3 ${on ? "fill-current" : ""}`} />
-      {on ? "Watching" : "Watch"}
+      {on ? tr("watchlist.watching") : tr("watchlist.watch")}
     </button>
   );
 }

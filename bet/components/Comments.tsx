@@ -2,11 +2,19 @@
 
 import useSWR from "swr";
 import { useState } from "react";
+import { useParams, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { toast } from "@/components/ui/Toaster";
 import { Button } from "@/components/ui/Button";
 import { ReportButton } from "@/components/ReportButton";
 import { timeAgo } from "@/lib/utils";
+import {
+  DEFAULT_LOCALE,
+  isLocale,
+  splitLocaleFromPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -25,6 +33,14 @@ export function Comments({
   canPost: boolean;
 }) {
   const { data: session } = useSession();
+  const params = useParams<{ locale?: string }>();
+  const pathname = usePathname();
+  const fromPath = splitLocaleFromPath(pathname ?? "/").locale;
+  const locale: Locale = isLocale(params?.locale)
+    ? params.locale
+    : (fromPath ?? DEFAULT_LOCALE);
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const myUsername = (session?.user as any)?.username as string | undefined;
   const { data, mutate, isLoading } = useSWR<{ comments: CommentRow[] }>(
@@ -46,7 +62,7 @@ export function Comments({
     });
     setBusy(false);
     if (!res.ok) {
-      toast("Couldn't post comment.", "err");
+      toast(tr("comments.couldntPost"), "err");
       return;
     }
     setBody("");
@@ -61,16 +77,16 @@ export function Comments({
             value={body}
             onChange={(e) => setBody(e.target.value)}
             maxLength={500}
-            placeholder="Share your take…"
+            placeholder={tr("comments.placeholder")}
             className="h-9 flex-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 text-sm placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
           />
           <Button type="submit" disabled={busy || !body.trim()} size="sm">
-            Post
+            {tr("comments.postButton")}
           </Button>
         </form>
       ) : (
         <div className="mb-3 rounded-lg border border-slate-800 bg-slate-900/50 p-3 text-xs text-slate-400">
-          Sign in to join the discussion.
+          {tr("comments.signInPrompt")}
         </div>
       )}
 
@@ -80,7 +96,7 @@ export function Comments({
           <div className="skeleton h-10 w-full" />
         </div>
       ) : (data?.comments ?? []).length === 0 ? (
-        <p className="text-sm text-slate-500">No comments yet.</p>
+        <p className="text-sm text-slate-500">{tr("comments.emptyState")}</p>
       ) : (
         <ul className="space-y-2">
           {data?.comments.map((c) => (

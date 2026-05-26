@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { Pencil, X, Check } from "lucide-react";
 import { useMarketStream } from "@/lib/useMarketStream";
@@ -9,6 +9,13 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { fmtCoins, fmtPrice, timeAgo, cn } from "@/lib/utils";
 import { toast } from "@/components/ui/Toaster";
+import {
+  DEFAULT_LOCALE,
+  isLocale,
+  splitLocaleFromPath,
+  t,
+  type Locale,
+} from "@/lib/i18n";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -28,6 +35,14 @@ interface Order {
 
 export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
   const router = useRouter();
+  const params = useParams<{ locale?: string }>();
+  const pathname = usePathname();
+  const fromPath = splitLocaleFromPath(pathname ?? "/").locale;
+  const locale: Locale = isLocale(params?.locale)
+    ? params.locale
+    : (fromPath ?? DEFAULT_LOCALE);
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
   const [, startTransition] = useTransition();
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -65,11 +80,11 @@ export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
     const res = await fetch(`/api/orders/${id}`, { method: "DELETE" });
     setCancelling(null);
     if (res.ok) {
-      toast("Order cancelled.", "ok");
+      toast(tr("market.orderCancelledToast"), "ok");
       void mutate();
       startTransition(() => router.refresh());
     } else {
-      toast("Could not cancel.", "err");
+      toast(tr("market.couldNotCancelToast"), "err");
     }
   }
 
@@ -81,10 +96,10 @@ export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      toast(prettyReplaceError(body.error), "err");
+      toast(prettyReplaceError(body.error, locale), "err");
       return false;
     }
-    toast("Order updated.", "ok");
+    toast(tr("market.orderUpdatedToast"), "ok");
     setEditingId(null);
     void mutate();
     startTransition(() => router.refresh());
@@ -94,8 +109,8 @@ export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
   if (visible.length === 0) {
     return (
       <Card>
-        <CardTitle className="mb-2">Your orders</CardTitle>
-        <p className="text-sm text-slate-500">No orders placed yet.</p>
+        <CardTitle className="mb-2">{tr("market.yourOrders")}</CardTitle>
+        <p className="text-sm text-slate-500">{tr("market.noOrdersPlaced")}</p>
       </Card>
     );
   }
@@ -103,7 +118,7 @@ export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Your orders</CardTitle>
+        <CardTitle>{tr("market.yourOrders")}</CardTitle>
       </CardHeader>
       <ul className="divide-y divide-slate-800">
         {visible.slice(0, 20).map((o) => {
@@ -114,6 +129,7 @@ export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
               {isEditing ? (
                 <EditRow
                   order={o}
+                  locale={locale}
                   onCancel={() => setEditingId(null)}
                   onApply={(price, shares) => applyEdit(o.id, price, shares)}
                 />
@@ -126,12 +142,16 @@ export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
                       </Badge>
                       <span className="font-mono">{fmtPrice(o.limitPrice)}</span>
                       <span className="font-mono text-slate-400">
-                        {o.shares.toFixed(2)} sh
+                        {o.shares.toFixed(2)} {tr("market.sharesAbbrev")}
                       </span>
                     </div>
                     <div className="text-[10px] text-slate-500">
-                      {o.status} · {o.filledShares.toFixed(2)} filled /{" "}
-                      {o.remaining.toFixed(2)} left · {timeAgo(o.createdAt)}
+                      {o.status} ·{" "}
+                      {tr("market.filledLabel", {
+                        filled: o.filledShares.toFixed(2),
+                        remaining: o.remaining.toFixed(2),
+                      })}{" "}
+                      · {timeAgo(o.createdAt)}
                     </div>
                   </div>
                   <div className="flex items-center justify-end gap-2">
@@ -140,7 +160,7 @@ export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
                         <button
                           onClick={() => setEditingId(o.id)}
                           className="p-1 text-slate-400 hover:text-slate-200"
-                          aria-label="Edit"
+                          aria-label={tr("market.editAriaLabel")}
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
@@ -149,13 +169,13 @@ export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
                           disabled={cancelling === o.id}
                           className="text-xs text-rose-300 hover:text-rose-200 disabled:opacity-50"
                         >
-                          {cancelling === o.id ? "…" : "Cancel"}
+                          {cancelling === o.id ? tr("market.cancelling") : tr("market.cancel")}
                         </button>
                       </>
                     ) : (
                       <span className="font-mono text-xs text-slate-500">
                         {Math.abs(o.filledCost)
-                          ? `${fmtCoins(Math.abs(o.filledCost))} coins`
+                          ? `${fmtCoins(Math.abs(o.filledCost))} ${tr("toast.coins")}`
                           : "—"}
                       </span>
                     )}
@@ -177,13 +197,17 @@ export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
  */
 function EditRow({
   order,
+  locale,
   onCancel,
   onApply,
 }: {
   order: Order;
+  locale: Locale;
   onCancel: () => void;
   onApply: (limitPrice: number, shares: number) => Promise<boolean>;
 }) {
+  const tr = (k: string, vars?: Record<string, string | number>) =>
+    t(k, locale, vars);
   const [price, setPrice] = useState(order.limitPrice.toFixed(2));
   const [shares, setShares] = useState(order.remaining.toFixed(2));
   const [busy, setBusy] = useState(false);
@@ -211,7 +235,8 @@ function EditRow({
         <Badge tone={order.outcome === "YES" ? "yes" : "no"}>
           {order.side} {order.outcome}
         </Badge>
-        <span className="text-slate-500">edit at price ×{" "}
+        <span className="text-slate-500">
+          {tr("market.editAtPrice")}{" "}
           <span className="font-mono">{fmtPrice(order.limitPrice)}</span>
           {" → "}
         </span>
@@ -219,7 +244,7 @@ function EditRow({
       <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
         <label className="block">
           <span className="block text-[10px] uppercase tracking-wider text-slate-500">
-            New price
+            {tr("market.newPriceLabel")}
           </span>
           <input
             type="number"
@@ -234,7 +259,7 @@ function EditRow({
         </label>
         <label className="block">
           <span className="block text-[10px] uppercase tracking-wider text-slate-500">
-            New size (max {order.remaining.toFixed(2)})
+            {tr("market.newSizeLabel", { max: order.remaining.toFixed(2) })}
           </span>
           <input
             type="number"
@@ -254,7 +279,7 @@ function EditRow({
             className={cn(
               "grid h-8 w-8 place-items-center rounded-md bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-50",
             )}
-            aria-label="Save"
+            aria-label={tr("market.saveAriaLabel")}
           >
             <Check className="h-4 w-4" />
           </button>
@@ -262,36 +287,33 @@ function EditRow({
             onClick={onCancel}
             disabled={busy}
             className="grid h-8 w-8 place-items-center rounded-md bg-slate-800 text-slate-300 hover:bg-slate-700"
-            aria-label="Cancel edit"
+            aria-label={tr("market.cancelEditAriaLabel")}
           >
             <X className="h-4 w-4" />
           </button>
         </div>
       </div>
-      <p className="mt-1 text-[10px] text-slate-500">
-        Reposition only — size can shrink but not grow. To increase, cancel
-        this order and place a new one.
-      </p>
+      <p className="mt-1 text-[10px] text-slate-500">{tr("market.repositionNote")}</p>
     </div>
   );
 }
 
-function prettyReplaceError(code?: string): string {
+function prettyReplaceError(code: string | undefined, locale: Locale): string {
   switch (code) {
     case "insufficient_coins":
-      return "Not enough coins for the new size at this price.";
+      return t("market.errReplaceInsufficientCoins", locale);
     case "insufficient_shares":
-      return "Not enough free shares for the new size.";
+      return t("market.errReplaceInsufficientShares", locale);
     case "size_increase_requires_new_order":
-      return "Can't grow the order — cancel and place a new one.";
+      return t("market.errSizeIncreaseNew", locale);
     case "order_closed":
-      return "Order already filled or cancelled.";
+      return t("market.errOrderClosed", locale);
     case "market_not_open":
     case "market_ended":
-      return "Market no longer accepting changes.";
+      return t("market.errMarketEnded", locale);
     case "invalid_input":
-      return "Check the new price (0.01–0.99) and size.";
+      return t("market.errInvalidPriceSize", locale);
     default:
-      return "Couldn't update the order.";
+      return t("market.errReplaceGeneric", locale);
   }
 }
