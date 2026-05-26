@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Navbar } from "@/components/Navbar";
-import { Card } from "@/components/ui/Card";
 import { getSessionToken } from "@/lib/session";
-import { backend, BackendUnauthorized } from "@/lib/backend";
+import { backend, BackendUnauthorized, type Auction } from "@/lib/backend";
+import { detectCountry, type CountryCode } from "@/lib/locale-detect";
 import {
   DEFAULT_LOCALE,
   buildLocalizedMetadata,
@@ -13,9 +11,16 @@ import {
   t,
   type Locale,
 } from "@/lib/i18n";
+import { HubClient, type HubAuction, type HubMarket } from "./hub-client";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Locale-aware SEO metadata for the hub. Marked `noindex` because the
+ * hub requires sign-in — letting Google crawl it just adds spam to
+ * the index. The title still localises so any external preview (e.g.
+ * a chat unfurl from a hub URL) reads in the right language.
+ */
 export async function generateMetadata({
   params,
 }: {
@@ -32,19 +37,81 @@ export async function generateMetadata({
   });
 }
 
+interface Me {
+  username: string;
+  email: string | null;
+  coinBalance: number;
+  isAdmin: boolean;
+}
+
+interface TrendingResponse {
+  markets: HubMarket[];
+}
+
+/** Server-side base URL for the Exchange. The browser-side helper
+ *  (`lib/exchange-url.ts`) picks the host at runtime; on the server
+ *  we can't read window.location, so we read an explicit env var and
+ *  fall back to the dev port. */
+function exchangeBaseServer(): string {
+  return (process.env.NEXT_PUBLIC_EXCHANGE_URL ?? "http://localhost:3100").replace(
+    /\/$/,
+    "",
+  );
+}
+
+function aviatorBaseServer(): string {
+  return (process.env.NEXT_PUBLIC_AVIATOR_URL ?? "http://localhost:3000").replace(
+    /\/$/,
+    "",
+  );
+}
+
+function adminBaseServer(): string {
+  return (process.env.NEXT_PUBLIC_ADMIN_URL ?? "http://localhost:4173").replace(
+    /\/$/,
+    "",
+  );
+}
+
 /**
- * Landing hub for the three Kalki products. Mirrors the Android
- * `HubScreen` exactly: three big tiles (Auctions, Aviator, Exchange),
- * one wallet chip at the top, and a sign-out button. From here the
- * user picks where to spend their coins.
+ * Landing hub for the three Kalki products.
  *
- *   - Aviator + Exchange live on their own origins (:3000, :3100). We
- *     append `?token=…` so the receiving app can SSO via its existing
- *     TokenBridge. This is the same handshake the Android WebView uses.
- *   - Auctions is the local route /auctions — no token hand-off needed
- *     since the cookie is already on this origin.
+ * Drives the new Hub design (see `hub-client.tsx`). Server-side
+ * responsibilities:
  *
- * Signed-out users get bounced to /login first.
+ *   1. Validate the URL locale segment — unknown values 404 the same
+ *      way every other [locale] route does.
+ *   2. Gate on the session — unauthenticated users land at the
+ *      locale-prefixed /login.
+ *   3. Resolve the user (username, coinBalance, isAdmin) via the
+ *      auctions backend's /auth/me.
+ *   4. Fetch live auctions from this app's NestJS backend and pick
+ *      one at random for the featured auction card. The rest fill
+ *      the "Hot right now" chip row.
+ *   5. Fetch trending markets from the Exchange's public REST
+ *      endpoint (`/api/markets/trending`) and pick one at random for
+ *      the featured market card. The rest fill the chip row alongside
+ *      auctions.
+ *
+ * The featured-card selection is intentionally randomised per render
+ * — keeps the hub feeling alive and surfaces different auctions/
+ * markets to different users on the same beat. If the upstream calls
+ * fail the card falls back to its loading placeholder (the design
+ * already accounts for null data).
+ *
+ * Game CTAs (`Place bid`, `Take off`, `Take a side`) are wired through
+ * `HubLinks` — each link carries the SSO `?token=…` query string so
+ * the receiving app's TokenBridge can sign the user in without a
+ * second login round-trip. Admin users get routed to the admin
+ * consoles for each property instead.
+ *
+ * The URL locale and the in-page locale-switcher are deliberately
+ * separate: the URL locale is the small four-language SEO set (en /
+ * pt / es / fr) that the App Router validates and Google indexes,
+ * while the in-page switcher offers the broader 11-market roster
+ * (with their own currency + number formatting). The switcher
+ * writes the `kalki_locale` cookie, which `detectCountry()` reads
+ * for the initial country on every render.
  */
 export default async function HubPage({
   params,
@@ -54,182 +121,131 @@ export default async function HubPage({
   const { locale: raw } = await params;
   if (!isLocale(raw)) notFound();
   const locale: Locale = raw;
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
   const lp = (path: string) => localizedPath(path, locale);
+
   const token = await getSessionToken();
   if (!token) redirect(`${lp("/login")}?next=${encodeURIComponent(lp("/"))}`);
 
-  interface Me {
-    username: string;
-    email: string | null;
-    coinBalance: number;
-    isAdmin: boolean;
-  }
   let me: Me | null = null;
   try {
     me = await backend.authed(token).get<Me>("/auth/me");
   } catch (err) {
-    if (err instanceof BackendUnauthorized) redirect("/login?next=/");
+    if (err instanceof BackendUnauthorized) {
+      redirect(`${lp("/login")}?next=${encodeURIComponent(lp("/"))}`);
+    }
     throw err;
   }
 
-  const aviatorBase = process.env.NEXT_PUBLIC_AVIATOR_URL ?? "http://localhost:3000";
-  const exchangeBase = process.env.NEXT_PUBLIC_EXCHANGE_URL ?? "http://localhost:3100";
-  const adminBase = process.env.NEXT_PUBLIC_ADMIN_URL ?? "http://localhost:4173";
-  // SSO links carry the JWT so the destination's TokenBridge can sign
-  // the user in. Local route stays clean — no need to leak the token
-  // back to the URL bar.
+  // Run upstream calls in parallel; either is allowed to fail
+  // independently — the design has loading-state cards for both.
+  const settled = await Promise.allSettled([
+    backend.publicGet<Auction[]>("/auctions"),
+    fetchTrendingMarkets(),
+    detectCountry(),
+  ]);
+  const auctionsResult: Auction[] =
+    settled[0].status === "fulfilled" ? settled[0].value : [];
+  const marketsResult: HubMarket[] =
+    settled[1].status === "fulfilled" ? settled[1].value : [];
+  const country: CountryCode =
+    settled[2].status === "fulfilled" ? settled[2].value : "IN";
+
+  const liveAuctions = auctionsResult.filter((a) => a.status === "LIVE");
+  const shuffledAuctions = shuffle(liveAuctions);
+  const featuredAuction = shuffledAuctions[0] ?? null;
+  const recentAuctions = shuffledAuctions
+    .slice(0, 4)
+    .map((a) => toHubAuction(a, lp));
+
+  const shuffledMarkets = shuffle(marketsResult);
+  const featuredMarket = shuffledMarkets[0] ?? null;
+  const recentMarkets = shuffledMarkets.slice(0, 4);
+
   const tokenQs = `?token=${encodeURIComponent(token)}`;
   const isAdmin = !!me?.isAdmin;
-  const auctionsHref = isAdmin
-    ? `${adminBase.replace(/\/$/, "")}/auctions${tokenQs}`
-    : lp("/auctions");
-  const aviatorHref = isAdmin
-    ? `${adminBase.replace(/\/$/, "")}/aviator/analytics${tokenQs}`
-    : `${aviatorBase.replace(/\/$/, "")}/${tokenQs}`;
-  const exchangeHref = isAdmin
-    ? `${exchangeBase.replace(/\/$/, "")}/admin${tokenQs}`
-    : `${exchangeBase.replace(/\/$/, "")}/${tokenQs}`;
-  // Admin tiles all leave this origin, so they open externally just
-  // like the user-facing Aviator/Exchange tiles do.
-  const auctionsExternal = isAdmin;
+  const adminBase = adminBaseServer();
+  const aviatorBase = aviatorBaseServer();
+  const exchangeBase = exchangeBaseServer();
 
-  const balanceFormatted = (me?.coinBalance ?? 0).toLocaleString("en-IN");
+  // Admin → console links; player → game deep-links.
+  const auctionHref = isAdmin
+    ? `${adminBase}/auctions${tokenQs}`
+    : featuredAuction
+      ? lp(`/auctions/${featuredAuction.id}`)
+      : lp("/auctions");
+  const aviatorHref = isAdmin
+    ? `${adminBase}/aviator/analytics${tokenQs}`
+    : `${aviatorBase}/${tokenQs}`;
+  const exchangeHref = isAdmin
+    ? `${exchangeBase}/admin${tokenQs}`
+    : featuredMarket
+      ? `${exchangeBase}/markets/${featuredMarket.slug}${tokenQs}`
+      : `${exchangeBase}/${tokenQs}`;
+  const walletHref = `${exchangeBase}/wallet${tokenQs}`;
 
   return (
-    <main className="min-h-screen pb-20">
-      <Navbar />
-      <div className="mx-auto max-w-5xl px-4 py-10">
-        <div className="mb-8">
-          {/* Greeting is rendered as a single localized string with the
-              user's handle interpolated in. The dictionary picks the
-              opener ("Hi"/"Salut"/"Hola"/"Olá") and where the handle
-              lands relative to it. We emit the literal `@username` in
-              cyan and let the surrounding sentence wrap naturally. */}
-          <h1 className="text-3xl font-black tracking-tight">
-            {tr("hub.greeting", { handle: `@${me?.username ?? ""}` })}
-            {isAdmin && (
-              <span className="ml-3 align-middle rounded-md border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-amber-300">
-                {tr("hub.adminBadge")}
-              </span>
-            )}
-          </h1>
-          <p className="text-sm text-slate-400">
-            {isAdmin
-              ? tr("hub.pickProductAdmin")
-              : tr("hub.pickProduct")}
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <ProductTile
-            href={auctionsHref}
-            title={tr("hub.auctionsTitle")}
-            tagline={
-              isAdmin
-                ? tr("hub.auctionsAdminTagline")
-                : tr("hub.auctionsTagline")
-            }
-            tone="cyan"
-            icon="🛒"
-            external={auctionsExternal}
-            openLabel={tr("hub.open")}
-          />
-          <ProductTile
-            href={aviatorHref}
-            title={tr("hub.aviatorTitle")}
-            tagline={
-              isAdmin
-                ? tr("hub.aviatorAdminTagline")
-                : tr("hub.aviatorTagline")
-            }
-            tone="orange"
-            icon="✈️"
-            external
-            openLabel={tr("hub.open")}
-          />
-          <ProductTile
-            href={exchangeHref}
-            title={tr("hub.exchangeTitle")}
-            tagline={
-              isAdmin
-                ? tr("hub.exchangeAdminTagline")
-                : tr("hub.exchangeTagline")
-            }
-            tone="emerald"
-            icon="📈"
-            external
-            openLabel={tr("hub.open")}
-          />
-        </div>
-
-        <Card className="mt-8 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-sm text-slate-300">
-            <span className="font-semibold text-amber-300">
-              {tr("hub.coinsInWallet", { coins: balanceFormatted })}
-            </span>
-          </div>
-          <Link
-            href={`${exchangeBase.replace(/\/$/, "")}/wallet?token=${encodeURIComponent(token)}`}
-            className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-sm font-semibold text-emerald-200 hover:bg-emerald-500/15"
-          >
-            {tr("hub.topUpWallet")}
-          </Link>
-        </Card>
-      </div>
-    </main>
+    <HubClient
+      initialCountry={country}
+      user={{
+        username: me?.username ?? "user",
+        coinBalance: me?.coinBalance ?? 0,
+        isAdmin,
+      }}
+      auction={featuredAuction ? toHubAuction(featuredAuction, lp) : null}
+      market={featuredMarket}
+      links={{
+        auction: auctionHref,
+        auctionsList: lp("/auctions"),
+        aviator: aviatorHref,
+        exchange: exchangeHref,
+        wallet: walletHref,
+        home: lp("/"),
+        watchlist: lp("/me/watchlist"),
+        notifications: lp("/notifications"),
+        profile: lp("/profile"),
+      }}
+      recentAuctions={recentAuctions}
+      recentMarkets={recentMarkets}
+    />
   );
 }
 
-function ProductTile({
-  href,
-  title,
-  tagline,
-  tone,
-  icon,
-  external,
-  openLabel,
-}: {
-  href: string;
-  title: string;
-  tagline: string;
-  tone: "cyan" | "orange" | "emerald";
-  icon: string;
-  external?: boolean;
-  openLabel: string;
-}) {
-  const toneRing = {
-    cyan: "from-cyan-500/20 via-cyan-500/0 hover:border-cyan-500/40",
-    orange:
-      "from-orange-500/20 via-orange-500/0 hover:border-orange-500/40",
-    emerald:
-      "from-emerald-500/20 via-emerald-500/0 hover:border-emerald-500/40",
-  }[tone];
-  const props = external
-    ? { target: "_blank" as const, rel: "noopener noreferrer" }
-    : {};
-  // `h-full` on both Link and Card pins the tile to the grid row height
-  // — without it, each tile sizes to its own content and the Aviator
-  // tile (shortest tagline) renders shorter than its neighbours. The
-  // `flex` + `mt-auto` on the footer pushes "Open →" to the bottom of
-  // the equalised box so the row looks visually consistent.
-  return (
-    <Link href={href} {...props} className="block h-full">
-      <Card
-        className={`group relative flex h-full flex-col overflow-hidden bg-gradient-to-br ${toneRing} transition`}
-      >
-        <div className="mb-3 flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-lg border border-[var(--color-divider)] bg-slate-900/60 text-xl">
-            {icon}
-          </span>
-          <div className="text-lg font-bold tracking-tight">{title}</div>
-        </div>
-        <p className="text-sm text-slate-400">{tagline}</p>
-        <div className="mt-auto pt-4 text-xs font-semibold text-slate-500 transition group-hover:text-cyan-300">
-          {openLabel}
-        </div>
-      </Card>
-    </Link>
-  );
+function toHubAuction(a: Auction, lp: (path: string) => string): HubAuction {
+  return {
+    id: a.id,
+    title: a.title,
+    imageUrl: a.imageUrls[0] ?? null,
+    retailPrice: a.retailPrice,
+    endsAt: a.endsAt,
+    href: lp(`/auctions/${a.id}`),
+  };
+}
+
+/** Fisher-Yates. We re-shuffle on every render so the featured card
+ *  cycles between auctions/markets without any client-side state. */
+function shuffle<T>(input: T[]): T[] {
+  const out = input.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/** Server-side fetch of the Exchange's trending-markets feed. The
+ *  Exchange is a separate origin (different Next.js process), so we
+ *  go through its public REST endpoint rather than its Prisma client.
+ *  Failures collapse to an empty list — the hub's market card has a
+ *  loading placeholder. */
+async function fetchTrendingMarkets(): Promise<HubMarket[]> {
+  try {
+    const res = await fetch(`${exchangeBaseServer()}/api/markets/trending?limit=10`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const body = (await res.json()) as TrendingResponse;
+    return Array.isArray(body.markets) ? body.markets : [];
+  } catch {
+    return [];
+  }
 }
