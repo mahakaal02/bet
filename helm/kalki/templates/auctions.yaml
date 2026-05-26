@@ -45,6 +45,19 @@ spec:
             - name: PORT
               value: {{ .Values.auctions.port | quote }}
             {{- include "kalki.publicUrlEnv" . | nindent 12 }}
+            # PR-TELEGRAM-LOGIN — server-side token for the start route
+            # (`/api/auth/telegram/start` reads the numeric prefix as the
+            # bot id) AND HMAC verification on the callback. Public bot
+            # @username is mirrored as NEXT_PUBLIC_* so it can be read
+            # both at build time (inlined into client chunks) and at
+            # runtime by lib/telegram.ts on the server.
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: kalki-shared
+                  key: TELEGRAM_BOT_TOKEN
+            - name: NEXT_PUBLIC_TELEGRAM_BOT
+              value: {{ .Values.sharedSecret.telegramBotUsername | default "" | quote }}
           readinessProbe:
             tcpSocket:
               port: {{ .Values.auctions.port }}
