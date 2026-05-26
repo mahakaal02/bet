@@ -163,16 +163,60 @@ filled in.
   index is still the right locale per their geo, just less
   deterministic.
 
+## Migration completed in this PR
+
+Every user-facing route now lives under `app/[locale]/*`:
+
+```
+app/[locale]/
+  page.tsx              landing
+  not-found.tsx         localized 404
+  layout.tsx            hreflang + canonical
+  achievements/
+  forgot/               password-reset request
+  kyc/
+  leaderboard/
+  login/
+  markets/
+    page.tsx
+    [slug]/
+      page.tsx
+      opengraph-image.tsx
+  notifications/
+  portfolio/
+  profile/
+  register/
+  reset/                password-reset complete
+  verify/               email-verify
+  wallet/
+    page.tsx
+    withdraw/
+```
+
+Non-localized (intentionally):
+
+```
+app/admin/      Operator surface (English-only by policy)
+app/api/        HTTP API routes
+app/share/      Server-rendered share previews (the public auction
+                share page uses crawler-friendly OG previews and
+                doesn't need a locale prefix — referenced externally
+                by social-media unfurl bots)
+```
+
+The middleware uses a prefix-match guard with explicit
+`NON_LOCALIZED_PREFIXES` for the carve-outs above.
+
 ## What's NOT in this PR
 
-- Migrations of other existing pages (`wallet`, `markets`,
-  `profile`, `login`, `register`, etc.). Mechanical follow-ups
-  using the guide above. Each is a single-file PR.
-- Translations for the auctions + aviator apps. They'd reuse the
-  same `config.ts` shape; if the platform decides to consolidate,
-  promote the i18n module to a shared package.
-- ICU-style format strings (`{n,number,percent}`). The current
-  `t()` does simple `{var}` substitution; richer formatting goes
-  through `Intl.NumberFormat` ahead of the `t()` call.
-- Locale-aware date formatting helpers. Pass a `Date` through
-  `toLocaleString(locale, ...)` at the call site.
+- **Full translation coverage** — the dictionary keys for nav,
+  landing, wallet, market, and auth are in place across en/pt/es/fr,
+  but individual page strings still need refinement. Missing keys
+  fall back to English via the deep walker, so a partial dictionary
+  doesn't break the UI.
+- **i18n for auctions + aviator apps** — they reuse the same
+  `lib/i18n` shape; promote to a shared package when ready.
+- **ICU-style format strings** (`{n,number,percent}`). Current `t()`
+  does `{var}` substitution. For numbers/dates, format via
+  `Intl.NumberFormat(locale).format(n)` / `date.toLocaleString(locale)`
+  ahead of the `t()` call.

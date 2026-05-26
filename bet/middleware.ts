@@ -89,23 +89,19 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // PR-BET-I18N — phased migration guard.
+  // PR-BET-I18N — migration completed. Every user-facing route now
+  // lives under `app/[locale]/*`. We use a prefix-match guard
+  // instead of an exact-set so deep dynamic routes (e.g.
+  // `/markets/super-bowl-winner`) also get localized — without
+  // having to enumerate every market slug in this file.
   //
-  // Only redirect paths we've actually migrated under `app/[locale]/`.
-  // Otherwise a request for `/wallet` would be redirected to
-  // `/en/wallet`, which 404s until that page is moved into the
-  // locale tree. Keeping the allowlist explicit means each
-  // page-migration PR is a single safe additive change to this
-  // array.
-  //
-  // Migrated so far:
-  //   • "/"  (app/[locale]/page.tsx)
-  //
-  // As pages move (wallet, markets, profile, login, register, …),
-  // add their paths here. The README in lib/i18n explains the
-  // mechanical 6-step migration.
-  const MIGRATED_PATHS = new Set<string>(["/"]);
-  if (!MIGRATED_PATHS.has(rest)) {
+  // The exclusion list `NON_LOCALIZED_PREFIXES` enumerates paths
+  // that intentionally stay non-localized (operator surface, OG
+  // image generators, etc.). The middleware-level `matcher` config
+  // already filters /api, /admin, /_next, etc.; this list catches
+  // anything else that should bypass i18n routing.
+  const NON_LOCALIZED_PREFIXES = ["/share"]; // server-side share previews
+  if (NON_LOCALIZED_PREFIXES.some((p) => rest === p || rest.startsWith(`${p}/`))) {
     return NextResponse.next();
   }
 

@@ -36,8 +36,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     select: { slug: true, updatedAt: true },
   });
 
-  // Static surfaces (path without locale prefix).
-  const staticPaths = ["/", "/markets"] as const;
+  // Static surfaces (paths without locale prefix). Order roughly
+  // matches the user's discovery flow — landing → catalog →
+  // reference pages.
+  //
+  // Authenticated routes (/wallet, /profile, /portfolio,
+  // /watchlist, /notifications) intentionally omitted: they serve
+  // user-specific content and would either 401 the crawler or
+  // pollute the index with empty pages.
+  const staticPaths = [
+    "/",
+    "/markets",
+    "/leaderboard",
+    "/achievements",
+    "/login",
+    "/register",
+  ] as const;
 
   const entries: MetadataRoute.Sitemap = [];
 
