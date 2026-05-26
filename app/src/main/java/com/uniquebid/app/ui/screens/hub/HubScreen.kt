@@ -1,163 +1,77 @@
 package com.uniquebid.app.ui.screens.hub
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import com.uniquebid.app.ui.components.CoinChip
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.uniquebid.app.ui.components.buildHardenedWebView
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Hub surface — hosts the auctions web app's `/` route inside a
+ * WebView (PR-ANDROID-WEBVIEW-LOGIN-HUB). Was previously a native
+ * Compose grid of three colour-coded game cards (warm amber Live
+ * Auctions, red/orange Aviator, blue Kalki Exchange) that drifted
+ * visually from the production web hub.
+ *
+ * Aligns the Android shell with the same "thin shell, web product
+ * surfaces" pattern as the three game screens (Auctions / Aviator
+ * / Bet). One design system, one place to update, instant parity
+ * with whatever the web team ships — including the cyan/indigo
+ * landing redesign + scroll-back-and-highlight on the three game
+ * cards (PR-LOGIN-V2 on the web side).
+ *
+ * Auth handoff
+ * ============
+ * The user reaches this screen only after the splash check found a
+ * token in [TokenStore] (or after the WebView login captured one).
+ * We pass it to the web side as a `?token=…` query param — the
+ * auctions middleware's existing SSO bridge consumes that, writes
+ * the `kalki_token` cookie, and 302-redirects to a clean `/` URL.
+ * Mirrors `AuctionsWebViewModel`, `BetViewModel`, `AviatorViewModel`.
+ *
+ * Navigation callbacks
+ * ====================
+ * The previous native hub took `onLiveAuctions` / `onAviator` /
+ * `onBet` / `onWallet` / `onNotifications` / `onProfile` callbacks
+ * and wired each card tap to one of those nav-graph destinations.
+ * In the WebView model those callbacks are unused — the web hub
+ * surfaces all three games + nav as web routes. They remain in the
+ * signature so the nav graph compiles unchanged; a follow-up can
+ * trim them once we're sure no downstream code reads them.
+ */
 @Composable
 fun HubScreen(
-    onLiveAuctions: () -> Unit,
-    onAviator: () -> Unit,
-    onBet: () -> Unit,
-    onWallet: () -> Unit,
-    onNotifications: () -> Unit,
-    onProfile: () -> Unit,
+    @Suppress("UNUSED_PARAMETER") onLiveAuctions: () -> Unit,
+    @Suppress("UNUSED_PARAMETER") onAviator: () -> Unit,
+    @Suppress("UNUSED_PARAMETER") onBet: () -> Unit,
+    @Suppress("UNUSED_PARAMETER") onWallet: () -> Unit,
+    @Suppress("UNUSED_PARAMETER") onNotifications: () -> Unit,
+    @Suppress("UNUSED_PARAMETER") onProfile: () -> Unit,
+    viewModel: HubWebViewModel = hiltViewModel(),
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Kalki Bet") },
-                actions = {
-                    CoinChip(onClick = onWallet)
-                    IconButton(onClick = onWallet) {
-                        Icon(Icons.Filled.AccountBalanceWallet, contentDescription = "Wallet")
-                    }
-                    IconButton(onClick = onNotifications) {
-                        Icon(Icons.Filled.Notifications, contentDescription = "Notifications")
-                    }
-                    IconButton(onClick = onProfile) {
-                        Icon(Icons.Filled.Person, contentDescription = "Profile")
-                    }
-                },
-            )
-        }
-    ) { inner ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .padding(horizontal = 20.dp, vertical = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            Text(
-                "Choose a game",
-                style = MaterialTheme.typography.headlineLarge,
-            )
+    val url = remember { viewModel.url() }
 
-            HubCard(
-                title = "Live Auctions",
-                subtitle = "Win real products by outsmarting other bidders.",
-                // Warm amber gradient — high-contrast against the dark
-                // navy background (`SurfaceDark = #0A0F1F`) and visually
-                // distinct from the red-orange Aviator tile and the
-                // blue Exchange tile below. The previous navy gradient
-                // (`BrandIndigo → BrandIndigoDark`) sat within 4 % of
-                // the page background lightness so the card was nearly
-                // invisible.
-                gradient = Brush.linearGradient(
-                    listOf(Color(0xFFD97706), Color(0xFF92400E)),
-                ),
-                accent = Color(0xFFFCD34D),
-                onClick = onLiveAuctions,
-            )
+    // Swallow the back gesture inside the hub — popping the splash
+    // back into view would just bounce the user right back here.
+    // Native log-out is the only intended exit (handled elsewhere
+    // via the web profile menu, which calls the API logout endpoint
+    // and clears both cookies).
+    BackHandler(enabled = true) { /* swallow */ }
 
-            HubCard(
-                title = "Aviator",
-                subtitle = "Cash out before the plane crashes. Multiplier rises every tick.",
-                gradient = Brush.linearGradient(
-                    listOf(Color(0xFFFF4D5A), Color(0xFFFF8C42)),
-                ),
-                accent = Color(0xFF2EE59D),
-                onClick = onAviator,
-            )
-
-            HubCard(
-                title = "Kalki Exchange",
-                subtitle = "Prediction markets. Trade YES/NO on real-world events.",
-                gradient = Brush.linearGradient(
-                    listOf(Color(0xFF0EA5E9), Color(0xFF1E1B4B)),
-                ),
-                accent = Color(0xFF22D3EE),
-                onClick = onBet,
-            )
-        }
-    }
-}
-
-@Composable
-private fun HubCard(
-    title: String,
-    subtitle: String,
-    gradient: Brush,
-    accent: Color,
-    onClick: () -> Unit,
-) {
     Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .height(180.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(gradient)
-            .clickable(onClick = onClick)
-            .padding(24.dp),
+            .fillMaxSize()
+            .background(Color(0xFF050608)),
     ) {
-        Column(
+        AndroidView(
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                ),
-            )
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.85f),
-            )
-        }
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .background(accent.copy(alpha = 0.18f), RoundedCornerShape(12.dp))
-                .padding(horizontal = 10.dp, vertical = 4.dp),
-        ) {
-            Text(
-                "Play →",
-                style = MaterialTheme.typography.labelLarge,
-                color = accent,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
+            factory = { ctx -> buildHardenedWebView(ctx, url) },
+        )
     }
 }

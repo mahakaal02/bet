@@ -43,10 +43,15 @@ android {
         // one shared design system + shared backend.
         //
         // Pointed at `/auctions` (the list page), not `/` (the web hub).
-        // The Android shell already shows a native hub; landing the
-        // WebView on the web hub would surface a redundant "pick a
-        // product" view inside the "Live Auctions" tab.
+        // The "Live Auctions" tab from the hub lands here directly.
         buildConfigField("String", "AUCTIONS_URL", "\"https://kalki-auctions.cloud.podstack.ai/auctions\"")
+        // PR-ANDROID-WEBVIEW-LOGIN-HUB — the native Login + Hub screens
+        // were rewritten to host the auctions web app's `/login` and
+        // `/` routes inside a WebView (was previously a native Compose
+        // login form + native hub card grid that didn't match the web
+        // design). Both screens read these URLs.
+        buildConfigField("String", "AUCTIONS_LOGIN_URL", "\"https://kalki-auctions.cloud.podstack.ai/login\"")
+        buildConfigField("String", "AUCTIONS_HUB_URL", "\"https://kalki-auctions.cloud.podstack.ai/\"")
     }
 
     buildTypes {
