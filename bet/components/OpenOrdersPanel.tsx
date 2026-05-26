@@ -9,7 +9,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { fmtCoins, fmtPrice, timeAgo, cn } from "@/lib/utils";
 import { toast } from "@/components/ui/Toaster";
-import { useTranslation } from "@/lib/i18n/client";
+import { useTranslation, type TranslateFunction } from "@/lib/i18n/client";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -283,7 +283,7 @@ function EditRow({
 
 function prettyReplaceError(
   code: string | undefined,
-  t: (key: string, vars?: Record<string, string | number>) => string,
+  t: TranslateFunction,
 ): string {
   switch (code) {
     case "insufficient_coins":

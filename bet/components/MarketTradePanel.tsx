@@ -16,6 +16,7 @@ import { useMarketStream } from "@/lib/useMarketStream";
 import {
   localizedPath,
   useTranslation,
+  type TranslateFunction,
 } from "@/lib/i18n/client";
 
 interface Props {
@@ -510,7 +511,7 @@ function Row({ label, value, hint }: { label: string; value: string; hint?: stri
 
 function prettyTradeError(
   code: string | undefined,
-  t: (key: string, vars?: Record<string, string | number>) => string,
+  t: TranslateFunction,
 ): string {
   switch (code) {
     case "insufficient_coins":

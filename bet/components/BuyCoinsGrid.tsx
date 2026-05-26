@@ -10,7 +10,11 @@ import { Badge } from "@/components/ui/Badge";
 import { toast } from "@/components/ui/Toaster";
 import { cn, fmtCoins } from "@/lib/utils";
 import type { CoinPack } from "@/lib/coin-packs";
-import { useTranslation, type Locale } from "@/lib/i18n/client";
+import {
+  useTranslation,
+  type Locale,
+  type TranslateFunction,
+} from "@/lib/i18n/client";
 
 interface Props {
   packs: CoinPack[];
@@ -278,7 +282,7 @@ export function BuyCoinsGrid({ packs, user, locale: _locale }: Props) {
 
 function prettyError(
   code: string | undefined,
-  t: (key: string, vars?: Record<string, string | number>) => string,
+  t: TranslateFunction,
 ): string {
   switch (code) {
     case "unknown_pack":

@@ -139,6 +139,21 @@ function interpolate(
 }
 
 /**
+ * Translation function signature returned by `useTranslation()`.
+ *
+ * Named interface (rather than an inline arrow type on the hook's
+ * return shape) so it can be reused as a parameter type in helper
+ * functions like `prettyError(code, t)`. Keeping the shape under one
+ * name also keeps TypeScript's inference deterministic across Node /
+ * lib.d.ts variations — the inline `vars?:` form can occasionally
+ * be inferred as required when threaded through certain generic
+ * call chains.
+ */
+export interface TranslateFunction {
+  (key: string, vars?: Record<string, string | number>): string;
+}
+
+/**
  * Hook that returns the active locale + a `t(key, vars?)` function
  * scoped to that locale. The function reference is memoised on
  * `dict`, so it's referentially-stable across renders unless the
@@ -154,7 +169,7 @@ function interpolate(
 export function useTranslation(): {
   locale: Locale;
   dir: Direction;
-  t: (key: string, vars?: Record<string, string | number>) => string;
+  t: TranslateFunction;
 } {
   const ctx = useContext(I18nContext);
 
@@ -162,8 +177,11 @@ export function useTranslation(): {
   // useCallback dep. If ctx is null (no provider), dict is undefined
   // and the callback below falls through to `key`.
   const dict = ctx?.dict;
-  const t = useCallback(
-    (key: string, vars?: Record<string, string | number>) => {
+  // Explicit generic on useCallback locks the function signature so
+  // downstream consumers (e.g. `prettyError(code, t)`) see a stable
+  // `(key, vars?) => string` shape rather than an inferred variant.
+  const t = useCallback<TranslateFunction>(
+    (key, vars) => {
       const val = walkDeep(dict, key);
       const str = typeof val === "string" ? val : key;
       return interpolate(str, vars);

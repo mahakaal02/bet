@@ -12,6 +12,7 @@ import { toast } from "@/components/ui/Toaster";
 import {
   localizedPath,
   useTranslation,
+  type TranslateFunction,
 } from "@/lib/i18n/client";
 
 export function RegisterForm() {
@@ -139,7 +140,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function prettyError(
   code: string | undefined,
-  t: (key: string, vars?: Record<string, string | number>) => string,
+  t: TranslateFunction,
 ): string {
   switch (code) {
     case "email_taken":
