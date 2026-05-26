@@ -19,7 +19,11 @@ import { getAuthedUser } from "@/lib/auth";
 import {
   DEFAULT_LOCALE,
   buildLocalizedMetadata,
+  formatCategory,
+  formatResolvedAs,
   isLocale,
+  marketTranslationInclude,
+  resolveMarketContent,
   t,
   type Locale,
 } from "@/lib/i18n";
@@ -42,6 +46,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale: raw, slug } = await params;
   const locale: Locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  // Side-load the locale-specific translation row so OG/Twitter cards
+  // pick up the translated title + description when available, with
+  // per-field fallback to the canonical fields.
   const m = await db.market.findUnique({
     where: { slug },
     select: {
@@ -51,6 +58,10 @@ export async function generateMetadata({
       noShares: true,
       status: true,
       resolvedAs: true,
+      translations: {
+        where: { locale },
+        select: { locale: true, title: true, description: true },
+      },
     },
   });
 
@@ -77,11 +88,11 @@ export async function generateMetadata({
     "market.no",
     locale,
   )} ${(1 - yes).toFixed(2)}`;
+  // Prefer the localized title/description from the sidecar; fall
+  // back to the canonical fields when no row exists for this locale.
+  const localized = resolveMarketContent(m, locale);
   // First line of the description, capped for nice-looking previews.
-  // Market title/description are user-generated and stay in their
-  // authoring language — the surrounding chrome (price tag, OG type)
-  // is localized.
-  const teaser = m.description.split("\n")[0].slice(0, 180);
+  const teaser = localized.description.split("\n")[0].slice(0, 180);
 
   // Build the base block via the helper, then override `ogType` to
   // "article" because per-market pages are content (not the homepage)
@@ -90,7 +101,7 @@ export async function generateMetadata({
   return buildLocalizedMetadata({
     locale,
     path: `/markets/${slug}`,
-    title: m.title,
+    title: localized.title,
     description: `${priceTag} — ${teaser}`,
     ogType: "article",
   });
@@ -112,9 +123,13 @@ export default async function MarketPage({
     include: {
       pricePoints: { orderBy: { recordedAt: "asc" }, take: 200 },
       _count: { select: { trades: true, comments: true } },
+      ...marketTranslationInclude(locale),
     },
   });
   if (!market) notFound();
+  // Localized title/description for the visible H1 + description block.
+  // Sidecar fallback handles missing translations field-by-field.
+  const localized = resolveMarketContent(market, locale);
 
   const me = await getAuthedUser();
   const yesPrice = priceYes({
@@ -151,7 +166,7 @@ export default async function MarketPage({
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-6 lg:grid-cols-[1fr_360px]">
         <div>
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <Badge>{market.category}</Badge>
+            <Badge>{formatCategory(market.category, locale)}</Badge>
             {market.featured && <Badge tone="info">{tr("market.featured")}</Badge>}
             {resolved ? (
               <Badge
@@ -165,9 +180,9 @@ export default async function MarketPage({
               >
                 {market.status === "CANCELLED"
                   ? tr("market.cancelled")
-                  : tr("market.resolvedOutcome", {
-                      outcome: market.resolvedAs ?? "",
-                    })}
+                  : market.resolvedAs
+                    ? formatResolvedAs(market.resolvedAs, locale)
+                    : tr("market.resolved")}
               </Badge>
             ) : (
               <Badge tone="default">
@@ -181,13 +196,13 @@ export default async function MarketPage({
               />
             )}
             <ShareButton
-              title={market.title}
+              title={localized.title}
               text={`${tr("market.yes")} ${(market.noShares / (market.yesShares + market.noShares)).toFixed(2)} · ${tr("market.no")} ${(market.yesShares / (market.yesShares + market.noShares)).toFixed(2)} on Kalki Exchange`}
             />
           </div>
-          <h1 className="text-2xl font-black md:text-3xl">{market.title}</h1>
+          <h1 className="text-2xl font-black md:text-3xl">{localized.title}</h1>
           <p className="mt-3 max-w-prose whitespace-pre-line text-sm text-slate-300">
-            {market.description}
+            {localized.description}
           </p>
           {market.resolutionSource && (
             <p className="mt-3 text-xs text-slate-500">

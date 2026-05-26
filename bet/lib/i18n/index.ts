@@ -37,6 +37,34 @@ export {
   type LocalizedMetadataInput,
 } from "./seo";
 
+export {
+  formatCategory,
+  formatStatus,
+  formatOutcome,
+  formatResolvedAs,
+  formatTradeAction,
+  formatTradeActionWithOutcome,
+  formatSort,
+  formatFilter,
+  listCategories,
+  listSorts,
+  listFilters,
+  type MarketCategory,
+  type MarketStatus,
+  type Outcome,
+  type TradeAction,
+  type MarketSort,
+  type MarketFilter,
+} from "./market-format";
+
+export {
+  resolveMarketContent,
+  marketTranslationInclude,
+  type LocalizedMarketContent,
+  type MarketWithTranslations,
+  type MarketTranslationLike,
+} from "./market-content";
+
 /**
  * Dictionary registry. Keyed by locale; English is the only one
  * required to be complete — others are typed `Partial<Dictionary>`

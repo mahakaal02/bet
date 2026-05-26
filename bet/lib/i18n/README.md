@@ -207,6 +207,101 @@ app/share/      Server-rendered share previews (the public auction
 The middleware uses a prefix-match guard with explicit
 `NON_LOCALIZED_PREFIXES` for the carve-outs above.
 
+## Localizing dynamic DB-driven content
+
+Static UI strings live in the four locale dictionaries. **Dynamic
+content authored by admins** (market titles + descriptions) is a
+different problem — we can't ship every translation in `en.ts` because
+the corpus grows with every new market.
+
+### Architecture: sidecar translation table
+
+```
+Market (canonical row)
+  ├─ title         "Will the Fed cut rates in Q3?"
+  ├─ description   "Resolves YES if the Federal Open Market…"
+  └─ translations  → MarketTranslation[]
+                    ├─ (marketId, "pt") title="…?", description="…"
+                    ├─ (marketId, "es") title="…?", description=null
+                    └─ (marketId, "fr") title=null,  description=null
+```
+
+- **One row per `(marketId, locale)` pair**, only inserted when a
+  translation actually exists. Untranslated markets stay zero-row in
+  the sidecar — no row-duplication for the long tail.
+- **Per-field nullability** — title and description columns are both
+  nullable, so a translator can fill title now, description later.
+  Reader-side fallback picks each field independently.
+- **Cascade delete** — orphan translations are useless and would
+  otherwise block admin Market deletion.
+
+### Reader API
+
+```ts
+import {
+  marketTranslationInclude,
+  resolveMarketContent,
+} from "@/lib/i18n";
+
+// Side-load the translation row for this locale in one round-trip:
+const market = await db.market.findUnique({
+  where: { slug },
+  include: marketTranslationInclude(locale),
+});
+
+// Per-field fallback — translation wins if non-null/non-empty,
+// else canonical fields are used:
+const { title, description, titleTranslated } =
+  resolveMarketContent(market, locale);
+```
+
+`resolveMarketContent` always returns non-null strings; the
+`titleTranslated` / `descriptionTranslated` flags are handy for
+rendering a "Translated" admin badge.
+
+### Typed enum formatters
+
+For non-text dynamic fields (categories, statuses, outcomes,
+sort/filter values) use the typed helpers in `market-format.ts` so
+adding a new enum value to Prisma fails the TS build until the
+translation key is mapped:
+
+```ts
+import {
+  formatCategory,     // POLITICS → "Política" / "Politics" / "Politique"
+  formatStatus,       // OPEN → "abierto" / "open" / "ouvert"
+  formatOutcome,      // YES → "SIM" / "YES" / "OUI"
+  formatResolvedAs,   // → "Resolvido SIM" / "Resolved YES"
+  formatTradeAction,  // BUY → "COMPRAR" / "BUY" / "ACHETER"
+  formatTradeActionWithOutcome, // → "Comprar SIM"
+  listCategories,     // pre-built [{value, label}] for dropdowns
+  listSorts,
+  listFilters,
+} from "@/lib/i18n";
+```
+
+All wrap `t(key, locale)` so the English-fallback semantics still
+apply: a brand-new enum value renders sanely as soon as it's added
+to `en.ts`, even before pt/es/fr translators have caught up.
+
+### Adding translations operationally
+
+Out of scope for the current PR but the schema supports it:
+
+1. Admin UI shows a "Translate" tab on the market editor with one
+   text-area pair per locale.
+2. Save = `upsert` on `(marketId, locale)`. Empty fields = no row
+   (delete on save-empty).
+3. Display layer picks up the new translation on the next request
+   — no client deploy, no cache invalidation beyond Next's per-
+   request rendering.
+
+Optional follow-ups: machine-translation worker that backfills
+`MarketTranslation` rows whenever a new Market is created (cheap
+GPT-4o-mini call; admin can override), and a "translation completeness"
+column on the admin market list so operators see which markets need
+attention.
+
 ## What's NOT in this PR
 
 - **Full translation coverage** — the dictionary keys for nav,

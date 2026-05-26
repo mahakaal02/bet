@@ -10,25 +10,22 @@ import { fmtCoins, fmtPrice } from "@/lib/utils";
 import {
   DEFAULT_LOCALE,
   buildLocalizedMetadata,
+  formatCategory,
+  formatResolvedAs,
+  formatStatus,
   isLocale,
+  listCategories,
   localizedPath,
+  marketTranslationInclude,
+  resolveMarketContent,
   t,
   type Locale,
+  type MarketCategory,
 } from "@/lib/i18n";
 import Link from "next/link";
 import { Search } from "lucide-react";
-import type { MarketCategory } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
-
-const CATEGORIES: { value: MarketCategory | "ALL"; labelKey: string }[] = [
-  { value: "ALL", labelKey: "market.categoryAll" },
-  { value: "POLITICS", labelKey: "market.categoryPolitics" },
-  { value: "SPORTS", labelKey: "market.categorySports" },
-  { value: "CRYPTO", labelKey: "market.categoryCrypto" },
-  { value: "TECH", labelKey: "market.categoryTech" },
-  { value: "ENTERTAINMENT", labelKey: "market.categoryEnt" },
-];
 
 export async function generateMetadata({
   params,
@@ -67,8 +64,19 @@ export default async function MarketsPage({
   const sort = pickString(sp.sort) || "trending";
   const status = (pickString(sp.status) || "OPEN").toUpperCase();
 
-  const validCat = CATEGORIES.find((c) => c.value === cat)?.value ?? "ALL";
+  // Drop "ALL" + every real category through the typed helper so the
+  // filter-chip list and the validCat lookup stay in sync with the
+  // Prisma enum. Adding a new MarketCategory in schema.prisma updates
+  // both surfaces automatically.
+  const categories = [
+    { value: "ALL" as const, label: tr("market.categoryAll") },
+    ...listCategories(locale),
+  ];
+  const validCat =
+    categories.find((c) => c.value === cat)?.value ?? "ALL";
 
+  // Side-load only the requested locale's translation row per market —
+  // sidecar table keeps the join tiny (one row max per market).
   const markets = await db.market.findMany({
     where: {
       ...(status !== "ALL" && {
@@ -79,9 +87,21 @@ export default async function MarketsPage({
         OR: [
           { title: { contains: q, mode: "insensitive" } },
           { description: { contains: q, mode: "insensitive" } },
+          {
+            translations: {
+              some: {
+                locale,
+                OR: [
+                  { title: { contains: q, mode: "insensitive" } },
+                  { description: { contains: q, mode: "insensitive" } },
+                ],
+              },
+            },
+          },
         ],
       }),
     },
+    include: marketTranslationInclude(locale),
     orderBy:
       sort === "volume"
         ? { volumeCoins: "desc" }
@@ -94,18 +114,15 @@ export default async function MarketsPage({
   });
 
   // Status word for the "{count} {status} markets" caption. ALL falls
-  // back to the raw lowercased status key, OPEN/RESOLVED/CLOSED/
-  // CANCELLED get translated.
+  // back to empty so the caption reads "5 markets" instead of "5 ALL
+  // markets". Real enum values flow through the typed formatter.
   const statusLabel =
-    status === "OPEN"
-      ? tr("market.statusOpen")
-      : status === "RESOLVED"
-        ? tr("market.statusResolved")
-        : status === "CLOSED"
-          ? tr("market.statusClosed")
-          : status === "CANCELLED"
-            ? tr("market.statusCancelled")
-            : "";
+    status === "ALL"
+      ? ""
+      : formatStatus(
+          status as "OPEN" | "RESOLVED" | "CLOSED" | "CANCELLED",
+          locale,
+        );
 
   return (
     <main className="min-h-screen pb-20">
@@ -163,7 +180,7 @@ export default async function MarketsPage({
         </form>
 
         <div className="mb-4 flex flex-wrap gap-2">
-          {CATEGORIES.map((c) => {
+          {categories.map((c) => {
             const active = c.value === validCat;
             const href =
               c.value === "ALL"
@@ -183,7 +200,7 @@ export default async function MarketsPage({
                     : "border-slate-700 bg-slate-900/60 text-slate-400 hover:text-slate-200"
                 }`}
               >
-                {tr(c.labelKey)}
+                {c.label}
               </Link>
             );
           })}
@@ -204,11 +221,14 @@ export default async function MarketsPage({
               });
               const resolved =
                 m.status === "RESOLVED" || m.status === "CANCELLED";
+              // Localized title (falls back to the canonical authoring-
+              // language title when no sidecar row exists for this locale).
+              const localized = resolveMarketContent(m, locale);
               return (
                 <Link key={m.id} href={lp(`/markets/${m.slug}`)}>
                   <Card className="fade-up h-full transition hover:border-cyan-500/30">
                     <div className="mb-2 flex items-center justify-between">
-                      <Badge>{m.category}</Badge>
+                      <Badge>{formatCategory(m.category, locale)}</Badge>
                       {resolved ? (
                         <Badge
                           tone={
@@ -221,9 +241,9 @@ export default async function MarketsPage({
                         >
                           {m.status === "CANCELLED"
                             ? tr("market.cancelled")
-                            : tr("market.resolvedOutcome", {
-                                outcome: m.resolvedAs ?? "",
-                              })}
+                            : m.resolvedAs
+                              ? formatResolvedAs(m.resolvedAs, locale)
+                              : tr("market.resolved")}
                         </Badge>
                       ) : (
                         <span className="text-[10px] text-slate-500">
@@ -234,7 +254,7 @@ export default async function MarketsPage({
                       )}
                     </div>
                     <h3 className="line-clamp-2 text-sm font-semibold text-slate-100">
-                      {m.title}
+                      {localized.title}
                     </h3>
                     <div className="mt-3 flex items-center justify-between">
                       <div>
