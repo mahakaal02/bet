@@ -11,6 +11,7 @@ import {
 import { fmtDate } from "@/components/admin/ui/format";
 import { IconRoles, IconShield } from "@/components/admin/ui/icons";
 import { RolesClient } from "./RolesClient";
+import { hubLoginUrl } from "@/lib/hub";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export default async function RolesPage() {
   const me = await getAuthedUser();
   // Layout already gated isAdmin; here we additionally distinguish
   // super-admin to render the management UI vs the read-only view.
-  if (!me) redirect("/login?next=/admin/roles");
+  if (!me) redirect(hubLoginUrl());
   const isSuper = me.adminRole === "SUPER_ADMIN";
 
   const [admins, invites] = await Promise.all([

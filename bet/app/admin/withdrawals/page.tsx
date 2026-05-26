@@ -6,6 +6,7 @@ import { WithdrawalActions } from "@/components/WithdrawalActions";
 import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { fmtCoins, timeAgo } from "@/lib/utils";
+import { hubLoginUrl } from "@/lib/hub";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function AdminWithdrawalsPage({
   searchParams: Promise<{ status?: string }>;
 }) {
   const u = await getAuthedUser();
-  if (!u) redirect("/login?next=/admin/withdrawals");
+  if (!u) redirect(hubLoginUrl());
   if (!u.isAdmin) redirect("/");
 
   const sp = await searchParams;

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin/Shell";
 import { getAuthedUser } from "@/lib/auth";
+import { hubLoginUrl } from "@/lib/hub";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   const u = await getAuthedUser();
-  if (!u) redirect("/login?next=/admin");
+  if (!u) redirect(hubLoginUrl());
   // PR-BET-ADMIN-REDESIGN — accept either the new `adminRole` (the
   // authoritative source post-migration) OR the legacy `isAdmin`
   // boolean. The migration backfills `adminRole` for every existing

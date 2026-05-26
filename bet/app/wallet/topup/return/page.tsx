@@ -5,6 +5,7 @@ import { getAuthedUser } from "@/lib/auth";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { fmtCoins } from "@/lib/utils";
+import { hubLoginUrl } from "@/lib/hub";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export default async function ReturnPage({
   searchParams: Promise<{ order?: string; result?: string }>;
 }) {
   const me = await getAuthedUser();
-  if (!me) redirect("/login?next=/wallet");
+  if (!me) redirect(hubLoginUrl());
   const sp = await searchParams;
 
   if (!sp.order) {

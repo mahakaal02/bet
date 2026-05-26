@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { hubLoginUrl } from "@/lib/hub";
 
 /**
  * GET /api/auth/sso-logout?next=<url>
@@ -12,13 +13,17 @@ import { NextResponse } from "next/server";
  * Why we can't just call NextAuth's signout: that endpoint is
  * POST-only and CSRF-gated, which makes cross-origin chained logout
  * impossible without injecting a form on every origin.
+ *
+ * Default `next` is the hub's login page (PR-SINGLE-LOGIN) — bet no
+ * longer hosts its own /login, so post-logout users land on the
+ * canonical sign-in surface at auctions instead.
  */
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const next = url.searchParams.get("next") ?? "/login";
+  const next = url.searchParams.get("next") ?? hubLoginUrl();
 
   // Default NextAuth cookie name (HTTPS production prefixes with __Secure-).
   const isSecure = process.env.NODE_ENV === "production";

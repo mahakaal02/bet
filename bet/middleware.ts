@@ -92,6 +92,26 @@ export function middleware(req: NextRequest) {
   /* ----- i18n routing (PR-BET-I18N) ----- */
   const { locale: pathLocale, rest } = splitLocaleFromPath(req.nextUrl.pathname);
 
+  // PR-SINGLE-LOGIN — bet no longer hosts its own auth UI. Any
+  // residual deep-link to `/{locale}/login` etc. (e.g. an old
+  // bookmark, a stale email body, a third-party search-engine
+  // result indexed before the migration) gets redirected to the
+  // canonical hub sign-in surface so users don't hit a 404.
+  //
+  // We check this BEFORE the `pathLocale` pass-through because a
+  // path-locale URL would otherwise be served as a Next.js 404
+  // (the page files are gone).
+  const LEGACY_AUTH_PATHS = ["/login", "/register", "/forgot", "/reset"];
+  if (
+    pathLocale &&
+    LEGACY_AUTH_PATHS.some((p) => rest === p || rest.startsWith(`${p}/`))
+  ) {
+    const hubBase =
+      process.env.NEXT_PUBLIC_AUCTIONS_URL?.replace(/\/$/, "") ??
+      "http://localhost:3200";
+    return NextResponse.redirect(`${hubBase}/login`, { status: 308 });
+  }
+
   if (pathLocale) {
     // URL already has a locale prefix. Trust it as the user's intent
     // and let it through unchanged — but surface the locale to the

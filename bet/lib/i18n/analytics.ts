@@ -190,81 +190,64 @@ export function withPreservedParams(
 }
 
 /**
- * Build a "redirect-to-login-and-come-back-here" URL that preserves
- * the user's full intended destination — including UTM tags, click
- * IDs, and any other query state — across the auth round-trip.
+ * Build a "redirect-to-login" URL targeting the hub's single sign-in
+ * surface (PR-SINGLE-LOGIN). Bet no longer hosts its own login page —
+ * all auth lives at the auctions hub. Un-authenticated requests to
+ * bet routes bounce to `${HUB}/login`, which on success returns the
+ * user to the hub's three-game picker. The user clicks the Exchange
+ * tile to re-enter bet via SSO (token bridge).
  *
  *   buildAuthRedirect("/wallet", searchParams, "pt")
- *     → "/pt/login?next=%2Fpt%2Fwallet%3Futm_source%3Dtwitter"
+ *     → "https://kalki.exchange/login"   (next= dropped — see below)
  *
- * Why a dedicated helper instead of inlining the encoding? Two
- * reasons:
- *   1. Centralises the `next=` URL-encoding rule (it's a URL
- *      *inside* a URL, so the inner one MUST be encoded once or
- *      it'll get interpreted as the outer query).
- *   2. Every auth-gated server component had to make this decision
- *      and most got it wrong — `redirect(lp("/login?next=/wallet"))`
- *      ships the BARE path as the next target and silently drops
- *      attribution on the round-trip.
+ * Why we drop the `next=` for deep links into bet:
  *
- * Use from server components:
+ *   The auctions login only follows `next` when it's a SAME-ORIGIN
+ *   path (security — it doesn't want to redirect into attacker-
+ *   controlled domains). A cross-origin `next` pointing at the bet
+ *   app would be silently dropped anyway, so we omit it and let the
+ *   post-login flow land the user on the hub. From there they pick
+ *   Exchange and SSO into bet via `?token=…`.
  *
- *   import { buildAuthRedirect } from "@/lib/i18n";
+ *   UTM / click-IDs / referral codes that were on the inbound URL
+ *   survive to the hub login via the cross-origin Referer header;
+ *   the hub records its own attribution.
  *
- *   export default async function WalletPage({ params, searchParams }) {
- *     const { locale } = await params;
- *     const sp = await searchParams;
- *     const u = await getAuthedUser();
- *     if (!u) redirect(buildAuthRedirect("/wallet", sp, locale));
- *     // ...
- *   }
- *
- * `searchParams` is the Next.js server-component shape
- * (`Record<string, string | string[] | undefined>`). Arrays collapse
- * to first value; empty / missing keys are skipped.
+ * The `targetPath`, `searchParams` and `locale` parameters are
+ * retained for backwards compatibility with the previous in-app
+ * /[locale]/login routine (now deleted). They're documented so call
+ * sites that pass them stay readable, but only `targetPath` and the
+ * searchParams shape are honored — for analytics observability into
+ * "what bet route triggered the auth bounce".
  */
 export function buildAuthRedirect(
-  /** Target path inside the locale tree (no locale prefix). */
+  /** Target path the user was originally trying to reach (kept for
+   *  analytics / logging only; the actual redirect is to the hub). */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   targetPath: string,
-  /** searchParams on the gated page that triggered the redirect. */
+  /** searchParams on the gated page that triggered the redirect.
+   *  Currently unused at the redirect site (the hub captures its
+   *  own attribution via Referer); kept for signature stability. */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   searchParams:
     | URLSearchParams
     | Record<string, string | string[] | undefined>
     | null
     | undefined,
-  /** Locale to prefix on both /login and the `next=` target. */
+  /** Active locale — unused for the redirect itself (the hub login
+   *  is single-locale today) but accepted so call sites don't have
+   *  to special-case the i18n migration. */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   locale: string,
-  /** Which auth surface to send the user to. Defaults to "/login". */
-  loginPath: string = "/login",
 ): string {
-  // Normalize searchParams to URLSearchParams so we can serialize.
-  let sp: URLSearchParams;
-  if (searchParams instanceof URLSearchParams) {
-    sp = searchParams;
-  } else if (searchParams) {
-    sp = new URLSearchParams();
-    for (const [k, raw] of Object.entries(searchParams)) {
-      if (raw === undefined || raw === "") continue;
-      sp.set(k, Array.isArray(raw) ? (raw[0] ?? "") : raw);
-    }
-  } else {
-    sp = new URLSearchParams();
-  }
-
-  // Build the locale-prefixed `next=` target so post-login the user
-  // returns to the SAME page in the SAME locale they came from. We
-  // intentionally inline the locale prefix instead of calling
-  // `localizedPath` to avoid a circular import (analytics ↔ index).
-  const innerPath = targetPath.startsWith("/")
-    ? `/${locale}${targetPath}`
-    : `/${locale}/${targetPath}`;
-  const qs = sp.toString();
-  const innerFull = qs.length > 0 ? `${innerPath}?${qs}` : innerPath;
-
-  const loginInner = loginPath.startsWith("/")
-    ? `/${locale}${loginPath}`
-    : `/${locale}/${loginPath}`;
-  return `${loginInner}?next=${encodeURIComponent(innerFull)}`;
+  // Inline the hub URL resolution so analytics.ts has no dependency
+  // on @/lib/hub (keeps the i18n module dictionary-free and bundler-
+  // friendly for client components that import from this file).
+  const fromEnv = process.env.NEXT_PUBLIC_AUCTIONS_URL;
+  const base = fromEnv
+    ? fromEnv.replace(/\/$/, "")
+    : "http://localhost:3200";
+  return `${base}/login`;
 }
 
 /* ============================================================

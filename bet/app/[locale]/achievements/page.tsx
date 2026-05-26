@@ -15,6 +15,7 @@ import {
   t,
   type Locale,
 } from "@/lib/i18n";
+import { hubLoginUrl } from "@/lib/hub";
 
 export const dynamic = "force-dynamic";
 
@@ -231,12 +232,15 @@ export default async function AchievementsPage({
             <p className="text-sm text-slate-300">
               {tr("achievements.signInNote")}
             </p>
-            <Link
-              href={localizedPath("/register", locale)}
+            {/* PR-SINGLE-LOGIN — the single account-creation surface
+                lives on the hub; bet no longer hosts its own /register.
+                Plain <a> because the hub is on a different origin. */}
+            <a
+              href={hubLoginUrl()}
               className="mt-2 inline-block rounded-lg bg-gradient-to-br from-cyan-400 to-indigo-500 px-4 py-2 text-sm font-bold text-slate-950"
             >
               {tr("achievements.createAccount")}
-            </Link>
+            </a>
           </Card>
         )}
       </div>

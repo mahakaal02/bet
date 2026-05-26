@@ -9,6 +9,7 @@ import { NotificationsBell } from "@/components/NotificationsBell";
 import { Brand } from "@/components/Brand";
 import { Avatar } from "@/components/Avatar";
 import { HubLogoLink } from "@/components/HubLogoLink";
+import { hubLoginUrl } from "@/lib/hub";
 import {
   localizedPath,
   useTranslation,
@@ -111,12 +112,16 @@ export function Navbar() {
               </Link>
             </>
           ) : (
-            <Link
-              href={localizedPath("/login", locale)}
+            // PR-SINGLE-LOGIN — sign-in routes to the canonical login
+            // surface on the hub (auctions). Plain <a> with full origin
+            // because the hub lives on a different port/origin and
+            // Next.js's <Link> can't cross origins.
+            <a
+              href={hubLoginUrl()}
               className="rounded-lg bg-gradient-to-br from-cyan-400 to-indigo-500 px-3 py-1.5 text-sm font-semibold text-slate-950"
             >
               {t("nav.signIn")}
-            </Link>
+            </a>
           )}
         </div>
       </div>

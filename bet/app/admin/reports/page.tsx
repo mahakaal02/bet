@@ -6,6 +6,7 @@ import { ReportRowActions } from "@/components/ReportRowActions";
 import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { timeAgo } from "@/lib/utils";
+import { hubLoginUrl } from "@/lib/hub";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export default async function ReportsPage({
   searchParams: Promise<{ status?: string }>;
 }) {
   const u = await getAuthedUser();
-  if (!u) redirect("/login?next=/admin/reports");
+  if (!u) redirect(hubLoginUrl());
   if (!u.isAdmin) redirect("/");
 
   const sp = await searchParams;
