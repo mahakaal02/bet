@@ -877,16 +877,20 @@ export function LoginLanding({
                     </button>
 
                     <div className="login-foot">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setMode((m) => (m === "signup" ? "login" : "login"))
-                        }
-                      >
-                        {mode === "signup"
-                          ? t("login_have_account")
-                          : t("login_forgot")}
-                      </button>
+                      {mode === "signup" ? (
+                        // Signup mode: toggle back to login.
+                        <button
+                          type="button"
+                          onClick={() => setMode("login")}
+                        >
+                          {t("login_have_account")}
+                        </button>
+                      ) : (
+                        // Login mode: navigate to the dedicated forgot-
+                        // password page (a separate route — has its own
+                        // email/token state machine, not just a mode flip).
+                        <a href="/auth/forgot">{t("login_forgot")}</a>
+                      )}
                       <span>
                         {mode === "signup"
                           ? t("login_takes")

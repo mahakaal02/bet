@@ -11,12 +11,39 @@ model User {
   id            String   @id @default(uuid())
   email         String?  @unique
   username      String   @unique
-  passwordHash  String
+  /// Bcrypt hash of the user's password. Nullable because OAuth-only
+  /// users (Telegram sign-up flow — see telegram* columns below) may
+  /// never set one. Email/password and WhatsApp signups always
+  /// populate this column on user creation; auth flows that read
+  /// the column must null-check before bcrypt-comparing.
+  passwordHash  String?
   emailVerified Boolean  @default(false)
   isAdmin       Boolean  @default(false)
   // WhatsApp-based identity (alternative to email signup).
   whatsappPhone String?  @unique
   phoneVerified Boolean  @default(false)
+  /// ───── Telegram identity (PR-TELEGRAM-LOGIN) ─────────────────
+  ///
+  /// `telegramId` is the canonical key — Telegram returns a stable
+  /// per-user numeric ID that never changes (unlike `username`,
+  /// which the user can rename). We index it unique so the upsert
+  /// in TelegramAuthService.signInOrSignUp() can race-safely
+  /// resolve to an existing row.
+  ///
+  /// `telegramAuthDate` is the unix-seconds timestamp Telegram
+  /// signed at the time of OAuth. We keep it to detect / debug
+  /// stale tokens during incident review; the actual ≤24h
+  /// freshness check happens at request time before any DB write.
+  ///
+  /// Profile fields (username, firstName, lastName, photoUrl) are
+  /// refreshed on every successful sign-in so user displays stay
+  /// current with what they last set on Telegram itself.
+  telegramId        BigInt?   @unique
+  telegramUsername  String?
+  telegramFirstName String?
+  telegramLastName  String?
+  telegramPhotoUrl  String?
+  telegramAuthDate  DateTime?
   /// Canonical wallet identity on Bet (Kalki Exchange). Populated lazily on
   /// the first wallet operation via POST /api/internal/users/ensure on the
   /// Bet host. Coin balances + wallet ledger live entirely on Bet, keyed by

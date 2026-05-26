@@ -266,6 +266,13 @@ export class TwoFactorService {
       select: { id: true, passwordHash: true, username: true },
     });
     if (!user) throw new NotFoundException('user not found');
+    // OAuth-only accounts (e.g. Telegram-only sign-up) have no password.
+    // They shouldn't be able to enable 2FA in the first place — but if
+    // somehow they did, refuse to verify here rather than blowing up
+    // bcrypt with a null hash.
+    if (!user.passwordHash) {
+      throw new UnauthorizedException('invalid credentials');
+    }
     const passwordOk = await bcrypt.compare(passwordPlain, user.passwordHash);
     if (!passwordOk) throw new UnauthorizedException('invalid credentials');
 

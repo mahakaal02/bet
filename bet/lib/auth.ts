@@ -83,10 +83,11 @@ export const authOptions: NextAuthOptions = {
         // PR-BET-HOTFIX-LOCAL-AUTH — fallback path for environments
         // where the auctions backend isn't reachable (local dev without
         // the Nest backend, or a temporary outage). Checks the local
-        // `User.passwordHash` column (populated by /api/register) via
-        // bcrypt compare. Production normally routes via the backend
-        // and never touches this branch; when the backend IS up,
-        // `upstream` is non-null and we skip the fallback entirely.
+        // `User.passwordHash` column (populated historically before
+        // PR-TELEGRAM-LOGIN deleted the orphan /api/register route)
+        // via bcrypt compare. Production normally routes via the
+        // backend and never touches this branch; when the backend IS
+        // up, `upstream` is non-null and we skip the fallback entirely.
         if (!upstream && process.env.ALLOW_LOCAL_PASSWORD_AUTH !== "false") {
           try {
             const local = await db.user.findUnique({ where: { email } });
