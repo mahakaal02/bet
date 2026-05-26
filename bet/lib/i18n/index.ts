@@ -69,6 +69,16 @@ export {
   type MarketTranslationLike,
 } from "./market-content";
 
+export {
+  TRACKING_PARAM_KEYS,
+  extractTrackingParams,
+  appendTrackingParams,
+  withPreservedParams,
+  localeDimension,
+  localeAnalyticsContext,
+  type LocaleAnalyticsContext,
+} from "./analytics";
+
 /**
  * Dictionary registry. Keyed by locale; English is the only one
  * required to be complete — others are typed `Partial<Dictionary>`

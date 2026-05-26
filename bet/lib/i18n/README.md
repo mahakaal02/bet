@@ -427,6 +427,105 @@ When an RTL locale is added the test suite immediately verifies
 the direction without needing fixture updates — just append to
 `RTL_LOCALES` and run.
 
+## Analytics safety — preserved attribution across locale changes
+
+### Invariant: marketing state survives every locale redirect
+
+UTM tags, click IDs, referral codes, and any other query state attached
+to an inbound link must survive both:
+
+1. The middleware's geo / cookie / Accept-Language redirect
+   (`/wallet?utm_campaign=launch` → `/pt/wallet?utm_campaign=launch`)
+2. The user clicking the language switcher mid-session
+   (`/pt/wallet?utm_campaign=launch` → `/en/wallet?utm_campaign=launch`)
+
+Otherwise a user who arrives via a campaign link and then changes
+language to read the page appears to your analytics as "direct" —
+breaking attribution and the whole funnel-by-source dashboard.
+
+How it's enforced:
+
+- **Middleware** clones the entire `nextUrl` (`req.nextUrl.clone()`)
+  before mutating only the path — every query parameter survives
+  the redirect unchanged. Tested per-tracker (UTM, gclid, fbclid,
+  msclkid, _ga, ref, multi-value).
+- **Language switcher** reads `useSearchParams()` and pipes the
+  current query through `withPreservedParams()` when calling
+  `router.push`. Target values win on conflicts (the user's
+  most-recent intent — e.g. they edited the search box — beats
+  whatever was on the URL when they landed).
+
+### Tracking-param vocabulary
+
+`lib/i18n/analytics.ts::TRACKING_PARAM_KEYS` is the canonical list:
+
+- **UTM family** — utm_source, utm_medium, utm_campaign, utm_term,
+  utm_content, utm_id
+- **Ad-network click IDs** — gclid, gbraid, wbraid, dclid (Google),
+  fbclid (Meta), msclkid (Bing), ttclid (TikTok), twclid (Twitter),
+  yclid (Yandex), li_fat_id (LinkedIn), mc_cid/mc_eid (Mailchimp)
+- **Referral / sharing** — ref, referrer, referral, referral_code,
+  aff, affiliate, invite, r
+- **Cross-domain session linkers** — _ga, _gl
+
+Adding a new ad network? Append to the list — the rest of the
+pipeline picks it up.
+
+### Helpers
+
+```ts
+import {
+  extractTrackingParams,    // picks known keys out of search params
+  appendTrackingParams,     // attaches a subset onto a path
+  withPreservedParams,      // attaches ALL params (switcher hot path)
+  localeDimension,          // 'pt' — for analytics event tagging
+  localeAnalyticsContext,   // { locale, language, dir } — global props
+} from "@/lib/i18n";
+```
+
+`extractTrackingParams` is for downstream pipelines that specifically
+want the marketing subset (e.g. when sending an event to a CDP) —
+the switcher uses the broader `withPreservedParams` because UX
+consistency means *all* state survives the swap (sort filters,
+search text, anchors), not just attribution.
+
+### Locale dimension for events
+
+Pass the locale as a custom dimension on every analytics event so
+dashboards can slice by language:
+
+```ts
+import { localeDimension, localeAnalyticsContext } from "@/lib/i18n";
+
+// Per-event:
+posthog.capture("trade_buy", {
+  market_slug: market.slug,
+  locale: localeDimension(locale),
+});
+
+// Or as global properties at page load (set once, attached to
+// every subsequent event):
+posthog.register(localeAnalyticsContext(locale));
+// → { locale: 'pt', language: 'pt-BR', dir: 'ltr' }
+```
+
+Both helpers are pure data — zero runtime, no network. Safe to call
+from server components and client components alike.
+
+### Tested
+
+`__tests__/i18n-analytics.test.ts` (39 cases) covers:
+
+- UTM / gclid / fbclid / msclkid / _ga preserved through geo
+  redirects, cookie redirects, default fallback, bot redirect
+- referral code preserved through cookie-driven locale change
+- multi-value query (search filters + UTM together) preserved
+- `extractTrackingParams` handles URLSearchParams, plain Records,
+  Records with arrays (Next.js searchParams shape), empty strings
+- `withPreservedParams` merge semantics (target wins on conflict)
+- `localeDimension` / `localeAnalyticsContext` shape for every
+  supported locale
+
 ## What's NOT in this PR
 
 - **Full translation coverage** — the dictionary keys for nav,

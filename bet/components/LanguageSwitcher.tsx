@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   LOCALES,
   LOCALE_DISPLAY,
@@ -9,6 +9,7 @@ import {
   PREFERRED_LOCALE_COOKIE_MAX_AGE_SECONDS,
   localizedPath,
   t,
+  withPreservedParams,
   type Locale,
 } from "@/lib/i18n";
 
@@ -57,6 +58,11 @@ export function LanguageSwitcher({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  // PR-BET-I18N — preserve query state across locale swaps so a user
+  // who lands on `/pt/wallet?utm_campaign=launch` and switches to
+  // English ends up on `/en/wallet?utm_campaign=launch`, not
+  // /en/wallet (which would shred attribution).
+  const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
   /** Index of the option that's currently keyboard-highlighted
    *  inside the open menu. Drives aria-activedescendant. Defaults
@@ -140,7 +146,13 @@ export function LanguageSwitcher({
     } catch {
       /* private mode / quota — cookie alone is enough */
     }
-    const target = localizedPath(pathname ?? "/", next);
+    // Build the cross-locale target with every query parameter
+    // intact — UTM tags, click IDs, referral codes, search/sort
+    // filters, etc. The user's analytics session continues
+    // uninterrupted; their on-page state (selected sort, search
+    // text) survives the language flip.
+    const base = localizedPath(pathname ?? "/", next);
+    const target = withPreservedParams(base, searchParams);
     setOpen(false);
     router.push(target);
     router.refresh();
