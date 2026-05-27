@@ -1,0 +1,41 @@
+# Xcode-generated project artefacts. We deliberately do NOT ship the
+# `.xcodeproj` from this repo — it's bound to the user's Apple Team ID
+# and bundle identifier, so it's regenerated locally per the runbook
+# in `ios/README.md`.
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+
+# Build output
+DerivedData/
+build/
+*.o
+*.dSYM
+*.dSYM.zip
+
+# Dependency managers
+Pods/
+Carthage/Build/
+.swiftpm/
+*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+.build/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Bitcode + archives
+*.ipa
+*.xcarchive
+
+# IDE/editor noise
+.idea/
+.vscode/
+*.swp
+
+# macOS
+.DS_Store

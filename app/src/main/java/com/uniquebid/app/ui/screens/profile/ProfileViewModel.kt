@@ -1,46 +1,37 @@
 package com.uniquebid.app.ui.screens.profile
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import com.uniquebid.app.data.model.User
-import com.uniquebid.app.data.repository.AuthRepository
+import com.uniquebid.app.BuildConfig
+import com.uniquebid.app.data.auth.TokenStore
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class ProfileUiState(
-    val loading: Boolean = true,
-    val user: User? = null,
-    val error: String? = null,
-)
-
+/**
+ * URL builder for the profile WebView (PR-ANDROID-WEBVIEW-PARITY).
+ * Hands the native JWT off to the auctions web app's `/profile` page
+ * via `?token=…`; the auctions middleware's SSO bridge consumes the
+ * param, writes the `kalki_token` cookie, and 302-redirects to a
+ * clean URL with the user's session established.
+ *
+ * Replaces the previous loading + user-profile-fetch + logout
+ * orchestration — the web `/profile` page now renders identity, the
+ * unified wallet balance, and the cross-app sign-out chain (clears
+ * auctions cookie, then Bet, then Aviator localStorage, then lands at
+ * `/login`). The native shell hosts the WebView and gets out of the
+ * way.
+ *
+ * Mirrors [com.uniquebid.app.ui.screens.hub.HubWebViewModel] /
+ * [com.uniquebid.app.ui.screens.auctions.AuctionsWebViewModel] exactly
+ * so every WebView surface in the shell follows the same hand-off
+ * pattern.
+ */
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
-    private val auth: AuthRepository,
+    private val tokens: TokenStore,
 ) : ViewModel() {
-
-    private val _state = MutableStateFlow(ProfileUiState())
-    val state: StateFlow<ProfileUiState> = _state.asStateFlow()
-
-    init { refresh() }
-
-    fun refresh() {
-        viewModelScope.launch {
-            _state.value = _state.value.copy(loading = true, error = null)
-            try {
-                val user = auth.me()
-                _state.value = ProfileUiState(loading = false, user = user)
-            } catch (e: Throwable) {
-                _state.value = ProfileUiState(loading = false, error = e.message ?: "failed to load profile")
-            }
-        }
-    }
-
-    fun logout(onLoggedOut: () -> Unit) {
-        auth.logout()
-        onLoggedOut()
+    fun url(): String {
+        val base = BuildConfig.AUCTIONS_HUB_URL.trimEnd('/')
+        val token = tokens.currentToken().orEmpty()
+        return if (token.isEmpty()) "$base/profile" else "$base/profile?token=$token"
     }
 }
