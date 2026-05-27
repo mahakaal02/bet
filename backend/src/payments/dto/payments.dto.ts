@@ -1,4 +1,4 @@
-import { IsInt, IsString, Length, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 
 export class VerifyPaymentDto {
   @IsString()
@@ -24,4 +24,27 @@ export class CreateWalletTopupOrderDto {
   @Min(100)
   @Max(100_000)
   amount!: number;
+}
+
+/**
+ * Body for POST /wallet/order — one of `coinPackId` or `amount`.
+ * Bounds match `CreateWalletTopupOrderDto.amount` (100–100k).
+ *
+ * Lives here (next to its siblings) rather than inline in
+ * wallet.controller.ts because referencing a class as a `@Body()`
+ * decorator type before its declaration trips the temporal dead zone
+ * under `nest start --watch` (the controller class is decorated at
+ * module-load time, before the lower class declaration is reached).
+ */
+export class CreateWalletOrderDto {
+  @IsOptional()
+  @IsString()
+  @Length(8, 64)
+  coinPackId?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(100)
+  @Max(100_000)
+  amount?: number;
 }
