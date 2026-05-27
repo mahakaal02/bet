@@ -40,7 +40,34 @@ export type Permission =
   | 'ticket.reply'
   // KYC review — consumed by PR-KYC-2
   | 'kyc.view'
-  | 'kyc.review';
+  | 'kyc.review'
+  // ─── PR-ARCH-AUDIT Stage C — granular admin surface ──────────────
+  // Coin economy (settings + packs)
+  | 'coin_settings.view'
+  | 'coin_settings.edit'
+  | 'coin_pack.view'
+  | 'coin_pack.edit'
+  // Auctions admin
+  | 'auction.edit'
+  | 'auction.bids_view'
+  // Aviator admin surface — read-only & write-side split so a
+  // junior support agent can see live state without being able to
+  // touch crash-engine / payout-cap knobs.
+  | 'aviator.view'
+  | 'aviator.settings_edit'
+  | 'aviator.crash_engine_edit'
+  | 'aviator.payout_cap_edit'
+  | 'aviator.seed_rotate'
+  | 'aviator.chat_moderate'
+  // Generic SystemSetting + feature flags
+  | 'settings.view'
+  | 'settings.edit'
+  | 'feature_flag.view'
+  | 'feature_flag.edit'
+  // Roles administration (who can grant who which role)
+  | 'role.view'
+  | 'role.grant'
+  | 'role.revoke';
 
 /**
  * Role → permissions mapping. Matches Roadmap §F-ADMIN-6.

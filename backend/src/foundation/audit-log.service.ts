@@ -4,11 +4,15 @@ import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * Append-only admin audit log writer. Every state-mutating admin
- * action goes through here. The interceptor in
- * `audit-log.interceptor.ts` handles the common case (it diffs the
- * before/after of route-level Prisma writes); this service is the
- * direct call path for cases where the interceptor can't introspect
- * the write (e.g. a multi-table transaction).
+ * action goes through here directly — there is NO interceptor; the
+ * caller is expected to invoke `record()` explicitly with the
+ * before/after diff.
+ *
+ * (Historical note: an earlier docstring claimed an interceptor
+ * existed in `audit-log.interceptor.ts`. PR-ARCH-AUDIT Stage D
+ * confirmed that file was never created, and added explicit
+ * record() calls to every AdminController mutation that had been
+ * relying on the imagined interceptor.)
  *
  * Design invariants:
  *

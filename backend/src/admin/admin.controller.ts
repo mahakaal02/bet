@@ -7,10 +7,8 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
+  Req,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AdminGuard } from './admin.guard';
 import { AuctionsService } from '../auctions/auctions.service';
 import { CoinSettingsService } from '../coins/coin-settings.service';
 import { CoinPacksService } from '../coin-packs/coin-packs.service';
@@ -26,8 +24,11 @@ import {
 } from '../aviator/payout-cap';
 import { SettingType } from '@prisma/client';
 import { SettingsService } from '../foundation/settings.service';
+import { AuditLogService } from '../foundation/audit-log.service';
+import { requestMeta } from '../foundation/request-meta';
 import { AuthedUser, CurrentUser } from '../auth/current-user.decorator';
 import { BadRequestException } from '@nestjs/common';
+import { Perm } from './perms.guard';
 import {
   CreateAuctionDto,
   CreateCoinPackDto,
@@ -36,7 +37,25 @@ import {
   UpsertCoinPackDto,
 } from './dto/admin.dto';
 
-@UseGuards(JwtAuthGuard, AdminGuard)
+type ReqLike = {
+  headers: Record<string, string | string[] | undefined>;
+  ip?: string;
+};
+
+/**
+ * Admin omnibus controller. Historically gated by the legacy
+ * AdminGuard (User.isAdmin bit only) which made all-or-nothing
+ * access the only granularity. PR-ARCH-AUDIT Stage C migrated every
+ * endpoint to @Perm() so non-admin roles (FINANCE, MODERATOR,
+ * SUPPORT, AUDITOR) can each see/touch only the slice they need.
+ *
+ * Legacy `isAdmin: true` accounts still get through because
+ * PermsGuard backstops them on line 61 of perms.guard.ts — that
+ * keeps the existing admin login flow unchanged.
+ *
+ * @Perm() stacks JwtAuthGuard + PermsGuard + permission metadata,
+ * so no class-level @UseGuards is needed.
+ */
 @Controller('admin')
 export class AdminController {
   constructor(
@@ -48,66 +67,198 @@ export class AdminController {
     private readonly fairness: FairnessStore,
     private readonly crashEngine: CrashDistributionService,
     private readonly settings: SettingsService,
+    // PR-ARCH-AUDIT Stage D — explicit audit writes on every
+    // mutation. There is no interceptor (despite an earlier
+    // docstring claiming so); each handler records its own diff.
+    private readonly audit: AuditLogService,
   ) {}
 
+  private actorMeta(actor: AuthedUser, req: ReqLike) {
+    return {
+      actorId: actor.id,
+      actorEmail: actor.email ?? actor.username,
+      ...requestMeta(req),
+    };
+  }
+
+  @Perm('coin_settings.view')
   @Get('coin-settings')
   getCoinSettings() {
     return this.coinSettings.get();
   }
 
+  @Perm('coin_settings.edit')
   @Patch('coin-settings')
-  updateCoinSettings(@Body() dto: UpdateCoinSettingsDto) {
-    return this.coinSettings.update(dto);
+  async updateCoinSettings(
+    @Body() dto: UpdateCoinSettingsDto,
+    @CurrentUser() actor: AuthedUser,
+    @Req() req: ReqLike,
+  ) {
+    const before = await this.coinSettings.get();
+    const updated = await this.coinSettings.update(dto);
+    await this.audit.record({
+      ...this.actorMeta(actor, req),
+      action: 'coin_settings.update',
+      targetType: 'CoinSettings',
+      targetId: 'singleton',
+      before: before as unknown as Record<string, unknown>,
+      after: updated as unknown as Record<string, unknown>,
+    });
+    return updated;
   }
 
+  @Perm('coin_pack.view')
   @Get('coin-packs')
   listCoinPacks() {
     return this.coinPacks.listAll();
   }
 
+  @Perm('coin_pack.edit')
   @Post('coin-packs')
-  createCoinPack(@Body() dto: CreateCoinPackDto) {
-    return this.coinPacks.create(dto);
+  async createCoinPack(
+    @Body() dto: CreateCoinPackDto,
+    @CurrentUser() actor: AuthedUser,
+    @Req() req: ReqLike,
+  ) {
+    const created = await this.coinPacks.create(dto);
+    await this.audit.record({
+      ...this.actorMeta(actor, req),
+      action: 'coin_pack.create',
+      targetType: 'CoinPack',
+      targetId: (created as { id: string }).id,
+      after: created as unknown as Record<string, unknown>,
+    });
+    return created;
   }
 
+  @Perm('coin_pack.edit')
   @Patch('coin-packs/:id')
-  updateCoinPack(@Param('id') id: string, @Body() dto: UpsertCoinPackDto) {
-    return this.coinPacks.update(id, dto);
+  async updateCoinPack(
+    @Param('id') id: string,
+    @Body() dto: UpsertCoinPackDto,
+    @CurrentUser() actor: AuthedUser,
+    @Req() req: ReqLike,
+  ) {
+    const updated = await this.coinPacks.update(id, dto);
+    await this.audit.record({
+      ...this.actorMeta(actor, req),
+      action: 'coin_pack.update',
+      targetType: 'CoinPack',
+      targetId: id,
+      after: { ...(dto as unknown as Record<string, unknown>) },
+    });
+    return updated;
   }
 
+  @Perm('coin_pack.edit')
   @Delete('coin-packs/:id')
-  deleteCoinPack(@Param('id') id: string) {
-    return this.coinPacks.delete(id);
+  async deleteCoinPack(
+    @Param('id') id: string,
+    @CurrentUser() actor: AuthedUser,
+    @Req() req: ReqLike,
+  ) {
+    const result = await this.coinPacks.delete(id);
+    await this.audit.record({
+      ...this.actorMeta(actor, req),
+      action: 'coin_pack.delete',
+      targetType: 'CoinPack',
+      targetId: id,
+    });
+    return result;
   }
 
+  @Perm('auction.edit')
   @Post('auctions')
-  createAuction(@Body() dto: CreateAuctionDto) {
-    return this.auctions.create(dto);
+  async createAuction(
+    @Body() dto: CreateAuctionDto,
+    @CurrentUser() actor: AuthedUser,
+    @Req() req: ReqLike,
+  ) {
+    const created = await this.auctions.create(dto);
+    await this.audit.record({
+      ...this.actorMeta(actor, req),
+      action: 'auction.create',
+      targetType: 'Auction',
+      targetId: (created as { id: string }).id,
+      after: { ...(dto as unknown as Record<string, unknown>) },
+    });
+    return created;
   }
 
+  @Perm('auction.edit')
   @Patch('auctions/:id')
-  updateAuction(@Param('id') id: string, @Body() dto: UpdateAuctionDto) {
-    return this.auctions.update(id, dto);
+  async updateAuction(
+    @Param('id') id: string,
+    @Body() dto: UpdateAuctionDto,
+    @CurrentUser() actor: AuthedUser,
+    @Req() req: ReqLike,
+  ) {
+    const updated = await this.auctions.update(id, dto);
+    await this.audit.record({
+      ...this.actorMeta(actor, req),
+      action: 'auction.update',
+      targetType: 'Auction',
+      targetId: id,
+      after: { ...(dto as unknown as Record<string, unknown>) },
+    });
+    return updated;
   }
 
+  @Perm('auction.edit')
   @Delete('auctions/:id')
-  deleteAuction(@Param('id') id: string) {
-    return this.auctions.delete(id);
+  async deleteAuction(
+    @Param('id') id: string,
+    @CurrentUser() actor: AuthedUser,
+    @Req() req: ReqLike,
+  ) {
+    const result = await this.auctions.delete(id);
+    await this.audit.record({
+      ...this.actorMeta(actor, req),
+      action: 'auction.delete',
+      targetType: 'Auction',
+      targetId: id,
+    });
+    return result;
   }
 
+  @Perm('auction.edit')
   @Post('auctions/:id/start')
-  startAuction(@Param('id') id: string) {
-    return this.auctions.startNow(id);
+  async startAuction(
+    @Param('id') id: string,
+    @CurrentUser() actor: AuthedUser,
+    @Req() req: ReqLike,
+  ) {
+    const result = await this.auctions.startNow(id);
+    await this.audit.record({
+      ...this.actorMeta(actor, req),
+      action: 'auction.start',
+      targetType: 'Auction',
+      targetId: id,
+    });
+    return result;
   }
 
+  @Perm('auction.edit')
   @Post('auctions/:id/close')
-  closeAuction(@Param('id') id: string) {
-    return this.auctions.close(id);
+  async closeAuction(
+    @Param('id') id: string,
+    @CurrentUser() actor: AuthedUser,
+    @Req() req: ReqLike,
+  ) {
+    const result = await this.auctions.close(id);
+    await this.audit.record({
+      ...this.actorMeta(actor, req),
+      action: 'auction.close',
+      targetType: 'Auction',
+      targetId: id,
+    });
+    return result;
   }
 
   // Exhaustive per-bid inspector for the auction admin "Bidding" view.
   // Returns one row per bid with both the at-post classification and the
   // current classification — ringmaster phantoms surface as @ringmaster.
+  @Perm('auction.bids_view')
   @Get('auctions/:id/bids')
   listAuctionBids(@Param('id') id: string) {
     return this.auctions.listBids(id);
@@ -121,6 +272,7 @@ export class AdminController {
   // Live snapshot of the current Aviator round (phase, bettor count,
   // total stake on this round). Drives the live-tile row on the admin
   // analytics page.
+  @Perm('aviator.view')
   @Get('aviator/current')
   aviatorCurrentRound() {
     return this.aviator.adminCurrentRound();
@@ -128,6 +280,7 @@ export class AdminController {
 
   // Per-user breakdown of bets on the current round. Drill-down from
   // the "Coins riding on this round" tile.
+  @Perm('aviator.view')
   @Get('aviator/current/bets')
   aviatorCurrentRoundBets() {
     return this.aviator.adminCurrentRoundBets();
@@ -136,6 +289,7 @@ export class AdminController {
   // Per-round P&L for the historical round log. Each row: round number,
   // stake, payout, house P/L, bettor count. Cursor paginate by
   // `before=<roundNumber>` to walk older.
+  @Perm('aviator.view')
   @Get('aviator/rounds-pnl')
   aviatorRoundsPnl(
     @Query('limit') limit?: string,
@@ -151,6 +305,7 @@ export class AdminController {
 
   // Day / month / fiscal-year (Indian, Apr–Mar) rollup of stake +
   // payout + house P/L. Used for the finance summary tabs.
+  @Perm('aviator.view')
   @Get('aviator/finance-rollup')
   aviatorFinanceRollup(
     @Query('period') period?: string,
@@ -163,16 +318,30 @@ export class AdminController {
 
   // Admin knobs for Aviator: (1) global max-payout ceiling, (2) one-shot
   // forced-payout override for the next round. See `AviatorSettings` model.
+  @Perm('aviator.view')
   @Get('aviator/settings')
   aviatorSettings() {
     return this.aviator.getAdminSettings();
   }
 
+  @Perm('aviator.settings_edit')
   @Patch('aviator/settings')
-  updateAviatorSettings(
+  async updateAviatorSettings(
     @Body() dto: { maxPayout?: string | null; forcedNextPayout?: string | null },
+    @CurrentUser() actor: AuthedUser,
+    @Req() req: ReqLike,
   ) {
-    return this.aviator.updateAdminSettings(dto);
+    const before = await this.aviator.getAdminSettings();
+    const updated = await this.aviator.updateAdminSettings(dto);
+    await this.audit.record({
+      ...this.actorMeta(actor, req),
+      action: 'aviator.settings_update',
+      targetType: 'AviatorSettings',
+      targetId: '1',
+      before: before as unknown as Record<string, unknown>,
+      after: updated as unknown as Record<string, unknown>,
+    });
+    return updated;
   }
 
   // ── Crash-engine controls ────────────────────────────────────────
@@ -181,6 +350,7 @@ export class AdminController {
   // histogram). Writes go through SettingsService so they're audited
   // via SystemSettingHistory exactly like the generic Settings UI.
 
+  @Perm('aviator.view')
   @Get('aviator/crash-engine')
   async getCrashEngine() {
     // Force a config refresh so the snapshot reflects any setting
@@ -189,6 +359,7 @@ export class AdminController {
     return this.crashEngine.snapshot();
   }
 
+  @Perm('aviator.crash_engine_edit')
   @Patch('aviator/crash-engine')
   async updateCrashEngine(
     @Body()
@@ -199,6 +370,7 @@ export class AdminController {
       adaptiveEnabled?: boolean;
     },
     @CurrentUser() actor: AuthedUser,
+    @Req() req: ReqLike,
   ) {
     // Validate up front so a misclicked admin can't write garbage
     // into SystemSetting and then have the engine clamp it silently.
@@ -236,7 +408,20 @@ export class AdminController {
     }
 
     await this.crashEngine.refreshConfig();
-    return this.crashEngine.snapshot();
+    const snapshot = this.crashEngine.snapshot();
+    // SettingsService.set() already writes SystemSettingHistory rows
+    // for each individual key. We additionally record one AdminAuditLog
+    // entry per operator action so the admin forensic timeline lists
+    // a single "crash engine updated" row instead of forcing an auditor
+    // to reconstruct the intent from 1–4 SystemSettingHistory rows.
+    await this.audit.record({
+      ...this.actorMeta(actor, req),
+      action: 'aviator.crash_engine_update',
+      targetType: 'CrashEngine',
+      targetId: 'singleton',
+      after: { ...(dto as unknown as Record<string, unknown>) },
+    });
+    return snapshot;
   }
 
   // ── Payout-cap (PR-AVIATOR-PAYOUT-CAP) ────────────────────────────
@@ -246,6 +431,7 @@ export class AdminController {
   // so admin edits show up in SystemSettingHistory like the crash-
   // engine knobs.
 
+  @Perm('aviator.view')
   @Get('aviator/payout-cap')
   async getPayoutCap() {
     const enabled = await this.settings.getBool(
@@ -259,10 +445,12 @@ export class AdminController {
     return { enabled, maxCoins };
   }
 
+  @Perm('aviator.payout_cap_edit')
   @Patch('aviator/payout-cap')
   async updatePayoutCap(
     @Body() dto: { enabled?: boolean; maxCoins?: number | null },
     @CurrentUser() actor: AuthedUser,
+    @Req() req: ReqLike,
   ) {
     // Validate up front so a misclicked admin can't write garbage
     // into SystemSetting and then have loadCapConfig silently
@@ -307,9 +495,18 @@ export class AdminController {
         actor.id,
       );
     }
-    return this.getPayoutCap();
+    const after = await this.getPayoutCap();
+    await this.audit.record({
+      ...this.actorMeta(actor, req),
+      action: 'aviator.payout_cap_update',
+      targetType: 'PayoutCap',
+      targetId: 'singleton',
+      after: { ...(dto as unknown as Record<string, unknown>) },
+    });
+    return after;
   }
 
+  @Perm('aviator.view')
   @Get('aviator/rounds')
   aviatorRounds(
     @Query('limit') limit?: string,
@@ -320,12 +517,14 @@ export class AdminController {
     return this.aviator.adminRoundLog(n, Number.isFinite(beforeNum) ? beforeNum : undefined);
   }
 
+  @Perm('aviator.view')
   @Get('aviator/analytics')
   aviatorAnalytics(@Query('hours') hours?: string) {
     const h = Math.min(720, Math.max(1, Number(hours) || 24));
     return this.aviator.adminAnalytics(h);
   }
 
+  @Perm('aviator.view')
   @Get('aviator/seeds')
   aviatorSeeds(@Query('limit') limit?: string) {
     const n = Math.min(200, Math.max(1, Number(limit) || 50));
@@ -334,20 +533,54 @@ export class AdminController {
     );
   }
 
+  @Perm('aviator.view')
   @Get('aviator/chat')
   aviatorChatList(@Query('limit') limit?: string) {
     const n = Math.min(500, Math.max(1, Number(limit) || 100));
     return this.aviatorChat.adminList(n);
   }
 
+  @Perm('aviator.chat_moderate')
   @Delete('aviator/chat/:id')
-  aviatorChatDelete(@Param('id') id: string) {
-    return this.aviatorChat.deleteMessage(id);
+  async aviatorChatDelete(
+    @Param('id') id: string,
+    @CurrentUser() actor: AuthedUser,
+    @Req() req: ReqLike,
+  ) {
+    const result = await this.aviatorChat.deleteMessage(id);
+    await this.audit.record({
+      ...this.actorMeta(actor, req),
+      action: 'aviator.chat_delete',
+      targetType: 'AviatorChat',
+      targetId: id,
+    });
+    return result;
   }
 
+  @Perm('aviator.seed_rotate')
   @Post('aviator/seed/rotate')
-  async rotateAviatorSeed() {
+  async rotateAviatorSeed(
+    @CurrentUser() actor: AuthedUser,
+    @Req() req: ReqLike,
+  ) {
     const result = await this.aviator.rotateSeed('admin');
+    // Seed rotation is a fairness-critical event. The seed reveal is
+    // already broadcast via SEED_ROTATED on the gateway and recorded
+    // by the fairness store. We additionally log it to AdminAuditLog
+    // so an auditor can answer "which operator rotated the seed and
+    // when?" without joining against the fairness table.
+    await this.audit.record({
+      ...this.actorMeta(actor, req),
+      action: 'aviator.seed_rotate',
+      targetType: 'AviatorFairnessSeed',
+      targetId: result.revealed.id,
+      after: {
+        revealedId: result.revealed.id,
+        revealedHash: result.revealed.serverSeedHash,
+        nextId: result.next.id,
+        nextHash: result.next.serverSeedHash,
+      },
+    });
     return {
       revealed: {
         id: result.revealed.id,

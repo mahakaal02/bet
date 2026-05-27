@@ -7,7 +7,6 @@ import {
   Param,
   Patch,
   Req,
-  UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import {
@@ -22,8 +21,7 @@ import {
   Min,
 } from 'class-validator';
 import { FlagMode, Role } from '@prisma/client';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AdminGuard } from './admin.guard';
+import { Perm } from './perms.guard';
 import { AuthedUser, CurrentUser } from '../auth/current-user.decorator';
 import { AuditLogService } from '../foundation/audit-log.service';
 import { FeatureFlagService } from '../foundation/feature-flags.service';
@@ -68,7 +66,10 @@ class UpdateFlagDto {
   description?: string;
 }
 
-@UseGuards(JwtAuthGuard, AdminGuard)
+// PR-ARCH-AUDIT Stage C: migrated to @Perm(). Reads need
+// feature_flag.view (AUDITOR gets this via '*.view' wildcard);
+// writes need feature_flag.edit (only ADMIN by default, can be
+// granted to operations roles later).
 @Controller('admin/feature-flags')
 export class FeatureFlagsController {
   constructor(
@@ -76,6 +77,7 @@ export class FeatureFlagsController {
     private readonly audit: AuditLogService,
   ) {}
 
+  @Perm('feature_flag.view')
   @Get()
   async list() {
     const rows = await this.flags.listFlags();
@@ -97,6 +99,7 @@ export class FeatureFlagsController {
     };
   }
 
+  @Perm('feature_flag.edit')
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Patch(':id')
   async update(
