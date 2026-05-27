@@ -82,7 +82,24 @@ jobs:
               NEXT_PUBLIC_BACKEND_URL=https://kalki-backend.cloud.podstack.ai
               NEXT_PUBLIC_EXCHANGE_URL=https://kalki-bet.cloud.podstack.ai
               NEXT_PUBLIC_ADMIN_URL=https://kalki-admin.cloud.podstack.ai
-              NEXT_PUBLIC_TELEGRAM_BOT=${{ secrets.NEXT_PUBLIC_TELEGRAM_BOT }}
+              # PR-TELEGRAM-LOGIN — Telegram bot public username. Reads
+              # from a REPO VARIABLE (not a secret) since the value is
+              # baked into client chunks at build time and ships to
+              # every visitor; it's not sensitive. `vars` returns the
+              # empty string when undefined (so an unset value renders
+              # `NEXT_PUBLIC_TELEGRAM_BOT=` which the Next.js build
+              # tolerates) — secrets used to do the same but recent
+              # GH Actions validation rejects workflows whose secret
+              # references resolve to nothing, which is why the
+              # original `${{ secrets.NEXT_PUBLIC_TELEGRAM_BOT }}` line
+              # broke every image build between PR #107 and this fix.
+              #
+              # To activate Telegram login end-to-end:
+              #   gh variable set NEXT_PUBLIC_TELEGRAM_BOT \
+              #     --body 'YourBotUsername' --repo mahakaal02/bet
+              # then re-run this workflow (any new push, or
+              # `gh workflow run build-and-push.yml`).
+              NEXT_PUBLIC_TELEGRAM_BOT=${{ vars.NEXT_PUBLIC_TELEGRAM_BOT }}
           - service: aviator
             changed: ${{ needs.detect.outputs.aviator }}
             build_args: |
