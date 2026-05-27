@@ -26,32 +26,94 @@ interface Locale {
   name: string;
   numberFmt: string;
   samples: { liquidity: string; retailValue: string; equiv: string };
+  /**
+   * ISO 4217 code used to look up the runtime-fetched FX rate (see
+   * `auctions/lib/fx.ts`). The backend stores `Auction.retailPrice`
+   * in INR, so this code drives the conversion when the user flips
+   * the country selector. No conversion *rate* is hardcoded here
+   * intentionally — they come from yesterday's ECB closing prices
+   * via Frankfurter at request time.
+   */
+  currencyCode: string;
 }
 
+// Static sample numbers used in the featured-product / trending-market
+// cards. Originally each locale had its values pre-formatted in NATIVE
+// grouping (e.g. BR "9.999", ID "24.999.000") — but that triggers the
+// same dot-as-thousands ambiguity the user flagged for dynamic prices.
+// All `retailValue` strings now use the universal `,` thousands /
+// `.` decimal convention so they read unambiguously regardless of
+// the viewer's regional intuition. `liquidity` and `equiv` are
+// abbreviated (K / L / M / 万 / млн) — those suffixes already
+// disambiguate, so we leave the locale-native decimal mark there for
+// the abbreviated forms.
 const LOCALES: Record<CountryCode, Locale> = {
-  IN: { lang: "en", currency: "₹",    flag: "🇮🇳", name: "India",         numberFmt: "en-IN",
-        samples: { liquidity: "14.2L",   retailValue: "1,69,900", equiv: "5,259" } },
-  BR: { lang: "pt", currency: "R$",   flag: "🇧🇷", name: "Brasil",        numberFmt: "pt-BR",
-        samples: { liquidity: "38,2K",   retailValue: "9.999",     equiv: "262" } },
-  FR: { lang: "fr", currency: "€",    flag: "🇫🇷", name: "France",        numberFmt: "fr-FR",
-        samples: { liquidity: "142K",    retailValue: "1 749",     equiv: "49" } },
-  RU: { lang: "ru", currency: "₽",    flag: "🇷🇺", name: "Россия",        numberFmt: "ru-RU",
-        samples: { liquidity: "1,4 млн", retailValue: "149 990",   equiv: "5 259" } },
-  PH: { lang: "en", currency: "₱",    flag: "🇵🇭", name: "Philippines",   numberFmt: "en-PH",
+  IN: { lang: "en", currency: "₹",    flag: "🇮🇳", name: "India",         numberFmt: "en-IN", currencyCode: "INR",
+        samples: { liquidity: "14.2L",   retailValue: "1,69,900",  equiv: "5,259" } },
+  BR: { lang: "pt", currency: "R$",   flag: "🇧🇷", name: "Brasil",        numberFmt: "pt-BR", currencyCode: "BRL",
+        samples: { liquidity: "38.2K",   retailValue: "9,999",     equiv: "262" } },
+  FR: { lang: "fr", currency: "€",    flag: "🇫🇷", name: "France",        numberFmt: "fr-FR", currencyCode: "EUR",
+        samples: { liquidity: "142K",    retailValue: "1,749",     equiv: "49" } },
+  RU: { lang: "ru", currency: "₽",    flag: "🇷🇺", name: "Россия",        numberFmt: "ru-RU", currencyCode: "RUB",
+        samples: { liquidity: "1.4 млн", retailValue: "149,990",   equiv: "5,259" } },
+  PH: { lang: "en", currency: "₱",    flag: "🇵🇭", name: "Philippines",   numberFmt: "en-PH", currencyCode: "PHP",
         samples: { liquidity: "142K",    retailValue: "89,990",    equiv: "3,000" } },
-  CN: { lang: "zh", currency: "¥",    flag: "🇨🇳", name: "中国",           numberFmt: "zh-CN",
-        samples: { liquidity: "14.2万",   retailValue: "12,999",    equiv: "380" } },
-  MX: { lang: "es", currency: "MX$",  flag: "🇲🇽", name: "México",        numberFmt: "es-MX",
+  CN: { lang: "zh", currency: "¥",    flag: "🇨🇳", name: "中国",           numberFmt: "zh-CN", currencyCode: "CNY",
+        samples: { liquidity: "14.2万",  retailValue: "12,999",    equiv: "380" } },
+  MX: { lang: "es", currency: "MX$",  flag: "🇲🇽", name: "México",        numberFmt: "es-MX", currencyCode: "MXN",
         samples: { liquidity: "38K",     retailValue: "28,999",    equiv: "1,049" } },
-  ID: { lang: "id", currency: "Rp",   flag: "🇮🇩", name: "Indonesia",     numberFmt: "id-ID",
-        samples: { liquidity: "1,4M",    retailValue: "24.999.000", equiv: "824.000" } },
-  NG: { lang: "en", currency: "₦",    flag: "🇳🇬", name: "Nigeria",       numberFmt: "en-NG",
+  ID: { lang: "id", currency: "Rp",   flag: "🇮🇩", name: "Indonesia",     numberFmt: "id-ID", currencyCode: "IDR",
+        samples: { liquidity: "1.4M",    retailValue: "24,999,000", equiv: "824,000" } },
+  NG: { lang: "en", currency: "₦",    flag: "🇳🇬", name: "Nigeria",       numberFmt: "en-NG", currencyCode: "NGN",
         samples: { liquidity: "380K",    retailValue: "1,49,000",  equiv: "82,500" } },
-  AE: { lang: "en", currency: "AED ", flag: "🇦🇪", name: "UAE",           numberFmt: "en-AE",
+  AE: { lang: "en", currency: "AED ", flag: "🇦🇪", name: "UAE",           numberFmt: "en-AE", currencyCode: "AED",
         samples: { liquidity: "14.2K",   retailValue: "4,999",     equiv: "189" } },
-  US: { lang: "en", currency: "$",    flag: "🇺🇸", name: "United States", numberFmt: "en-US",
+  US: { lang: "en", currency: "$",    flag: "🇺🇸", name: "United States", numberFmt: "en-US", currencyCode: "USD",
         samples: { liquidity: "142K",    retailValue: "1,199",     equiv: "63" } },
 };
+
+/**
+ * Convert an INR-denominated amount (string from the backend, or a
+ * raw number) to the locale's currency using the runtime-fetched
+ * FX rate table. When the rate is missing (FX source temporarily
+ * unreachable), falls back to the raw INR figure so the displayed
+ * value is still finite — see `auctions/lib/fx.ts::convertFromINR`
+ * for the rationale.
+ */
+function convertFromINR(
+  inrAmount: string | number,
+  locale: Locale,
+  fxRates: Partial<Record<string, number>>,
+): number {
+  const n = typeof inrAmount === "string" ? Number(inrAmount) : inrAmount;
+  if (!Number.isFinite(n)) return 0;
+  const rate = fxRates[locale.currencyCode];
+  if (!Number.isFinite(rate) || rate === undefined || rate <= 0) {
+    return Math.round(n);
+  }
+  return Math.round(n * rate);
+}
+
+/**
+ * Format a money amount for display.
+ *
+ * We *intentionally* don't use `locale.numberFmt` here. Brazilian
+ * Portuguese (`pt-BR`) and Indonesian (`id-ID`) both use `.` as the
+ * thousands separator and `,` as the decimal point — so a converted
+ * value of 5,655,000 IDR renders as `"5.655.000"`, which any
+ * English-trained eye misreads as "five point six five five" rather
+ * than "five million". The same applies to BR: `"1.740"` reads as
+ * decimal in most non-CIS / non-EU regions.
+ *
+ * Standardising money to the en-US convention (comma thousands,
+ * period decimal) keeps the displayed value unambiguous to an
+ * international audience without giving up locale-native text
+ * elsewhere in the UI (dates, button labels, market questions all
+ * still use `locale.numberFmt` / `locale.lang`).
+ */
+function formatMoney(amount: number): string {
+  return amount.toLocaleString("en-US");
+}
 
 type Strings = Partial<Record<string, string>>;
 const STRINGS: Record<LangCode, Strings> = {
@@ -300,6 +362,11 @@ export interface HubClientProps {
   recentAuctions: HubAuction[];
   /** Top trending markets surfaced as chips alongside the auctions. */
   recentMarkets: HubMarket[];
+  /** INR-base FX rate table, fetched server-side from Frankfurter
+   *  (yesterday's ECB close) with Open ER API as fallback for
+   *  currencies ECB doesn't cover. Empty object when both upstreams
+   *  fail — `convertFromINR` then renders the raw INR figure as-is. */
+  fxRates: Partial<Record<string, number>>;
 }
 
 /** True for `http(s)://...` URLs — used to decide whether the game
@@ -539,6 +606,7 @@ export function HubClient({
   links,
   recentAuctions,
   recentMarkets,
+  fxRates,
 }: HubClientProps) {
   const [country, setCountry] = useState<CountryCode>(initialCountry);
   const [locMenuOpen, setLocMenuOpen] = useState(false);
@@ -585,26 +653,24 @@ export function HubClient({
     return () => document.removeEventListener("mousedown", onDown);
   }, [locMenuOpen]);
 
-  // Wallet balance feels alive with a small subtle drift over time.
-  // The real wallet balance gets pushed in via session refresh on
-  // navigation — this is purely cosmetic.
-  const [bal, setBal] = useState(user.coinBalance);
-  useEffect(() => {
-    setBal(user.coinBalance);
-  }, [user.coinBalance]);
-  useEffect(() => {
-    const id = setInterval(() => {
-      setBal((b) => {
-        if (Math.random() < 0.3) {
-          const delta = Math.floor(Math.random() * 130 - 50);
-          return Math.max(0, b + delta);
-        }
-        return b;
-      });
-    }, 4000);
-    return () => clearInterval(id);
-  }, []);
-  const balDisplay = bal.toLocaleString(locale.numberFmt);
+  // Wallet balance is the SSR-resolved truth — render it verbatim.
+  //
+  // (Previous version drifted the displayed number by ±50–80 every
+  //  ~4s "to feel alive". That's fine for a fictional ticker but
+  //  catastrophic for a wallet: the user's eye lands on the chip,
+  //  sees a number that doesn't match what they spent or earned,
+  //  thinks the app glitched. Removed.)
+  //
+  // When a write changes the balance (top-up, bet placed, auction
+  // bid), the calling page issues a `router.refresh()` which causes
+  // the server component above to re-fetch /auth/me and pass a
+  // fresh `user.coinBalance` prop down here, so the value updates
+  // without a polling loop.
+  // Coin balance is displayed adjacent to the locale currency symbol
+  // (wallet equiv line: "≈ ₹ <balance>"), so the BR/ID `.`-as-
+  // thousands ambiguity bites here too. Use the universal `,`
+  // thousands grouping.
+  const balDisplay = formatMoney(user.coinBalance);
   const handleInitials = useMemo(() => {
     const name = user.username.replace(/[^A-Za-z0-9]/g, "");
     return name.slice(0, 2).toUpperCase() || "U";
@@ -639,14 +705,18 @@ export function HubClient({
         {/* ========== NAV ========== */}
         <nav className="nav">
           <a className="brand" href={links.home}>
-            <span className="brand-mark" aria-label="kalki.bet logo">
-              <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <text x="16" y="22" textAnchor="middle" fontFamily="Space Grotesk, sans-serif" fontWeight="700" fontSize="20" fill="#020617">K</text>
-              </svg>
+            {/* Kalki warrior-on-horse mark. File lives at
+                auctions/public/kalki-mark.png, served at /kalki-mark.png. */}
+            <span className="brand-mark" aria-label="Kalki logo">
+              <img
+                src="/kalki-mark.png"
+                alt=""
+                width={106}
+                height={106}
+                style={{ objectFit: "contain" }}
+              />
             </span>
-            <span>
-              kalki<span className="brand-dot">.</span>bet
-            </span>
+            {/* Wordmark removed — "KALKI" is baked into the PNG. */}
           </a>
 
           <div className="nav-right">
@@ -768,7 +838,17 @@ export function HubClient({
                 <div className="meta-label">{tr("g1_retail")}</div>
                 <div className="meta-value">
                   <span>{locale.currency}</span>
-                  <span>{auction ? Number(auction.retailPrice).toLocaleString(locale.numberFmt) : "—"}</span>
+                  {/* retailPrice is INR on the backend — convert to
+                      the selected locale's currency so the displayed
+                      number agrees with the shown symbol. Formatted
+                      with `,` thousands / `.` decimal regardless of
+                      locale to avoid the BR/ID `.`-as-thousands
+                      ambiguity (see formatMoney for rationale). */}
+                  <span>
+                    {auction
+                      ? formatMoney(convertFromINR(auction.retailPrice, locale, fxRates))
+                      : "—"}
+                  </span>
                 </div>
               </div>
               <span className="game-cta">
@@ -846,11 +926,14 @@ export function HubClient({
               <div className="exchange-bars">
                 <div className="ex-bar yes">
                   <span className="lbl">{tr("g3_yes")}</span>
-                  <span>{market ? `${market.yesCents}¢` : "—"}</span>
+                  {/* yesCents / noCents are 0–100 from the bet
+                      backend (probability × 100). Display as 0.00-1.00
+                      decimal — prediction-market convention. */}
+                  <span>{market ? (market.yesCents / 100).toFixed(2) : "—"}</span>
                 </div>
                 <div className="ex-bar no">
                   <span className="lbl">{tr("g3_no")}</span>
-                  <span>{market ? `${market.noCents}¢` : "—"}</span>
+                  <span>{market ? (market.noCents / 100).toFixed(2) : "—"}</span>
                 </div>
               </div>
               <div className="ex-vol">
@@ -858,11 +941,15 @@ export function HubClient({
                   <span>{tr("g3_liquidity")}</span>
                   &nbsp;<b>
                     <span>{locale.currency}</span>
-                    <span>{market ? market.liquidityCoins.toLocaleString(locale.numberFmt) : "—"}</span>
+                    {/* Money — universal `,` thousands format. */}
+                    <span>{market ? formatMoney(market.liquidityCoins) : "—"}</span>
                   </b>
                 </span>
                 <span>
                   <span>{tr("g3_traders")}</span>
+                  {/* Traders is a head count, not money — locale-
+                      native grouping is fine (no currency symbol to
+                      anchor on, so ambiguity doesn't bite). */}
                   &nbsp;<b>{market ? market.traders.toLocaleString(locale.numberFmt) : "—"}</b>
                 </span>
               </div>

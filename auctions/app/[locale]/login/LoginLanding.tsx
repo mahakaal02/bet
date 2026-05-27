@@ -280,6 +280,15 @@ export function LoginLanding({
   const fillRedId = useId();
   const glowId = useId();
 
+  // Ref-wrapped lastCrashBackend so the animation loop can read the
+  // freshest value at each new round-start without re-mounting the
+  // raf loop (which would visibly stutter the chart). The effect
+  // below keeps the ref in sync with state.
+  const lastCrashBackendRef = useRef<number | null>(null);
+  useEffect(() => {
+    lastCrashBackendRef.current = lastCrashBackend;
+  }, [lastCrashBackend]);
+
   useEffect(() => {
     let raf = 0;
     let mult = 1.0;
@@ -291,7 +300,16 @@ export function LoginLanding({
     function startRound() {
       mult = 1.0;
       busted = false;
-      crashAt = Math.max(1.2, Math.pow(rand(0, 1), 1.7) * 30 + 1.2);
+      // The animated sample now lands at the SAME value as the
+      // "Last crash" stat tile above the chart — so the two numbers
+      // a user sees can't disagree. When the backend hasn't published
+      // a round yet (fresh DB / cold backend), fall back to the
+      // original random distribution so the chart still animates.
+      const backend = lastCrashBackendRef.current;
+      crashAt =
+        backend !== null && Number.isFinite(backend) && backend >= 1.01
+          ? backend
+          : Math.max(1.2, Math.pow(rand(0, 1), 1.7) * 30 + 1.2);
       startedAt = performance.now();
       history = [{ t: 0, m: 1.0 }];
       setCrashBusted(false);
@@ -748,29 +766,24 @@ export function LoginLanding({
         <nav className="nav" aria-label="Site">
           <a className="brand" href="/">
             {/* ============ LOGO SLOT — START ============
-                Drop-in placeholder. Devs swap the inner <svg> with
-                the final mark or `<img src="/logo.svg">`. The 28×28
-                container + cyan→indigo gradient bg + glow live in
-                CSS. */}
-            <span className="brand-mark" aria-label="kalki.bet logo">
-              <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <text
-                  x="16"
-                  y="22"
-                  textAnchor="middle"
-                  fontFamily="Space Grotesk, sans-serif"
-                  fontWeight="700"
-                  fontSize="20"
-                  fill="#020617"
-                >
-                  K
-                </text>
-              </svg>
+                Kalki warrior-on-horse mark. The 28×28 container with
+                a cyan→indigo gradient halo + glow lives in
+                landing.css (`.brand-mark`). The image lives in
+                `auctions/public/kalki-mark.png` and is served at
+                `/kalki-mark.png` by Next.js's static handler. */}
+            <span className="brand-mark" aria-label="Kalki logo">
+              <img
+                src="/kalki-mark.png"
+                alt=""
+                width={106}
+                height={106}
+                style={{ objectFit: "contain" }}
+              />
             </span>
             {/* ============ /LOGO SLOT ============ */}
-            <span className="brand-word">
-              kalki<span className="brand-dot">.</span>bet
-            </span>
+            {/* Wordmark removed — the "KALKI" lettering is baked
+                into the warrior PNG, so an adjacent <span> would
+                read as a duplicate. */}
           </a>
 
           <div className="nav-right">
@@ -1284,11 +1297,16 @@ export function LoginLanding({
                 <div className="yesno">
                   <div className="yesno-bar yes">
                     <span>{t("m1_yes")}</span>
-                    <span>68¢</span>
+                    {/* Decimal share format (0.68) — prediction-market
+                        convention since Robinhood / Polymarket / Kalshi
+                        all surface contract prices as $0.00-$1.00.
+                        Was `68¢` which a casual viewer can confuse
+                        with a tip / fee. */}
+                    <span>0.68</span>
                   </div>
                   <div className="yesno-bar no">
                     <span>{t("m1_no")}</span>
-                    <span>32¢</span>
+                    <span>0.32</span>
                   </div>
                 </div>
               </div>

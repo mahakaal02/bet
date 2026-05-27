@@ -318,7 +318,7 @@ export const STRINGS: Record<LanguageCode, Partial<Record<StringKey, string>>> =
     headline_strike: "Slow money.",
     hero_subcopy:
       "The market never sleeps. Neither do winners. Predict the next outcome, ride the crash, snipe the lowest unique bid — and cash out before everyone else does.",
-    stat_paid_today: "Paid out today",
+    stat_paid_today: "Paid out till now",
     stat_players_online: "Players online",
     stat_last_crash: "Last crash",
     stat_active_predictions: "Active predictions",
@@ -407,7 +407,7 @@ export const STRINGS: Record<LanguageCode, Partial<Record<StringKey, string>>> =
     headline_strike: "Dinheiro lento.",
     hero_subcopy:
       "O mercado nunca dorme. Vencedores também não. Preveja o próximo resultado, surfe o crash, dê o lance único mais baixo — e saque antes de todo mundo.",
-    stat_paid_today: "Pago hoje",
+    stat_paid_today: "Pago até agora",
     stat_players_online: "Jogadores online",
     stat_last_crash: "Último crash",
     stat_active_predictions: "Previsões ativas",
@@ -496,7 +496,7 @@ export const STRINGS: Record<LanguageCode, Partial<Record<StringKey, string>>> =
     headline_strike: "Dinero lento.",
     hero_subcopy:
       "El mercado nunca duerme. Los ganadores tampoco. Predice el próximo resultado, surfea el crash, gana con la puja única más baja — y cobra antes que nadie.",
-    stat_paid_today: "Pagado hoy",
+    stat_paid_today: "Pagado hasta ahora",
     stat_players_online: "Jugadores en línea",
     stat_last_crash: "Último crash",
     stat_active_predictions: "Predicciones activas",
@@ -585,7 +585,7 @@ export const STRINGS: Record<LanguageCode, Partial<Record<StringKey, string>>> =
     headline_strike: "L'argent lent.",
     hero_subcopy:
       "Le marché ne dort jamais. Les gagnants non plus. Prédisez l'issue, surfez le crash, décrochez l'enchère unique la plus basse — et encaissez avant tout le monde.",
-    stat_paid_today: "Payé aujourd’hui",
+    stat_paid_today: "Payé jusqu’à présent",
     stat_players_online: "Joueurs en ligne",
     stat_last_crash: "Dernier crash",
     stat_active_predictions: "Prédictions actives",
@@ -674,7 +674,7 @@ export const STRINGS: Record<LanguageCode, Partial<Record<StringKey, string>>> =
     headline_strike: "Медленные деньги.",
     hero_subcopy:
       "Рынок не спит. Победители — тоже. Угадай исход, поймай краш, выиграй с самой низкой уникальной ставкой — и забери первым.",
-    stat_paid_today: "Выплачено сегодня",
+    stat_paid_today: "Выплачено до сих пор",
     stat_players_online: "Игроков онлайн",
     stat_last_crash: "Последний краш",
     stat_active_predictions: "Активных прогнозов",
@@ -762,7 +762,7 @@ export const STRINGS: Record<LanguageCode, Partial<Record<StringKey, string>>> =
     headline_strike: "慢钱时代。",
     hero_subcopy:
       "市场不眠，赢家不眠。预测下一个结果、骑住崩盘、用最低的唯一出价拿下大奖 — 比所有人先一步落袋。",
-    stat_paid_today: "今日已派彩",
+    stat_paid_today: "迄今已派彩",
     stat_players_online: "在线玩家",
     stat_last_crash: "上次崩盘",
     stat_active_predictions: "进行中的预测",
@@ -849,7 +849,7 @@ export const STRINGS: Record<LanguageCode, Partial<Record<StringKey, string>>> =
     headline_strike: "Uang lambat.",
     hero_subcopy:
       "Pasar tak pernah tidur. Pemenang juga tidak. Tebak hasilnya, naik di crash, sergap bid unik terendah — dan cair sebelum yang lain.",
-    stat_paid_today: "Dibayar hari ini",
+    stat_paid_today: "Dibayar sampai sekarang",
     stat_players_online: "Pemain online",
     stat_last_crash: "Crash terakhir",
     stat_active_predictions: "Prediksi aktif",

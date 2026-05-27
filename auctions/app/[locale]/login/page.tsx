@@ -28,7 +28,7 @@ import { LoginLanding } from "./LoginLanding";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "kalki.bet — trade instinct, cash out before it crashes",
+  title: "kalki — trade instinct, cash out before it crashes",
   description:
     "Prediction markets, Aviator crash and lowest-unique-bid auctions. One wallet. Three ways to print. Cash out before everyone else does.",
 };

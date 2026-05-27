@@ -180,37 +180,41 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 56px;
+  /* No min-height — the row grows to fit whichever child is tallest
+     (currently the 106-px Kalki mark). If you scale the mark up or
+     down, no nav change needed. */
   gap: 16px;
 }
 .kalki-login-page .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   font-weight: 600;
   letter-spacing: -0.02em;
-  font-size: 18px;
+  font-size: 20px;
 }
 .kalki-login-page .brand-mark {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #22D3EE 0%, #6366F1 100%);
+  /* 3.8× the original 28-px K letter → 106 px. The Kalki warrior PNG
+     carries its own visual identity (transparent bg, integrated cyan
+     glow) so we keep zero chrome around it — no gradient halo, no
+     rounded square, no shadow. The image floats over the navy page
+     bg. To resize: change both 106s here AND the `width/height`
+     props on the <img> in LoginLanding.tsx / hub-client.tsx (the
+     explicit attrs prevent layout shift before the image loads). */
+  width: 106px;
+  height: 106px;
   display: grid;
   place-items: center;
-  color: #020617;
-  box-shadow:
-    0 0 0 1px rgba(34, 211, 238, 0.5),
-    0 0 24px rgba(99, 102, 241, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
   flex-shrink: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 .kalki-login-page .brand-mark svg,
 .kalki-login-page .brand-mark img {
   width: 100%;
   height: 100%;
   display: block;
+  /* Preserve the PNG's transparency over the page bg. */
+  background: transparent;
 }
 .kalki-login-page .brand-dot {
   color: var(--neon);
@@ -346,7 +350,9 @@
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(360px, 1fr);
   gap: 56px;
-  margin-top: 36px;
+  /* Halved from 36 → 18 so the Kalki mark sits visually closer to
+     the hero content. */
+  margin-top: 18px;
   align-items: start;
 }
 @media (max-width: 980px) {
