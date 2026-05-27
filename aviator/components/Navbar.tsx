@@ -44,8 +44,10 @@ export default function Navbar() {
     setUsername(getUser()?.username ?? '?');
   }, []);
 
-  const onlineCount = useGame((s) => s.onlineCount);
-  const connected = useGame((s) => s.connected);
+  // `onlineCount` + `connected` were used by the "N online" pill in
+  // the topbar — removed per UX feedback (a 2-online indicator on a
+  // game site reads more "empty" than "live"). Selectors dropped so
+  // we don't subscribe to store changes for a value we never render.
 
   return (
     <>
@@ -74,19 +76,9 @@ export default function Navbar() {
           </div>
         </a>
 
-        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-divider bg-elevated/40">
-          <span
-            className={`inline-block h-1.5 w-1.5 rounded-full ${
-              connected ? 'bg-success glow-breath' : 'bg-danger'
-            }`}
-            style={{
-              boxShadow: connected ? '0 0 6px #22E0BD' : '0 0 6px #FF4D6D',
-            }}
-          />
-          <span className="text-[11px] font-bold text-text-secondary tabular-nums">
-            {onlineCount} {t('common.online').toLowerCase()}
-          </span>
-        </div>
+        {/* "N online" pill removed — was confusing on a dev / low-
+            traffic stage where the count reads as "2 online" and
+            undermines the live-game feel. */}
 
         <div className="flex items-center gap-2 text-sm">
           <LanguageSwitcher currentLocale={locale} size="sm" />
