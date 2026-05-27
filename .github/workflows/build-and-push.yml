@@ -82,7 +82,20 @@ jobs:
               NEXT_PUBLIC_BACKEND_URL=https://kalki-backend.cloud.podstack.ai
               NEXT_PUBLIC_EXCHANGE_URL=https://kalki-bet.cloud.podstack.ai
               NEXT_PUBLIC_ADMIN_URL=https://kalki-admin.cloud.podstack.ai
-              NEXT_PUBLIC_TELEGRAM_BOT=${{ secrets.NEXT_PUBLIC_TELEGRAM_BOT }}
+              # PR-TELEGRAM-GO-LIVE — Telegram bot public username.
+              # Reads from a REPO VARIABLE (not a secret) since the
+              # value ships in client chunks at build time and isn't
+              # sensitive. `vars` returns the empty string when
+              # undefined; secrets used to do the same but GH Actions
+              # validation now rejects workflows whose secret refs
+              # resolve to nothing — that's what broke every image
+              # build between PR #107 and the fix in PR #112 (rolled
+              # into this PR).
+              #
+              # The value is set via:
+              #   gh variable set NEXT_PUBLIC_TELEGRAM_BOT \
+              #     --body 'kalkibet_bot' --repo mahakaal02/bet
+              NEXT_PUBLIC_TELEGRAM_BOT=${{ vars.NEXT_PUBLIC_TELEGRAM_BOT }}
           - service: aviator
             changed: ${{ needs.detect.outputs.aviator }}
             build_args: |

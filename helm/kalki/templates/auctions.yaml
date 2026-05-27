@@ -45,6 +45,23 @@ spec:
             - name: PORT
               value: {{ .Values.auctions.port | quote }}
             {{- include "kalki.publicUrlEnv" . | nindent 12 }}
+            # PR-TELEGRAM-GO-LIVE — canonical origin the auctions Next
+            # app advertises to itself. The Telegram OAuth start route
+            # (`/api/auth/telegram/start`) reads this to build the
+            # `origin` + `return_to` parameters it passes to
+            # `oauth.telegram.org/auth?…`. Telegram refuses the OAuth
+            # redirect back to any host that isn't on the bot's
+            # `/setdomain` allow-list, so `NEXTAUTH_URL` MUST match
+            # the BotFather domain exactly (kalki.bet — set via the
+            # bot owner's BotFather `/setdomain` step).
+            #
+            # Without this env, the start route falls back to the
+            # request's `Host` header, which behind a Traefik
+            # IngressRoute is the routed external host most of the
+            # time but can desync (e.g. internal probes, custom
+            # forwarding). Pinning it is belt-and-braces.
+            - name: NEXTAUTH_URL
+              value: "https://kalki.bet"
             # PR-TELEGRAM-LOGIN — server-side token for the start route
             # (`/api/auth/telegram/start` reads the numeric prefix as the
             # bot id) AND HMAC verification on the callback. Public bot
