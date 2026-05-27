@@ -1,0 +1,25 @@
+# Admin (Vite + React) — DEVELOPMENT image.
+#
+# `vite --host 0.0.0.0 --port 5173` so the dev server listens on the
+# container's external interface (without --host, Vite binds to
+# 127.0.0.1 inside the container and is unreachable from the host).
+#
+# The Vite dev server proxies /api → backend:4000 via the dev-only
+# proxy block in vite.config.ts; the prod image uses nginx instead.
+FROM node:20-alpine
+
+WORKDIR /app
+
+RUN apk add --no-cache tini curl
+
+ENV PATH=/app/node_modules/.bin:$PATH \
+    NODE_ENV=development \
+    CHOKIDAR_USEPOLLING=true
+
+COPY package.json package-lock.json* ./
+RUN npm ci --no-audit --no-fund
+
+EXPOSE 5173
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["sh", "-c", "exec npm run dev -- --host 0.0.0.0 --port 5173"]

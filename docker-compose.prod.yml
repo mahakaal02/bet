@@ -1,0 +1,108 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Production overlay — drops bind mounts, swaps Dockerfile.dev for the
+# real Dockerfile, and uses the prod CMDs (next start / node dist).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This is "production-like local" — single host, single replica per
+# service, no TLS termination, no external secret manager. It mirrors
+# the prod cluster's image set so smoke tests against `next start` /
+# `node dist/main.js` catch regressions before the Helm rollout.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: kalki-backend:prod
+    environment:
+      NODE_ENV: production
+    volumes:
+      # Drop the source bind mount and node_modules volume — the image
+      # has its own. KEEP the uploads volume so banners survive
+      # rebuilds. The `!override` tag empties the dev volume list.
+      - backend-uploads:/app/uploads
+    command: ["node", "dist/src/main.js"]
+
+  backend-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: kalki-backend:prod
+    environment:
+      NODE_ENV: production
+      KALKI_ROLE: worker
+    volumes:
+      - backend-uploads:/app/uploads
+    command: ["node", "dist/src/main.js"]
+
+  bet:
+    build:
+      context: ./bet
+      dockerfile: Dockerfile
+      args:
+        # Next.js inlines NEXT_PUBLIC_* at BUILD time — they must be
+        # passed as build args for the prod image to bake in the
+        # right URLs.
+        NEXT_PUBLIC_BACKEND_URL: ${BACKEND_URL}
+        NEXT_PUBLIC_AUCTIONS_URL: ${AUCTIONS_URL}
+        NEXT_PUBLIC_AVIATOR_URL: ${AVIATOR_URL}
+        NEXT_PUBLIC_GOOGLE_ENABLED: ${GOOGLE_ENABLED:-false}
+    image: kalki-bet:prod
+    environment:
+      NODE_ENV: production
+    volumes: []
+    command: ["sh", "-c", "npx prisma migrate deploy && npm run start"]
+
+  auctions:
+    build:
+      context: ./auctions
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_BACKEND_URL: ${BACKEND_URL}
+        NEXT_PUBLIC_AUCTIONS_URL: ${AUCTIONS_URL}
+        NEXT_PUBLIC_AVIATOR_URL: ${AVIATOR_URL}
+        NEXT_PUBLIC_EXCHANGE_URL: ${EXCHANGE_URL}
+        NEXT_PUBLIC_ADMIN_URL: ${ADMIN_URL}
+    image: kalki-auctions:prod
+    environment:
+      NODE_ENV: production
+    volumes: []
+    command: ["npm", "run", "start"]
+
+  aviator:
+    build:
+      context: ./aviator
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${BACKEND_URL}
+        NEXT_PUBLIC_AUCTIONS_URL: ${AUCTIONS_URL}
+        NEXT_PUBLIC_EXCHANGE_URL: ${EXCHANGE_URL}
+        NEXT_PUBLIC_AVIATOR_ROCKET: ${AVIATOR_ROCKET:-1}
+    image: kalki-aviator:prod
+    environment:
+      NODE_ENV: production
+    volumes: []
+    command: ["npm", "run", "start"]
+
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${BACKEND_URL}
+        VITE_BET_BASE_URL: ${EXCHANGE_URL}
+    image: kalki-admin:prod
+    environment:
+      NODE_ENV: production
+    volumes: []
+    ports:
+      # Admin's prod image is nginx-on-80; expose on the host's admin
+      # port so the URL doesn't change between dev/prod.
+      - "${ADMIN_PORT:-5173}:80"
+
+  # Adminer / mailpit / redis-commander stay as-is — they're dev tools
+  # but harmless in a prod-like local stack. Disable per-service with
+  # `docker compose stop adminer mailpit redis-commander` if undesired.

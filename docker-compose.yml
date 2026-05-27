@@ -1,0 +1,431 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Kalki Bet — root docker-compose.yml (DEVELOPMENT default).
+#
+# `docker compose up` boots the full stack in development mode:
+#
+#   ┌─────────────┐     ┌──────────┐    ┌────────┐    ┌──────────────┐
+#   │  bet :3100  │ ◄── │          │ ── │postgres│    │              │
+#   │ auctions:3200│ ◄── │  nginx   │    │  :5432 │    │   adminer    │
+#   │ aviator :3000│ ◄── │  :8000   │    │        │ ── │    :8080     │
+#   │  admin :5173│ ◄── │ (proxy)  │    └────────┘    └──────────────┘
+#   │ backend:4000│ ◄── │          │    ┌────────┐    ┌──────────────┐
+#   └─────────────┘     └──────────┘    │ redis  │ ── │redis-commander│
+#         │                              │  :6379 │    │    :8081     │
+#         └──── worker (no HTTP) ────────┴────────┘    └──────────────┘
+#                                        ┌──────────────────┐
+#                                        │ mailpit :8025/1025 (dev SMTP) │
+#                                        └──────────────────┘
+#
+# Source code is bind-mounted into each service container; node_modules
+# and Next.js build dirs live in NAMED volumes so the host mount doesn't
+# shadow the container's npm install.
+#
+# Production overlay: `docker compose -f docker-compose.yml -f
+# docker-compose.prod.yml up` swaps every service to its prod Dockerfile
+# and drops the bind mounts.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# A single shared bridge network. Compose auto-creates one anyway, but
+# naming it explicitly makes `docker network inspect kalki-net` cleaner
+# and lets future infra (e.g. an external monitoring stack) attach.
+networks:
+  kalki-net:
+    name: kalki-net
+    driver: bridge
+
+# Named volumes — survive `docker compose down`. Drop with `down -v` to
+# fully reset. The node_modules volumes prevent host bind mounts from
+# shadowing the container's `npm ci` output.
+volumes:
+  pg-data:
+  redis-data:
+  backend-uploads:
+  backend-node-modules:
+  bet-node-modules:
+  bet-next-cache:
+  auctions-node-modules:
+  auctions-next-cache:
+  aviator-node-modules:
+  aviator-next-cache:
+  admin-node-modules:
+
+services:
+  # ─── Infrastructure ─────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: kalki-postgres
+    restart: unless-stopped
+    networks: [kalki-net]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kalki}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kalki}
+      POSTGRES_DB: ${POSTGRES_DB:-uniquebid}
+      # Force initdb to create the cluster in UTF-8 — matches the
+      # Prisma + Next.js client encoding so mixed-script bid data
+      # (Hindi/Arabic merchant names) round-trips without mojibake.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      # Mount as :ro — init scripts must never be mutated by the
+      # cluster, and the official postgres entrypoint only reads them.
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # pg_isready is the canonical readiness probe; reaches the
+      # listener BEFORE accepting connections, which is what
+      # `depends_on: condition: service_healthy` needs.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kalki} -d ${POSTGRES_DB:-uniquebid}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: kalki-redis
+    restart: unless-stopped
+    networks: [kalki-net]
+    # `--appendonly yes` makes a fresh restart preserve cron locks,
+    # rate-limit buckets, and the aviator round-state stream. Without
+    # AOF, redis is purely in-memory and a restart drops everything.
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    # Dev SMTP catcher. The bet app sends password-reset and email-
+    # verification messages through SMTP_URL=smtp://mailpit:1025;
+    # view captured mail at http://localhost:${MAILPIT_HTTP_PORT}.
+    # In prod you'd point SMTP_URL at a real provider and drop this.
+    image: axllent/mailpit:latest
+    container_name: kalki-mailpit
+    restart: unless-stopped
+    networks: [kalki-net]
+    ports:
+      - "${MAILPIT_HTTP_PORT:-8025}:8025"
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+    environment:
+      MP_MAX_MESSAGES: "5000"
+      # In-memory mode — captured mail vanishes when the container
+      # restarts, which is what we want for a dev mail catcher (no
+      # need to mount a volume, no stale messages between sessions).
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8025/api/v1/info"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Application services ───────────────────────────────────────────────
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    image: kalki-backend:dev
+    container_name: kalki-backend
+    restart: unless-stopped
+    networks: [kalki-net]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    environment:
+      NODE_ENV: development
+      PORT: "4000"
+      KALKI_ROLE: ${KALKI_ROLE:-api}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-kalki}:${POSTGRES_PASSWORD:-kalki}@postgres:5432/${POSTGRES_DB:-uniquebid}?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-10}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      FIREBASE_CREDENTIALS_PATH: ${FIREBASE_CREDENTIALS_PATH:-}
+      # KYC cipher: nullish-coalesce in app code (`?? JWT_SECRET`) does NOT
+      # fall back on an empty string, so we must NOT pass an empty value.
+      # Nesting `:-${JWT_SECRET}` here makes KYC_DOCUMENT_KEY default to
+      # JWT_SECRET when not explicitly set in .env (matches the app's
+      # documented dev fallback semantics).
+      KYC_DOCUMENT_KEY: ${KYC_DOCUMENT_KEY:-${JWT_SECRET}}
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
+      # BetWalletService prints a warn if BET_BASE_URL is unset. We point
+      # it at the in-network bet service so backend↔bet wallet calls work.
+      BET_BASE_URL: http://bet:3100
+      SMTP_URL: ${SMTP_URL:-smtp://mailpit:1025}
+      EMAIL_FROM: ${EMAIL_FROM:-Kalki <noreply@kalki.local>}
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    volumes:
+      # Bind the source for hot reload; node_modules is a named
+      # volume so the host directory (which doesn't exist after a
+      # fresh clone, but might exist with the wrong arch deps on
+      # Windows ↔ Linux) doesn't shadow `npm ci`.
+      - ./backend:/app
+      - backend-node-modules:/app/node_modules
+      # Uploads volume is shared with the prod overlay so existing
+      # banner files survive a switch between dev/prod compose.
+      - backend-uploads:/app/uploads
+      # Mount Firebase JSON if present (optional).
+      - ./docker/secrets:/run/secrets:ro
+    healthcheck:
+      # The backend doesn't expose a dedicated /health route — we
+      # probe /auctions, which is a public GET that returns 200
+      # once the Nest application has finished its module init.
+      # Curl --fail flips a 4xx/5xx body into a non-zero exit, but
+      # /auctions is also the cheapest possible "server up" probe.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:4000/auctions || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  backend-worker:
+    # Same image as backend; KALKI_ROLE=worker skips the HTTP listener
+    # so cron jobs (notification drain, outbox dispatch, recon) don't
+    # compete with API requests. Disabled by default — uncomment the
+    # `profiles` line OR run `docker compose --profile worker up`.
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    image: kalki-backend:dev
+    container_name: kalki-backend-worker
+    restart: unless-stopped
+    networks: [kalki-net]
+    profiles: ["worker"]
+    depends_on:
+      backend:  { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    environment:
+      NODE_ENV: development
+      KALKI_ROLE: worker
+      DATABASE_URL: postgresql://${POSTGRES_USER:-kalki}:${POSTGRES_PASSWORD:-kalki}@postgres:5432/${POSTGRES_DB:-uniquebid}?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
+      FIREBASE_CREDENTIALS_PATH: ${FIREBASE_CREDENTIALS_PATH:-}
+      SMTP_URL: ${SMTP_URL:-smtp://mailpit:1025}
+    volumes:
+      - ./backend:/app
+      - backend-node-modules:/app/node_modules
+      - backend-uploads:/app/uploads
+      - ./docker/secrets:/run/secrets:ro
+    # Worker doesn't expose ports.
+
+  bet:
+    build:
+      context: ./bet
+      dockerfile: Dockerfile.dev
+    image: kalki-bet:dev
+    container_name: kalki-bet
+    restart: unless-stopped
+    networks: [kalki-net]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+      backend:  { condition: service_started }
+    environment:
+      NODE_ENV: development
+      PORT: "3100"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-kalki}:${POSTGRES_PASSWORD:-kalki}@postgres:5432/bet?schema=public
+      REDIS_URL: redis://redis:6379
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: ${EXCHANGE_URL:-http://localhost:3100}
+      # NEXT_PUBLIC_* values are inlined by `next dev` at first request
+      # (not baked into a build). Re-reading on each request in dev
+      # means changing these in .env and restarting the container is
+      # enough — no rebuild.
+      NEXT_PUBLIC_BACKEND_URL: ${BACKEND_URL:-http://localhost:4000}
+      NEXT_PUBLIC_AUCTIONS_URL: ${AUCTIONS_URL:-http://localhost:3200}
+      NEXT_PUBLIC_AVIATOR_URL: ${AVIATOR_URL:-http://localhost:3000}
+      NEXT_PUBLIC_ADMIN_URL: ${ADMIN_URL:-http://localhost:5173}
+      NEXT_PUBLIC_GOOGLE_ENABLED: ${GOOGLE_ENABLED:-false}
+      # Backend host the Next.js rewrites point at (server-side; uses
+      # the docker network name).
+      AUCTIONS_BACKEND_URL: http://backend:4000
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+      NOWPAYMENTS_API_KEY: ${NOWPAYMENTS_API_KEY:-}
+      NOWPAYMENTS_IPN_SECRET: ${NOWPAYMENTS_IPN_SECRET:-}
+      NOWPAYMENTS_SANDBOX: ${NOWPAYMENTS_SANDBOX:-true}
+      BACKEND_JWT_SECRET: ${BACKEND_JWT_SECRET:-${JWT_SECRET}}
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
+      SIGNUP_COIN_BONUS: ${SIGNUP_COIN_BONUS:-10000}
+      DAILY_REWARD_COINS: ${DAILY_REWARD_COINS:-500}
+      DISCLAIMER: ${DISCLAIMER:-Demo only — virtual coins.}
+      ALLOW_INSTANT_TOPUP: ${ALLOW_INSTANT_TOPUP:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
+      SMTP_URL: ${SMTP_URL:-smtp://mailpit:1025}
+      EMAIL_FROM: ${EMAIL_FROM:-Kalki <noreply@kalki.local>}
+    ports:
+      - "${BET_PORT:-3100}:3100"
+    volumes:
+      - ./bet:/app
+      - bet-node-modules:/app/node_modules
+      - bet-next-cache:/app/.next
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3100 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+
+  auctions:
+    build:
+      context: ./auctions
+      dockerfile: Dockerfile.dev
+    image: kalki-auctions:dev
+    container_name: kalki-auctions
+    restart: unless-stopped
+    networks: [kalki-net]
+    depends_on:
+      backend: { condition: service_started }
+    environment:
+      NODE_ENV: development
+      PORT: "3200"
+      NEXT_PUBLIC_BACKEND_URL: ${BACKEND_URL:-http://localhost:4000}
+      NEXT_PUBLIC_AUCTIONS_URL: ${AUCTIONS_URL:-http://localhost:3200}
+      NEXT_PUBLIC_AVIATOR_URL: ${AVIATOR_URL:-http://localhost:3000}
+      NEXT_PUBLIC_EXCHANGE_URL: ${EXCHANGE_URL:-http://localhost:3100}
+      NEXT_PUBLIC_ADMIN_URL: ${ADMIN_URL:-http://localhost:5173}
+      AUCTIONS_BACKEND_URL: http://backend:4000
+      NEXTAUTH_URL: ${AUCTIONS_URL:-http://localhost:3200}
+    ports:
+      - "${AUCTIONS_PORT:-3200}:3200"
+    volumes:
+      - ./auctions:/app
+      - auctions-node-modules:/app/node_modules
+      - auctions-next-cache:/app/.next
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3200 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  aviator:
+    build:
+      context: ./aviator
+      dockerfile: Dockerfile.dev
+    image: kalki-aviator:dev
+    container_name: kalki-aviator
+    restart: unless-stopped
+    networks: [kalki-net]
+    depends_on:
+      backend: { condition: service_started }
+    environment:
+      NODE_ENV: development
+      PORT: "3000"
+      NEXT_PUBLIC_API_URL: ${BACKEND_URL:-http://localhost:4000}
+      NEXT_PUBLIC_BACKEND_URL: ${BACKEND_URL:-http://localhost:4000}
+      NEXT_PUBLIC_AUCTIONS_URL: ${AUCTIONS_URL:-http://localhost:3200}
+      NEXT_PUBLIC_EXCHANGE_URL: ${EXCHANGE_URL:-http://localhost:3100}
+      NEXT_PUBLIC_AVIATOR_ROCKET: ${AVIATOR_ROCKET:-1}
+    ports:
+      - "${AVIATOR_PORT:-3000}:3000"
+    volumes:
+      - ./aviator:/app
+      - aviator-node-modules:/app/node_modules
+      - aviator-next-cache:/app/.next
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile.dev
+    image: kalki-admin:dev
+    container_name: kalki-admin
+    restart: unless-stopped
+    networks: [kalki-net]
+    depends_on:
+      backend: { condition: service_started }
+    environment:
+      NODE_ENV: development
+      VITE_API_BASE_URL: ${BACKEND_URL:-http://localhost:4000}
+      VITE_BET_BASE_URL: ${EXCHANGE_URL:-http://localhost:3100}
+    ports:
+      - "${ADMIN_PORT:-5173}:5173"
+    volumes:
+      - ./admin:/app
+      - admin-node-modules:/app/node_modules
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5173 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  # ─── Reverse proxy + admin UIs ──────────────────────────────────────────
+
+  proxy:
+    image: nginx:1.27-alpine
+    container_name: kalki-proxy
+    restart: unless-stopped
+    networks: [kalki-net]
+    depends_on:
+      - backend
+      - bet
+      - auctions
+      - aviator
+      - admin
+    ports:
+      - "${PROXY_HTTP_PORT:-8000}:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      # Probe the backend API behind the proxy. Cannot probe the
+      # bet root (`/`) because it 307s to `/en/` and the nginx:alpine
+      # image's `localhost` resolves to ::1 first (which nginx
+      # doesn't bind by default), so we hit 127.0.0.1 explicitly.
+      test: ["CMD-SHELL", "wget -qO/dev/null http://127.0.0.1/api/auctions || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  adminer:
+    # Lightweight Postgres GUI — log in with host=postgres,
+    # user=$POSTGRES_USER, db=uniquebid (or bet).
+    image: adminer:4-standalone
+    container_name: kalki-adminer
+    restart: unless-stopped
+    networks: [kalki-net]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: kalki-redis-commander
+    restart: unless-stopped
+    networks: [kalki-net]
+    depends_on:
+      redis: { condition: service_healthy }
+    environment:
+      REDIS_HOSTS: local:redis:6379
+      HTTP_USER: admin
+      HTTP_PASSWORD: admin
+    ports:
+      - "${REDIS_COMMANDER_PORT:-8081}:8081"

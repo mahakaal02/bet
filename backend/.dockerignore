@@ -1,0 +1,22 @@
+# Don't ship host build artefacts, secrets, or VCS metadata into the
+# build context. Everything listed here is recreated inside the image.
+node_modules
+dist
+coverage
+.nyc_output
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+.DS_Store
+.idea
+.vscode
+.git
+.gitignore
+.dockerignore
+Dockerfile*
+docker-compose*.y*ml
+uploads
+README.md
+ARCHITECTURE_AUDIT.md
