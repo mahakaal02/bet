@@ -169,8 +169,24 @@ export function LoginLanding({
 
   /* ============================================================
      COUNTERS (paidOut / playersOnline / activePred)
+     ------------------------------------------------------------
+     `paidOut` is shown DIVIDED BY 100 from the underlying locale
+     sample. The sample magnitudes were sized for a hypothetical
+     "all-product gross" view that overshot what we actually want
+     to advertise (e.g. India's ₹8,42,19,330 = ~₹8.4 crore). One-
+     hundredth of that lands in a more believable range (~₹8.4 lakh
+     in India, R$ ~218k in Brazil, etc.) without forking the locale
+     samples — those are still used elsewhere (crash pot, market
+     card "retail value") where the larger magnitudes are correct.
+
+     The ticking increment is similarly scaled — was rand(120, 8400)
+     per tick (which would have pushed ₹8.4 crore past ₹9 crore in
+     a minute); now rand(1, 84) per tick so the number visibly
+     moves but stays in the believable range.
      ============================================================ */
-  const [paidOut, setPaidOut] = useState(() => parseSample(locale.samples.paidOut));
+  const [paidOut, setPaidOut] = useState(
+    () => Math.floor(parseSample(locale.samples.paidOut) / 100),
+  );
   const [playersOnline, setPlayersOnline] = useState(14238);
   const [activePred, setActivePred] = useState(3841);
   const [loginOnline, setLoginOnline] = useState(412);
@@ -178,17 +194,70 @@ export function LoginLanding({
   // Reset paidOut base whenever the locale changes so the ticking
   // counter starts from a believable per-region magnitude.
   useEffect(() => {
-    setPaidOut(parseSample(locale.samples.paidOut));
+    setPaidOut(Math.floor(parseSample(locale.samples.paidOut) / 100));
   }, [locale.samples.paidOut]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
-      setPaidOut((v) => v + Math.floor(rand(120, 8400)));
+      setPaidOut((v) => v + Math.floor(rand(1, 84)));
       setPlayersOnline((v) => v + Math.floor(rand(-12, 38)));
       setActivePred((v) => Math.max(3200, v + Math.floor(rand(-4, 8))));
       setLoginOnline(Math.floor(rand(380, 470)));
     }, 1400);
     return () => window.clearInterval(id);
+  }, []);
+
+  /* ============================================================
+     LAST CRASH — wired to the aviator backend
+     ------------------------------------------------------------
+     The "Last crash" stat tile in the hero displays the most
+     recent CRASHED round's multiplier. Sourced from the public
+     endpoint at `/api/aviator/last-crash` (Next.js route handler
+     proxying to `${BACKEND}/aviator/public/last-crash`) so the
+     landing page — which is unauthenticated — can read it without
+     a session.
+
+     Polling cadence: 15s. Aviator rounds last ~5-12s between
+     crashes; 15s is the longest interval that still feels live
+     while keeping the request rate cheap (~4/min/visitor) and
+     well under the server-side throttle (30/min).
+
+     Initial state is `null` rather than a static fallback so the
+     UI can render an explicit em-dash when no published round
+     exists (fresh DB, pre-launch, or backend down) — accurate
+     placeholder beats a hard-coded number that pretends to be
+     live data.
+     ============================================================ */
+  const [lastCrashBackend, setLastCrashBackend] = useState<number | null>(
+    null,
+  );
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchOnce() {
+      try {
+        const res = await fetch("/api/aviator/last-crash", {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const body = (await res.json()) as { multiplier: string | null };
+        if (cancelled) return;
+        if (body.multiplier === null) {
+          setLastCrashBackend(null);
+        } else {
+          const n = Number(body.multiplier);
+          if (Number.isFinite(n)) setLastCrashBackend(n);
+        }
+      } catch {
+        // Network down / backend hiccup — leave the last good value
+        // in place. The next poll cycle will retry.
+      }
+    }
+    fetchOnce();
+    const id = window.setInterval(fetchOnce, 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
   }, []);
 
   /* ============================================================
@@ -205,7 +274,6 @@ export function LoginLanding({
   const [crashMult, setCrashMult] = useState(1.0);
   const [crashBusted, setCrashBusted] = useState(false);
   const [crashDelta, setCrashDelta] = useState("▲ +0.00x");
-  const [lastCrash, setLastCrash] = useState(18.24);
   const [playersIn, setPlayersIn] = useState(412);
   const [roundId, setRoundId] = useState(8421092);
   const fillId = useId();
@@ -246,7 +314,12 @@ export function LoginLanding({
     function bust() {
       busted = true;
       setCrashBusted(true);
-      setLastCrash(Number(mult.toFixed(2)));
+      // NOTE: `lastCrash` (the stat tile in the hero stat row) is NOT
+      // updated here anymore — it now reflects REAL aviator data from
+      // the backend (see the polling effect below). The hero crash
+      // chart's local simulation is purely a visual animation; using
+      // its busts to pretend "this was the last real crash" would
+      // contradict the actual data on the same page.
       setCrashDelta(`✕ ${mult.toFixed(2)}x`);
       if (crashLineRef.current) {
         crashLineRef.current.setAttribute("stroke", "#FF4D6D");
@@ -408,26 +481,69 @@ export function LoginLanding({
   }, [winnersPool, locale.currency, locale.samples.liquidity, locale.samples.retailValue]);
 
   /* ============================================================
-     TICKER — recompute when locale changes
+     TICKER — recompute when locale / winners pool changes
+     ------------------------------------------------------------
+     Amounts are random integers in [500, 96_000] formatted via
+     Intl in the active locale's numbering convention, then
+     prefixed with the locale's currency symbol.
+
+     Why we no longer pull from `locale.samples.{liquidity, …}`:
+     those were sized for "headline" amounts (single-bid retail
+     value, market liquidity) and skewed toward 10⁵–10⁷ magnitudes.
+     For per-winner ticker rows we want believable individual-
+     winning numbers — most users winning ₹500-₹95k feels real;
+     half the ticker showing ₹1.69 lakh wins reads like marketing
+     theatre.
+
+     The cap is a hardcoded 96_000 (raw integer) — the user's
+     spec said "<97,000 INR". For non-INR locales we let the
+     same integer ride through their `numberFmt`, which is
+     slightly inconsistent in purchasing-power terms (₹96k ≠
+     R$96k ≠ €96k) but consistent with everything else on the
+     page: the locale system here is a presentation skin, not a
+     real FX layer. When the backend feeds actual wins, those
+     will already be currency-correct.
+
+     The seeded `rand()` (mulberry32 keyed on the locale code +
+     pool index) keeps the same row showing the same amount
+     across re-renders within a locale; switching countries
+     reshuffles. Without the seed, every component re-render
+     would lottery a fresh set of numbers.
      ============================================================ */
   const tickerItems = useMemo(() => {
     const games = ["AVIATOR", "PREDICT", "UNIQUE BID"];
-    const amounts = [
-      locale.samples.liquidity,
-      locale.samples.bonus + ",000",
-      locale.samples.retailValue,
-      locale.samples.pot,
-      locale.samples.bonus + ",420",
-      locale.samples.liquidity,
-    ];
+    // Seed off the locale code so the same locale always shows the
+    // same row → amount mapping (stable on re-renders), but the
+    // numbers shift when the user switches countries.
+    const seedSource = `${country}::${winnersPool.length}`;
+    let seed = 0;
+    for (let i = 0; i < seedSource.length; i++) {
+      seed = (seed * 31 + seedSource.charCodeAt(i)) >>> 0;
+    }
+    function nextRand(): number {
+      // mulberry32 — small, fast, decent distribution.
+      seed = (seed + 0x6D2B79F5) >>> 0;
+      let t = seed;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+    }
+
     return winnersPool.map((who, i) => {
+      // [500, 96_000] inclusive on the lower bound, exclusive on the
+      // upper. floor() because partial currency units look fake here.
+      const amount = Math.floor(nextRand() * (96_000 - 500) + 500);
+      const formatted = formatNumber(amount, locale.numberFmt);
+      // Match the original spacing pattern (no space for the first
+      // currency, space otherwise) so symbols like "R$" / "MX$" /
+      // "AED " sit naturally next to the digits.
       const amt =
-        locale.currency + (i % 6 === 0 ? "" : " ") + amounts[i % amounts.length];
+        locale.currency + (i % 6 === 0 ? "" : " ") + formatted;
       const game = games[i % games.length];
       const ago = (((i * 7) % 9) + 1) + "m";
       return { who, amt, game, ago };
     });
-  }, [winnersPool, locale.currency, locale.samples]);
+  }, [winnersPool, locale.currency, locale.numberFmt, country]);
 
   /* ============================================================
      LOGIN FORM
@@ -741,8 +857,19 @@ export function LoginLanding({
               <div className="stat">
                 <div className="stat-label">{t("stat_last_crash")}</div>
                 <div className="stat-value gold">
-                  {lastCrash.toFixed(2)}
-                  <span style={{ fontSize: 14, opacity: 0.7 }}>x</span>
+                  {/* Real value from /api/aviator/last-crash. While the
+                      first poll is in flight (or backend is empty /
+                      down) we render an em-dash rather than a fake
+                      static "18.24" — accurate placeholder beats
+                      believable-looking lies. */}
+                  {lastCrashBackend === null ? (
+                    "—"
+                  ) : (
+                    <>
+                      {lastCrashBackend.toFixed(2)}
+                      <span style={{ fontSize: 14, opacity: 0.7 }}>x</span>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="stat">
