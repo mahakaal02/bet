@@ -6,6 +6,7 @@ import { AviatorService } from './aviator.service';
 import { FairnessStore } from './fairness-store';
 import { AviatorChatService } from './chat.service';
 import { PlaceAviatorBetDto, SendChatMessageDto } from './dto/aviator.dto';
+import { DenyImpersonated } from '../foundation/decorators/deny-impersonated.decorator';
 
 @UseGuards(JwtAuthGuard)
 @Controller('aviator')
@@ -21,6 +22,10 @@ export class AviatorController {
     return { demoBalance: await this.aviator.getBalance(user.id) };
   }
 
+  // Bet placement + cashout move real money; deny while impersonating
+  // (PR-ARCH-AUDIT, Stage A). Read-only endpoints below stay open so
+  // the admin can see what the user sees.
+  @DenyImpersonated()
   @Throttle({ bid: { limit: 5, ttl: 10_000 } })
   @Post('bet')
   async placeBet(@CurrentUser() user: AuthedUser, @Body() dto: PlaceAviatorBetDto) {
@@ -32,6 +37,7 @@ export class AviatorController {
     );
   }
 
+  @DenyImpersonated()
   @Throttle({ bid: { limit: 10, ttl: 10_000 } })
   @Post('cashout')
   async cashout(@CurrentUser() user: AuthedUser) {
