@@ -4,11 +4,12 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
-import { NotificationChannel } from '@prisma/client';
+import { NotificationChannel, OutboxKind } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BetWalletService } from '../bet-wallet/bet-wallet.service';
 import { SettingsService } from '../foundation/settings.service';
 import { NotificationService } from '../foundation/notification.service';
+import { OutboxService } from '../foundation/outbox.service';
 
 /**
  * Daily-login streak rewards (Roadmap §F-USER-8).
@@ -103,6 +104,11 @@ export class DailyLoginService {
     private readonly betWallet: BetWalletService,
     private readonly settings: SettingsService,
     private readonly notifications: NotificationService,
+    // PR-ARCH-AUDIT Stage F — credit via outbox so a Bet outage at
+    // midnight UTC doesn't orphan claim rows. Before this change,
+    // the claim row would persist with no wallet credit and only
+    // the nightly reconciliation sweep could spot the drift.
+    private readonly outbox: OutboxService,
   ) {}
 
   async getState(userId: string, now = new Date()) {
@@ -162,11 +168,13 @@ export class DailyLoginService {
       newDayNumber: projected.dayNumber,
     });
 
-    // Persist the claim + advance the DailyLogin row atomically.
-    // The wallet credit is OUTSIDE the transaction so a wallet-host
-    // outage doesn't roll back the claim — better to have the claim
-    // recorded + retry the credit later than to keep retrying the
-    // whole flow and produce duplicate claims.
+    // Persist the claim + advance the DailyLogin row + enqueue the
+    // wallet credit in one transaction (PR-ARCH-AUDIT, Stage F —
+    // migrated from inline betWallet.credit() to the outbox pattern
+    // referrals already uses). If Bet is down at midnight UTC, the
+    // claim still records and the outbox dispatcher retries the
+    // credit on a backoff. Idempotency on `reference` ensures no
+    // double-credit on retry.
     const claim = await this.prisma.$transaction(async (tx) => {
       const created = await tx.dailyLoginClaim.create({
         data: {
@@ -190,31 +198,25 @@ export class DailyLoginService {
           streakFreezes: newStreakFreezes,
         },
       });
+      await this.outbox.enqueue(tx, {
+        kind: OutboxKind.BET_WALLET_CREDIT,
+        sourceTable: 'DailyLoginClaim',
+        sourceId: created.id,
+        payload: {
+          userId,
+          amount: reward.coins,
+          kind: 'daily_login',
+          reference: `daily_login:${created.id}`,
+          metadata: {
+            dayNumber: projected.dayNumber,
+            bonus: reward.bonus ?? null,
+            claimDateUtc: todayUtc.toISOString(),
+          },
+        },
+        idempotencyKey: `daily_login:${created.id}`,
+      });
       return created;
     });
-
-    try {
-      await this.betWallet.credit({
-        userId,
-        amount: reward.coins,
-        kind: 'daily_login',
-        reference: `daily_login:${claim.id}`,
-        metadata: {
-          dayNumber: projected.dayNumber,
-          bonus: reward.bonus ?? null,
-          claimDateUtc: todayUtc.toISOString(),
-        },
-      });
-    } catch (err) {
-      // We deliberately do NOT roll back the claim row — keeping it
-      // means a retry of the credit (manual or future job) will be
-      // idempotent under the `reference` key. The error surfaces to
-      // the caller so the UI can show a retry CTA.
-      this.logger.error(
-        `wallet credit failed for daily login claim ${claim.id}: ${(err as Error).message}`,
-      );
-      throw err;
-    }
 
     // Best-effort notification. Fire-and-forget so a notification
     // failure can never break the claim flow.

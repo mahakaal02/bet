@@ -196,25 +196,33 @@ function makeService(opts: Parameters<typeof makePrismaMock>[0] = {}) {
   const notifications = {
     enqueue: jest.fn(async (_args: any) => [] as unknown[]),
   };
+  // PR-ARCH-AUDIT Stage F — daily-login now enqueues an outbox row
+  // instead of calling betWallet.credit() inline.
+  const outbox = {
+    enqueue: jest.fn(async (_tx: any, _row: any) => ({ id: 'outbox-1' })),
+  };
   const svc = new DailyLoginService(
     prisma as any,
     betWallet as any,
     settings as any,
     notifications as any,
+    outbox as any,
   );
-  return { svc, prisma, betWallet, notifications };
+  return { svc, prisma, betWallet, notifications, outbox };
 }
 
 describe('DailyLoginService.claim', () => {
-  it('first-ever claim → day 1, credits coins, advances row', async () => {
-    const { svc, prisma, betWallet } = makeService({ row: null });
+  it('first-ever claim → day 1, enqueues credit, advances row', async () => {
+    const { svc, prisma, outbox } = makeService({ row: null });
     const res = await svc.claim('u-1', TODAY);
     expect(res.dayNumber).toBe(1);
     expect(res.rewardCoins).toBe(50);
     expect(prisma._claims()).toHaveLength(1);
     expect(prisma._claims()[0].claimDateUtc.getTime()).toBe(TODAY_UTC.getTime());
-    expect(betWallet.credit).toHaveBeenCalledTimes(1);
-    expect(betWallet.credit.mock.calls[0][0].reference).toBe(
+    // Outbox row enqueued in the same transaction; dispatcher will
+    // call Bet asynchronously with full idempotency on the reference.
+    expect(outbox.enqueue).toHaveBeenCalledTimes(1);
+    expect(outbox.enqueue.mock.calls[0][1].payload.reference).toBe(
       'daily_login:c-1',
     );
     expect(prisma._dailyRow().streak).toBe(1);
@@ -234,15 +242,22 @@ describe('DailyLoginService.claim', () => {
     );
   });
 
-  it('keeps the claim row even if the wallet credit fails', async () => {
-    const { svc, prisma, betWallet } = makeService({ row: null });
-    betWallet.credit.mockImplementationOnce(async () => {
-      throw new Error('bet host 500');
-    });
-    await expect(svc.claim('u-1', TODAY)).rejects.toThrow('bet host 500');
-    // Claim row persists → retry of the credit is idempotent under
-    // the daily_login:<id> reference.
+  it('claim + outbox enqueue are in one transaction (atomic vs bet outage)', async () => {
+    // PR-ARCH-AUDIT Stage F — replaces the legacy "credit fails ⇒
+    // claim persists" path with outbox semantics. Now the claim and
+    // the outbox row land together, atomically: if Bet is down at
+    // midnight UTC the claim STILL exists, the outbox dispatcher
+    // retries the credit on its own backoff, and reconciliation has
+    // an authoritative source of truth (the outbox row) for what
+    // SHOULD have been credited.
+    const { svc, prisma, outbox } = makeService({ row: null });
+    await svc.claim('u-1', TODAY);
     expect(prisma._claims()).toHaveLength(1);
+    expect(outbox.enqueue).toHaveBeenCalledTimes(1);
+    // The outbox row's idempotencyKey is the claim id — retries by
+    // the dispatcher are deduped at Bet's wallet level on the
+    // `reference` we ship inside the payload.
+    expect(outbox.enqueue.mock.calls[0][1].idempotencyKey).toBe('daily_login:c-1');
   });
 
   it('14-day milestone earns a freeze', async () => {
