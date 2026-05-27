@@ -1,4 +1,5 @@
 import { Module, Provider } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaModule } from '../prisma/prisma.module';
 import { FoundationModule } from '../foundation/foundation.module';
 import { KycService } from './kyc.service';
@@ -26,26 +27,33 @@ import { KmsDocumentCipher, LocalKeyDocumentCipher } from './document-cipher';
  * built against it.
  */
 
+// Adapter selection via ConfigService (PR-ARCH-AUDIT, Stage F) — was
+// reading process.env directly. ConfigService is preferred so tests
+// can override via the ConfigModule's `load` factories and so the
+// rest of the app uses one config-access pattern.
 const storageProvider: Provider = {
   provide: KYC_STORAGE,
-  useFactory: () => {
-    const driver = process.env.KYC_STORAGE_DRIVER ?? 'disk';
+  inject: [ConfigService],
+  useFactory: (config: ConfigService) => {
+    const driver = config.get<string>('KYC_STORAGE_DRIVER') ?? 'disk';
     return driver === 's3' ? new S3KycStorage() : new DiskKycStorage();
   },
 };
 
 const scannerProvider: Provider = {
   provide: VIRUS_SCANNER,
-  useFactory: () => {
-    const driver = process.env.KYC_VIRUS_SCANNER ?? 'stub';
+  inject: [ConfigService],
+  useFactory: (config: ConfigService) => {
+    const driver = config.get<string>('KYC_VIRUS_SCANNER') ?? 'stub';
     return driver === 'clamav' ? new ClamAvVirusScanner() : new StubVirusScanner();
   },
 };
 
 const cipherProvider: Provider = {
   provide: DOCUMENT_CIPHER,
-  useFactory: () => {
-    const driver = process.env.KYC_CIPHER_DRIVER ?? 'local';
+  inject: [ConfigService],
+  useFactory: (config: ConfigService) => {
+    const driver = config.get<string>('KYC_CIPHER_DRIVER') ?? 'local';
     return driver === 'kms' ? new KmsDocumentCipher() : new LocalKeyDocumentCipher();
   },
 };

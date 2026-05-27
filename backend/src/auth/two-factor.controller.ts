@@ -11,6 +11,7 @@ import { IsString, MaxLength, MinLength } from 'class-validator';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { AuthedUser, CurrentUser } from './current-user.decorator';
 import { TwoFactorService } from './two-factor.service';
+import { DenyImpersonated } from '../foundation/decorators/deny-impersonated.decorator';
 
 /**
  * Authenticated 2FA endpoints (Roadmap §F-USER-9). The intermediate
@@ -51,6 +52,10 @@ export class TwoFactorController {
     return this.twoFactor.status(user.id);
   }
 
+  // 2FA mutations change the user's auth posture; an impersonating
+  // admin must NOT be able to enroll, verify, disable, or rotate
+  // backup codes (PR-ARCH-AUDIT, Stage A). Status read is allowed.
+  @DenyImpersonated()
   @Throttle({ '2fa_enroll': { limit: 10, ttl: 60_000 } })
   @HttpCode(200)
   @Post('enroll')
@@ -59,6 +64,7 @@ export class TwoFactorController {
     return this.twoFactor.beginEnrollment(user.id, label);
   }
 
+  @DenyImpersonated()
   @Throttle({ '2fa_verify': { limit: 10, ttl: 60_000 } })
   @HttpCode(200)
   @Post('verify')
@@ -70,6 +76,7 @@ export class TwoFactorController {
     return { ok: true };
   }
 
+  @DenyImpersonated()
   @Throttle({ '2fa_disable': { limit: 10, ttl: 60_000 } })
   @HttpCode(200)
   @Post('disable')
@@ -81,6 +88,7 @@ export class TwoFactorController {
     return { ok: true };
   }
 
+  @DenyImpersonated()
   @Throttle({ '2fa_codes': { limit: 5, ttl: 60_000 } })
   @HttpCode(200)
   @Post('backup-codes/regenerate')

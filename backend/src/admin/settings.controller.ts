@@ -8,16 +8,14 @@ import {
   Patch,
   Query,
   Req,
-  UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { SettingType, SystemSetting } from '@prisma/client';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AdminGuard } from './admin.guard';
 import { AuthedUser, CurrentUser } from '../auth/current-user.decorator';
 import { AuditLogService } from '../foundation/audit-log.service';
 import { SettingsService } from '../foundation/settings.service';
+import { Perm } from './perms.guard';
 
 /**
  * Admin runtime-settings API. Drives the `/settings` page in the
@@ -83,7 +81,10 @@ class UpdateSettingDto {
   reason?: string;
 }
 
-@UseGuards(JwtAuthGuard, AdminGuard)
+// PR-ARCH-AUDIT Stage C: migrated to @Perm(). Reads need
+// settings.view; writes need settings.edit. Critical-key behaviour
+// (two-admin approval) is deferred to a follow-up PR per the
+// CRITICAL_KEYS hint at the top of this file.
 @Controller('admin/settings')
 export class SettingsController {
   constructor(
@@ -91,6 +92,7 @@ export class SettingsController {
     private readonly audit: AuditLogService,
   ) {}
 
+  @Perm('settings.view')
   @Get()
   async list() {
     const rows = await this.settings.list();
@@ -110,6 +112,7 @@ export class SettingsController {
     };
   }
 
+  @Perm('settings.view')
   @Get(':key/history')
   async history(
     @Param('key') key: string,
@@ -131,6 +134,7 @@ export class SettingsController {
 
   // Throttled so a mis-clicking admin (or a script) can't thrash
   // wallet caps. 6/min/admin is plenty for human-paced edits.
+  @Perm('settings.edit')
   @Throttle({ default: { limit: 6, ttl: 60_000 } })
   @Patch(':key')
   async update(

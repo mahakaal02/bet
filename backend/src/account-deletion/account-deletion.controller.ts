@@ -14,6 +14,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthedUser, CurrentUser } from '../auth/current-user.decorator';
 import { AccountDeletionService } from './account-deletion.service';
+import { DenyImpersonated } from '../foundation/decorators/deny-impersonated.decorator';
 
 /**
  * Authenticated deletion + export endpoints. Roadmap §F-USER-12.
@@ -43,6 +44,11 @@ export class AccountDeletionController {
     return this.service.status(user.id);
   }
 
+  // Irreversible-after-30d actions must not be reachable while an
+  // admin is impersonating (PR-ARCH-AUDIT, Stage A). Status read +
+  // data export are intentionally NOT denied — admins need to see
+  // the deletion state and (in support contexts) help export data.
+  @DenyImpersonated()
   @Throttle({ acct_del_request: { limit: 3, ttl: 60_000 } })
   @HttpCode(200)
   @Post('me/account-deletion')
@@ -53,6 +59,7 @@ export class AccountDeletionController {
     return this.service.request(user.id, dto.reason);
   }
 
+  @DenyImpersonated()
   @Throttle({ acct_del_cancel: { limit: 5, ttl: 60_000 } })
   @HttpCode(200)
   @Post('me/account-deletion/cancel')

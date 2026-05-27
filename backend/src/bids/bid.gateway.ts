@@ -8,7 +8,7 @@ import {
 } from '@nestjs/websockets';
 import Decimal from 'decimal.js';
 import { WebSocket, WebSocketServer as WsServer } from 'ws';
-import { JwtPayload } from '../auth/auth.service';
+import { AuthService, JwtPayload } from '../auth/auth.service';
 import { BidsService } from './bids.service';
 import { BidEventsService } from './bid-events.service';
 import { classifyBidFor } from './bidding-engine';
@@ -53,6 +53,10 @@ export class BidGateway implements OnGatewayConnection, OnGatewayDisconnect, OnM
     private readonly jwt: JwtService,
     private readonly bids: BidsService,
     private readonly events: BidEventsService,
+    // PR-ARCH-AUDIT Stage F — use AuthService.validateJwt so a
+    // password-reset's `passwordChangedAt` bump invalidates any
+    // live WS subscription, not just future REST calls.
+    private readonly auth: AuthService,
   ) {}
 
   onModuleInit() {
@@ -84,7 +88,13 @@ export class BidGateway implements OnGatewayConnection, OnGatewayDisconnect, OnM
     try {
       switch (msg.type) {
         case 'subscribe': {
+          // Two-step verification (PR-ARCH-AUDIT, Stage F):
+          //   1. JWT signature + expiry via jwt.verify().
+          //   2. passwordChangedAt + RG check via auth.validateJwt().
+          // Step 2 is what catches a token that's cryptographically
+          // valid but stale (user just rotated their password).
           const payload = this.jwt.verify<JwtPayload>(msg.token);
+          await this.auth.validateJwt(payload);
           state.userId = payload.sub;
           state.auctionId = msg.auctionId;
           this.send(client, { type: 'subscribed', auctionId: msg.auctionId });

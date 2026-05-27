@@ -11,6 +11,7 @@ import { OUTBOX_DISPATCHER_REGISTRY } from './outbox-dispatcher';
 import { BetWalletDebitDispatcher } from './outbox-dispatchers/bet-wallet-debit.dispatcher';
 import { BetWalletCreditDispatcher } from './outbox-dispatchers/bet-wallet-credit.dispatcher';
 import { RolesGuard } from './roles.guard';
+import { ImpersonationScopeGuard } from './guards/impersonation-scope.guard';
 
 /**
  * Foundation module — the shared substrate every feature-area
@@ -63,6 +64,7 @@ import { RolesGuard } from './roles.guard';
       inject: [BetWalletDebitDispatcher, BetWalletCreditDispatcher],
     },
     RolesGuard,
+    ImpersonationScopeGuard,
   ],
   exports: [
     FeatureFlagService,
@@ -71,6 +73,7 @@ import { RolesGuard } from './roles.guard';
     NotificationService,
     OutboxService,
     RolesGuard,
+    ImpersonationScopeGuard,
   ],
 })
 export class FoundationModule {}

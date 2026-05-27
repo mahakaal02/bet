@@ -7,16 +7,14 @@ import {
   Post,
   Query,
   Req,
-  UseGuards,
   NotFoundException,
 } from '@nestjs/common';
 import { IsEnum } from 'class-validator';
 import { Role } from '@prisma/client';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AdminGuard } from './admin.guard';
 import { AuthedUser, CurrentUser } from '../auth/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../foundation/audit-log.service';
+import { Perm } from './perms.guard';
 
 /**
  * RBAC admin API. Drives the `/roles` admin SPA page where an
@@ -42,7 +40,11 @@ class GrantRevokeDto {
   role!: Role;
 }
 
-@UseGuards(JwtAuthGuard, AdminGuard)
+// PR-ARCH-AUDIT Stage C: migrated from AdminGuard-only to per-method
+// @Perm() so granting/revoking roles can be delegated to a dedicated
+// "RBAC manager" role in the future without giving them full admin
+// god-mode. Read endpoints get role.view; mutating endpoints get
+// role.grant / role.revoke.
 @Controller('admin/roles')
 export class AdminRolesController {
   constructor(
@@ -56,6 +58,7 @@ export class AdminRolesController {
    * plain ILIKE prefix match against email + username + display
    * name is fast enough, max 20 results.
    */
+  @Perm('role.view')
   @Get('users')
   async searchUsers(@Query('q') q: string) {
     const query = (q ?? '').trim();
@@ -98,6 +101,7 @@ export class AdminRolesController {
    * grants. Revoked grants are kept (soft delete) so the audit
    * trail shows when each role was held.
    */
+  @Perm('role.view')
   @Get('users/:id')
   async getUser(@Param('id') id: string) {
     const user = await this.prisma.user.findUnique({
@@ -135,6 +139,7 @@ export class AdminRolesController {
     };
   }
 
+  @Perm('role.grant')
   @Post('users/:id/grant')
   async grant(
     @Param('id') userId: string,
@@ -193,6 +198,7 @@ export class AdminRolesController {
     return { ok: true, role: dto.role, activeRoles: after.map((g) => g.role) };
   }
 
+  @Perm('role.revoke')
   @Post('users/:id/revoke')
   async revoke(
     @Param('id') userId: string,
@@ -249,6 +255,7 @@ export class AdminRolesController {
   }
 
   /** All known roles — drives the role-picker dropdown in the UI. */
+  @Perm('role.view')
   @Get()
   listRoles() {
     return { roles: Object.values(Role) };

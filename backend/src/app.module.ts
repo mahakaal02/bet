@@ -34,6 +34,7 @@ import { CsvModule } from './csv/csv.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { StorageModule } from './storage/storage.module';
+import { ImpersonationScopeGuard } from './foundation/guards/impersonation-scope.guard';
 
 @Module({
   imports: [
@@ -77,6 +78,13 @@ import { StorageModule } from './storage/storage.module';
     CampaignsModule,
     StorageModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Global enforcement of @DenyImpersonated() (PR-ARCH-AUDIT,
+    // Stage A). The guard reads metadata via Reflector — if the
+    // route lacks @DenyImpersonated, this is a no-op. Routes that
+    // carry it 403 any JWT with `purpose: 'impersonation'`.
+    { provide: APP_GUARD, useClass: ImpersonationScopeGuard },
+  ],
 })
 export class AppModule {}
