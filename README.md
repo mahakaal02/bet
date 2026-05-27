@@ -1,50 +1,54 @@
-# UniqueBid
+# Kalki Bet
 
-Slices 1–5 are in. The system has:
+A monorepo for the Kalki Bet platform:
 
-- a NestJS backend with the lowest-unique-bid engine, rate limiting, an
-  auto-close scheduler, FCM-ready notifications, and Razorpay coin purchases
-- a Jetpack Compose Android app with auto-reconnecting WebSocket bid status
-  and end-to-end Razorpay Checkout integration
-- a Vite + React admin dashboard for coin economy, auction CRUD, and coin
-  pack CRUD
+- **`backend/`** — NestJS API (auctions, bidding engine, wallet, aviator
+  crash engine, KYC, notifications, payments)
+- **`bet/`** — Next.js 15 prediction-market app
+- **`auctions/`** — Next.js 15 auctions hub / SSO landing
+- **`aviator/`** — Next.js 15 crash game
+- **`admin/`** — Vite + React operator dashboard
+- **`app/`** — Android app (Jetpack Compose, min SDK 26)
+- **`ios/`** — iOS app
 
-## Layout
+## Run the entire backend + web stack — one command
 
-- `app/` — Android app (Jetpack Compose, min SDK 26)
-- `backend/` — NestJS API
-- `admin/` — Vite + React admin dashboard
-
-## Run it end-to-end
-
-### Backend
+The whole platform (postgres, redis, all 5 services, reverse proxy,
+mailpit, adminer) runs in Docker. Host requirements: **Docker** and
+**Docker Compose v2**. Nothing else.
 
 ```bash
-cd backend
+git clone https://github.com/mahakaal02/bet.git
+cd bet
 cp .env.example .env
-npm install
-docker compose up -d                       # Postgres + Redis
-npx prisma migrate dev --name slice5       # picks up DeviceToken model
-npm run prisma:seed
-npm test                                   # bidding-engine unit tests
-npm run start:dev                          # :4000
+docker compose up -d --build
+# wait ~3-5 min on first run, ~30s subsequently
 ```
 
-### Admin dashboard
+Then open:
+
+- <http://localhost:8000> — unified proxy
+- <http://localhost:8000/admin/> — operator SPA (admin@kalki.local / password12345 after `make -f Makefile.dev seed`)
+- <http://localhost:8080> — Adminer (Postgres GUI)
+- <http://localhost:8025> — Mailpit (captured outbound mail)
+
+Full setup, troubleshooting, architecture diagram, hot-reload notes,
+database operations, and rebuild instructions live in **[DOCKER.md](DOCKER.md)**.
+
+Convenience wrappers (all do the same thing):
 
 ```bash
-cd admin
-npm install
-npm run dev                                # :5173, proxies /api → :4000
+make -f Makefile.dev up         # Linux / macOS / WSL
+.\scripts\dev.ps1 up            # Windows PowerShell
+./scripts/dev.sh up             # POSIX
 ```
 
-Open <http://localhost:5173>, sign in as `admin@kalki.local` / `password12345`,
-create auctions, tune coin economy.
+### Android / iOS
 
-### Android app
-
-Open `First App/` in Android Studio. Run on the emulator (debug build points
-at `10.0.2.2:4000`). Sign in as `user1@kalki.local` / `password12345`.
+Not Docker-driven — open `app/` in Android Studio or `ios/` in Xcode.
+The Android emulator's `10.0.2.2` resolves to the host, so debug builds
+hit the backend running in Docker. Sign in as
+`user1@kalki.local` / `password12345` after running the seed.
 
 ## What's new
 

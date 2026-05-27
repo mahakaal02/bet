@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import "@/lib/boot";
 import { SessionProvider } from "@/components/SessionProvider";
@@ -11,6 +12,31 @@ import {
   isLocale,
   type Locale,
 } from "@/lib/i18n";
+
+/**
+ * Inter + JetBrains Mono via next/font/google.
+ *
+ * next/font self-hosts the font files at build time, so the dev
+ * server downloads them once and serves them from /_next/static
+ * thereafter — no FOUT, no Google Fonts fetch from the browser,
+ * no privacy leak. The CSS variables `--font-inter` and
+ * `--font-jetbrains-mono` are wired into the `--font-sans` /
+ * `--font-mono` stacks in globals.css.
+ *
+ * `display: "swap"` so the system fallback shows immediately on
+ * cold load and the real font swaps in once downloaded (better
+ * than `block` which can flash invisible text for up to 3s).
+ */
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+});
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-jetbrains-mono",
+});
 
 /** Mobile viewport. Without this, Next.js doesn't emit a viewport meta
  *  and iOS Safari falls back to the 980px virtual viewport — every page
@@ -78,8 +104,12 @@ export default async function RootLayout({
   const dir = dirForLocale(locale);
 
   return (
-    <html lang={locale} dir={dir} className="dark">
-      <body className="min-h-screen">
+    <html
+      lang={locale}
+      dir={dir}
+      className={`dark ${inter.variable} ${jetbrainsMono.variable}`}
+    >
+      <body className="min-h-screen font-sans antialiased">
         <SessionProvider>
           {children}
           <Toaster />

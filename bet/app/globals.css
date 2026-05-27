@@ -1,30 +1,125 @@
 @import "tailwindcss";
 
+/* ============================================================
+   Unified Kalki design tokens — premium fintech.
+
+   Bet (the exchange) now shares the same base palette as the
+   auctions hub and aviator. The intent stated in the original
+   auctions/aviator globals.css was always to feel like one
+   product; this file completes that alignment.
+
+   Inspirations: Mercury (dark navy + tabular numerics), Stripe
+   (gradient mesh hero), Robinhood (signature accent + restrained
+   chrome), Phantom (glass cards over deep blue).
+
+   Token names from auctions/aviator are mirrored verbatim so an
+   edit to either side reaches all three surfaces. Bet-specific
+   semantic aliases (--color-bg-card, --color-yes, etc.) are
+   re-bound to the shared palette so existing bet code paths
+   keep working unchanged.
+   ============================================================ */
 @theme {
-  --color-bg: #07090e;
-  --color-bg-elev: #0d1117;
-  --color-bg-card: #11161f;
-  --color-border: #1f2937;
-  --color-border-strong: #334155;
-  --color-text: #e5e7eb;
-  --color-text-dim: #94a3b8;
-  --color-text-faint: #64748b;
-  --color-accent: #22d3ee;
-  --color-accent-2: #818cf8;
-  --color-yes: #10b981;
-  --color-no: #ef4444;
-  --color-yes-bg: rgba(16, 185, 129, 0.12);
-  --color-no-bg: rgba(239, 68, 68, 0.12);
+  /* Surfaces — deep navy, three lift levels */
+  --color-bg:        #0B1020;
+  --color-surface:   #121A2F;
+  --color-elevated:  #1A2542;
+  --color-overlay:   rgba(10, 16, 36, 0.72);
+
+  /* Brand accents — premium cyan + indigo gradient pair */
+  --color-cyan:           #22D3EE;
+  --color-cyan-deep:      #06B6D4;
+  --color-indigo:         #818CF8;
+  --color-indigo-deep:    #6366F1;
+
+  /* Semantic — yes/no / win/loss */
+  --color-neon-green:      #2EE59D;
+  --color-neon-green-deep: #18C37E;
+  --color-accent-red:      #FF4D5A;
+  --color-accent-red-deep: #E53947;
+  --color-accent-orange:   #FF8C42;
+
+  /* Typography */
+  --color-text-primary:   #F5F7FF;
+  --color-text-secondary: #AAB3CC;
+  --color-text-muted:     #6F7A99;
+  --color-text-faint:     #4B5572;
+
+  /* Strokes & dividers — low-contrast, premium feel */
+  --color-divider:        rgba(255, 255, 255, 0.06);
+  --color-divider-strong: rgba(255, 255, 255, 0.10);
+
+  /* Bet legacy aliases — kept so any code that still references
+     them flips to the unified palette automatically. */
+  --color-bg-elev:      var(--color-surface);
+  --color-bg-card:      var(--color-elevated);
+  --color-border:       var(--color-divider);
+  --color-border-strong: var(--color-divider-strong);
+  --color-text:         var(--color-text-primary);
+  --color-text-dim:     var(--color-text-secondary);
+  --color-accent:       var(--color-cyan);
+  --color-accent-2:     var(--color-indigo);
+  --color-yes:          var(--color-neon-green);
+  --color-no:           var(--color-accent-red);
+  --color-yes-bg:       rgba(46, 229, 157, 0.10);
+  --color-no-bg:        rgba(255, 77, 90, 0.10);
+
+  /* Typography stacks. Inter is loaded via next/font in
+     app/layout.tsx — `--font-inter` is the CSS variable that
+     next/font emits, and we fall back to the system stack so
+     dev cold-starts never see a FOUT. */
+  --font-sans:
+    var(--font-inter), Inter, ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
 }
 
+/* ============================================================
+   Document-level chrome — the "premium" envelope.
+
+   The body has a fixed dark navy fill plus two radial highlights
+   at the top corners (cyan on the left, indigo on the right).
+   This is the same trick Stripe / Mercury / Phantom use to give
+   their hero a sense of depth without resorting to a heavy
+   image. Layered with `attachment: fixed` so the glow stays
+   anchored as the user scrolls — looks like ambient lighting
+   instead of a tiled pattern.
+
+   Font features: `cv11` is Inter's single-storey `a` (the more
+   "fintech" feel — matches Linear / Mercury / Vercel), `tnum`
+   pins numeric columns so a row of changing prices doesn't
+   shift width as digits update.
+   ============================================================ */
 html,
 body {
   background: var(--color-bg);
-  color: var(--color-text);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  font-feature-settings: "cv11", "ss03", "ss07", "ss08", "tnum";
+}
+
+body {
+  min-height: 100dvh;
+  background-color: var(--color-bg);
+  /* Premium ambient glow — two soft radials anchored to the top
+     corners. Numbers tuned so the glow disappears below the fold
+     and never competes with content for attention. */
+  background-image:
+    radial-gradient(
+      900px circle at 15% -10%,
+      rgba(34, 211, 238, 0.10),
+      transparent 60%
+    ),
+    radial-gradient(
+      900px circle at 92% -5%,
+      rgba(129, 140, 248, 0.10),
+      transparent 60%
+    );
+  background-attachment: fixed;
+  background-repeat: no-repeat;
 }
 
 * {
@@ -42,82 +137,212 @@ button {
   font: inherit;
 }
 
+/* Tabular numerics on every price / coin / pct number so columns
+   line up cleanly. Tailwind's `tabular-nums` utility does the
+   same, but defaulting it document-wide stops new components
+   from shipping wobbly tables. */
+.tabular,
+table,
+th,
+td {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   Premium focus ring.
+
+   Every focus-visible element gets a 2-px cyan halo with a soft
+   outer glow. Replaces the browser-default blue outline which
+   never matches a dark theme.
+   ============================================================ */
+:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(11, 16, 32, 1),
+    0 0 0 4px rgba(34, 211, 238, 0.55),
+    0 0 16px rgba(34, 211, 238, 0.25);
+  border-radius: 6px;
+}
+
+/* ============================================================
+   Custom scrollbars — refined dark-mode bars, NOT a giant
+   block. Width 8px (was 10), thumb uses divider color so it
+   recedes until hover. Firefox gets the equivalent via
+   `scrollbar-color`.
+   ============================================================ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-divider-strong) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1f2937;
+  background: var(--color-divider-strong);
   border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: rgba(255, 255, 255, 0.18);
+  background-clip: padding-box;
 }
 
-/* Glassmorphism card. Used by <Card variant="glass">. */
+/* Selection — accented to match the brand */
+::selection {
+  background: rgba(34, 211, 238, 0.28);
+  color: var(--color-text-primary);
+}
+
+/* ============================================================
+   Cards & glass
+
+   `.glass` is the premium card style: very subtle border, soft
+   inner shimmer at the top edge (mimics light catching a glass
+   pane), and a faint shadow underneath for separation. Used by
+   `<Card variant="glass">`. The shimmer is a tiny linear
+   gradient on the border, not a separate element, so it stays
+   GPU-cheap.
+   ============================================================ */
 .glass {
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.04),
-    rgba(255, 255, 255, 0.01)
-  );
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.04) 0%,
+      rgba(255, 255, 255, 0.015) 40%,
+      rgba(255, 255, 255, 0.01) 100%
+    ),
+    var(--color-elevated);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid var(--color-divider);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px 0 rgba(0, 0, 0, 0.30),
+    0 12px 24px -12px rgba(0, 0, 0, 0.45);
+  border-radius: 14px;
 }
 
-/* Premium price ticker — slight glow on green/red. */
+/* Compact card variant for dense lists (orderbook rows, etc) */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: 10px;
+}
+
+/* ============================================================
+   Price tickers — refined glow.
+
+   The old ticker glow was a 12-px radial that bled into adjacent
+   rows on dense tables. New version: 8-px halo at lower opacity,
+   plus a font-weight bump on the digit so the bias is in the
+   typography, not the shadow. Still reads as "live data".
+   ============================================================ */
 .ticker-up {
-  color: var(--color-yes);
-  text-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
+  color: var(--color-neon-green);
+  text-shadow: 0 0 8px rgba(46, 229, 157, 0.40);
+  font-weight: 600;
 }
 .ticker-down {
-  color: var(--color-no);
-  text-shadow: 0 0 12px rgba(239, 68, 68, 0.45);
+  color: var(--color-accent-red);
+  text-shadow: 0 0 8px rgba(255, 77, 90, 0.40);
+  font-weight: 600;
 }
 
+/* ============================================================
+   Gradient accents — used by hero text, buy buttons,
+   the wallet pill, etc. The two pairs (cyan→indigo and
+   green→cyan) cover every brand surface; everything else
+   should compose from them.
+   ============================================================ */
 .gradient-accent {
-  background: linear-gradient(135deg, #22d3ee 0%, #818cf8 100%);
+  background: linear-gradient(135deg, var(--color-cyan) 0%, var(--color-indigo) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
-/* Skeleton loader pulse */
-@keyframes pulse-bg {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-.skeleton {
-  background: #1a212c;
-  border-radius: 8px;
-  animation: pulse-bg 1.5s ease-in-out infinite;
+.gradient-emerald {
+  background: linear-gradient(135deg, var(--color-neon-green) 0%, var(--color-cyan) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
-/* Subtle fade-in for client-rendered cards */
-@keyframes fade-up {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+.bg-gradient-accent {
+  background: linear-gradient(135deg, var(--color-cyan) 0%, var(--color-indigo) 100%);
 }
-.fade-up {
-  animation: fade-up 220ms ease-out both;
+
+/* Premium "live" pill — used on the navbar, side panels, etc.
+   The 2-px outline pulses gently to convey "this stream is on". */
+.live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-neon-green);
+  box-shadow: 0 0 8px var(--color-neon-green);
+  animation: live-pulse 1.8s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.85); }
 }
 
 /* ============================================================
-   Admin design-system tokens (PR-BET-ADMIN-REDESIGN)
+   Skeleton loader — slightly darker than the surface so it
+   reads as "absence of content" rather than a filled element.
+   Pulse softened to ease-in-out so it doesn't feel jittery.
+   ============================================================ */
+@keyframes pulse-bg {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+.skeleton {
+  background: var(--color-surface);
+  border-radius: 8px;
+  animation: pulse-bg 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
 
-   Tokens are scoped to `[data-admin-theme]` so they only apply
-   under the admin layout (the user-facing Kalki Exchange keeps
-   its existing palette unchanged). Theme is toggled by setting
-   the attribute to "dark" or "light" on <html> — see the
-   ThemeToggle component.
+/* Fade-up entrance for newly-rendered cards (orderbook depth,
+   newly-loaded markets, etc.) */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up {
+  animation: fade-up 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
 
-   Why CSS vars instead of Tailwind config: theme switch is a
-   single attribute flip, no React re-render and no rebuild.
-   Tailwind v4 doesn't have a baked-in "dark mode class" story,
-   so this keeps the implementation portable.
+/* ============================================================
+   Premium button hover — tiny lift + accent ring.
+   Buttons that opt in by adding `.btn-premium` get the same
+   tactile feel across the whole exchange. Existing Tailwind
+   buttons keep working untouched.
+   ============================================================ */
+.btn-premium {
+  transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+}
+.btn-premium:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.07);
+  box-shadow: 0 8px 20px -10px rgba(34, 211, 238, 0.5);
+}
+.btn-premium:active {
+  transform: translateY(0);
+  filter: brightness(0.96);
+}
+
+/* ============================================================
+   Admin design-system tokens (PR-BET-ADMIN-REDESIGN) —
+   unchanged. The admin theme is fully scoped to
+   `[data-admin-theme]` so it doesn't bleed into the user
+   surface above.
    ============================================================ */
 
 [data-admin-theme="dark"] {
@@ -154,8 +379,8 @@ button {
   --admin-glow: 0 0 24px rgba(34, 211, 238, 0.12);
 }
 
-/* Default to dark when unset, so any /admin route renders something
-   sensible while the theme cookie is hydrating. */
+/* Default to dark admin tokens at :root so /admin renders
+   sensibly while the theme cookie is hydrating. */
 :root {
   --admin-bg: #07090e;
   --admin-bg-deep: #050709;
@@ -172,24 +397,16 @@ button {
                   0 8px 16px -8px rgba(0, 0, 0, 0.55);
 }
 
-/* Admin-page body background overrides the global bet bg so the
-   admin can have its own neutral surface in light mode without
-   bleeding through. Scoped to `.admin-root` so user-facing pages
-   stay untouched. */
 .admin-root {
   background: var(--admin-bg);
   color: var(--admin-text-primary);
   min-height: 100vh;
 }
 
-/* Hide global body scrollbar when an admin modal is open so the
-   sticky topbar doesn't shift. */
 body[data-modal-open="1"] {
   overflow: hidden;
 }
 
-/* Grid pattern overlay for the dashboard hero — purely decorative,
-   GPU-cheap. */
 .admin-grid-bg {
   background-image:
     linear-gradient(rgba(148, 163, 184, 0.04) 1px, transparent 1px),

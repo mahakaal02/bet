@@ -7,12 +7,12 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthedUser, CurrentUser } from '../auth/current-user.decorator';
 import { PaymentsService } from './payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  CreateWalletOrderDto,
   CreateWalletTopupOrderDto,
   VerifyPaymentDto,
 } from './dto/payments.dto';
@@ -162,21 +162,4 @@ export class WalletController {
       dto.signature,
     );
   }
-}
-
-/**
- * Body for POST /wallet/order — one of `coinPackId` or `amount`.
- * Bounds match `CreateWalletTopupOrderDto.amount` (100–100k).
- */
-export class CreateWalletOrderDto {
-  @IsOptional()
-  @IsString()
-  @Length(8, 64)
-  coinPackId?: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(100)
-  @Max(100_000)
-  amount?: number;
 }

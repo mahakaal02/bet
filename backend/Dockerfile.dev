@@ -1,0 +1,56 @@
+# Backend — DEVELOPMENT image.
+#
+# Differences vs the production Dockerfile:
+#   - Single stage, full devDependencies (nest-cli, ts-node, prisma CLI).
+#   - Source code is NOT baked in — docker-compose bind-mounts ./backend
+#     into /app so edits trigger Nest's --watch reload.
+#   - /app/node_modules is a NAMED volume so the host bind mount does
+#     not shadow the container's npm install.
+#   - prisma generate runs in the entrypoint so the client is regenerated
+#     against the currently bind-mounted schema.prisma every restart.
+#   - Runs as root so bind-mounted files written by Windows/macOS hosts
+#     don't trip Linux permission checks. The prod image runs as nodejs.
+FROM node:20-bookworm-slim
+
+WORKDIR /app
+
+# OpenSSL is required by Prisma's engine on Debian; tini gives clean
+# SIGTERM handling so `docker compose down` doesn't take 10s; curl is
+# used by the healthcheck below.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates tini curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Make locally-installed binaries (nest, prisma, ts-node) discoverable
+# without a `npx` prefix.
+ENV PATH=/app/node_modules/.bin:$PATH \
+    NODE_ENV=development \
+    CHOKIDAR_USEPOLLING=true \
+    WATCHPACK_POLLING=true
+
+# Install dependencies in a layer that only invalidates when the lockfile
+# changes — `docker compose up` is then a no-op rebuild for source edits.
+COPY package.json package-lock.json* ./
+RUN npm ci --no-audit --no-fund
+
+# Copy schema before generate so the layer cache survives source edits.
+# The compose bind mount supersedes this at runtime; we keep the build-
+# time copy only so `prisma generate` works in CI / `docker build` runs
+# that don't mount source.
+COPY prisma ./prisma
+RUN npx prisma generate
+
+EXPOSE 4000
+
+# tini → entrypoint script so we can run migrate deploy + prisma
+# generate before nest start --watch. Inline so we don't ship an
+# extra script file.
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["sh", "-c", "\
+  echo '[backend] regenerating prisma client...' && \
+  npx prisma generate && \
+  echo '[backend] applying migrations...' && \
+  npx prisma migrate deploy && \
+  echo '[backend] starting nest in watch mode...' && \
+  exec npm run start:dev \
+"]

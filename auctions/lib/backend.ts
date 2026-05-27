@@ -33,24 +33,82 @@ export class BackendUnauthorized extends BackendApiError {
   }
 }
 
+/**
+ * Coerce a value of unknown shape into a human-readable string. The
+ * backend emits THREE different error envelopes depending on which
+ * layer rejected the request, and several of them are nested objects —
+ * if we just assign one to `Error.message`, JS coerces it via
+ * `String(value)` and the user sees `[object Object]`.
+ *
+ *   1. AllExceptionsFilter (PR-ARCH-AUDIT, Stage A) — the canonical
+ *      modern envelope:
+ *        { error: { code: "RATE_LIMITED", message: "..." },
+ *          requestId, path, timestamp }
+ *   2. NestJS validation pipe:
+ *        { statusCode, message: string | string[], error: "Bad Request" }
+ *   3. Express / proxy fallback (HTML or text/plain):
+ *        "Internal Server Error\n"
+ *
+ * This helper inspects each in turn and always returns a finite,
+ * readable string. Anything we genuinely can't unpack falls back to
+ * `JSON.stringify` so at least the raw fields are visible — never
+ * `[object Object]`.
+ */
+function stringifyError(value: unknown, fallback: string): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value.map((v) => stringifyError(v, "")).filter(Boolean).join("; ");
+  }
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    if (typeof obj.message === "string") return obj.message;
+    if (typeof obj.error === "string") return obj.error;
+    if (typeof obj.detail === "string") return obj.detail;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      // Circular ref or non-serialisable — fall through.
+    }
+  }
+  return fallback;
+}
+
 async function parseError(res: Response): Promise<BackendApiError> {
   const text = await res.text();
   let code = "internal";
-  let message = text;
+  let message = text || `HTTP ${res.status}`;
   try {
     const body = JSON.parse(text);
-    // NestJS standard error shape: { message, error, statusCode } where
-    // `error` is a short slug and `message` may be a string or string[].
-    code =
-      body?.error?.code ??
-      body?.error ??
-      (Array.isArray(body?.message) ? body.message[0] : null) ??
-      "internal";
-    message = Array.isArray(body?.message)
-      ? body.message.join("; ")
-      : body?.message ?? body?.error ?? code;
+
+    // Stage-A envelope: { error: { code, message }, requestId, path }.
+    // Match this first because it's the canonical modern shape, and
+    // `body.error` is the OBJECT (not a string) — getting confused
+    // between code and message here is what caused the original
+    // `[object Object]` bug.
+    if (body && typeof body === "object" && body.error && typeof body.error === "object") {
+      code =
+        typeof body.error.code === "string" ? body.error.code : `http_${res.status}`;
+      message = stringifyError(body.error, `HTTP ${res.status}`);
+    } else if (body && typeof body === "object") {
+      // Legacy NestJS shape: { statusCode, message: string|string[], error: string }
+      code =
+        typeof body.error === "string"
+          ? body.error
+          : Array.isArray(body.message) && typeof body.message[0] === "string"
+            ? body.message[0]
+            : `http_${res.status}`;
+      message = stringifyError(
+        body.message ?? body.error ?? body,
+        `HTTP ${res.status}`,
+      );
+    } else {
+      message = stringifyError(body, `HTTP ${res.status}`);
+    }
   } catch {
-    // Non-JSON error (HTML proxy page, etc) — leave defaults.
+    // Non-JSON error (nginx 502 HTML page, proxy timeout text, etc).
+    // Keep the raw text but cap it so an entire HTML page doesn't end
+    // up in a thrown Error.
+    message = text ? text.slice(0, 300) : `HTTP ${res.status}`;
   }
   return new BackendApiError(res.status, code, message);
 }

@@ -1,0 +1,25 @@
+# Auctions (Next.js 15) — DEVELOPMENT image.
+#
+# No DB of its own. Talks to the backend service over the docker
+# network. `next dev -p 3200` for HMR; polling flags so file watching
+# works across Docker Desktop's filesystem bridge on Windows/macOS.
+FROM node:20-alpine
+
+WORKDIR /app
+
+# tini for clean shutdown; curl for the compose healthcheck.
+RUN apk add --no-cache tini curl
+
+ENV PATH=/app/node_modules/.bin:$PATH \
+    NODE_ENV=development \
+    CHOKIDAR_USEPOLLING=true \
+    WATCHPACK_POLLING=true \
+    NEXT_TELEMETRY_DISABLED=1
+
+COPY package.json package-lock.json* ./
+RUN npm ci --no-audit --no-fund
+
+EXPOSE 3200
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["sh", "-c", "exec npm run dev -- --hostname 0.0.0.0"]

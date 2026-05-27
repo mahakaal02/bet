@@ -1,0 +1,41 @@
+# Bet (Next.js 15) — DEVELOPMENT image.
+#
+# Differences vs the production Dockerfile:
+#   - No build step. `next dev -p 3100` runs the dev server with HMR.
+#   - Source is bind-mounted at runtime; /app/node_modules and /app/.next
+#     are named volumes so the host bind mount doesn't shadow them.
+#   - WATCHPACK_POLLING + CHOKIDAR_USEPOLLING enable file watching when
+#     the host is Windows/macOS (inotify events don't cross the VM
+#     boundary reliably on Docker Desktop).
+#   - prisma generate runs at entrypoint against the live schema.
+FROM node:20-bookworm-slim
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates tini curl \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PATH=/app/node_modules/.bin:$PATH \
+    NODE_ENV=development \
+    CHOKIDAR_USEPOLLING=true \
+    WATCHPACK_POLLING=true \
+    NEXT_TELEMETRY_DISABLED=1
+
+COPY package.json package-lock.json* ./
+RUN npm ci --no-audit --no-fund
+
+COPY prisma ./prisma
+RUN npx prisma generate
+
+EXPOSE 3100
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["sh", "-c", "\
+  echo '[bet] regenerating prisma client...' && \
+  npx prisma generate && \
+  echo '[bet] applying migrations...' && \
+  npx prisma migrate deploy && \
+  echo '[bet] starting next dev on :3100...' && \
+  exec npm run dev -- --hostname 0.0.0.0 \
+"]

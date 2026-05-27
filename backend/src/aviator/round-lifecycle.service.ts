@@ -50,6 +50,77 @@ export class RoundLifecycleService {
   ) {}
 
   /**
+   * Run a DB-touching block with bounded retries.
+   *
+   * The lifecycle state machine cannot tolerate a *transient* Postgres
+   * blip without permanent damage: if `startRunningPhase` throws on the
+   * `UPDATE … status='RUNNING'` write, `this.state.phase` has already
+   * been mutated in-memory but the DB row stays at `BETTING`, no
+   * GAME_RUNNING event ever fires, no tickTimer is scheduled — and
+   * `bootstrap()` only ever runs on cold-start. The engine ends up
+   * permanently stuck at "BETTING forever".
+   *
+   * This helper retries up to 3× with linear-ish backoff (200ms → 1s
+   * → 3s) which covers the ~few-second blackouts we see when Docker
+   * Desktop on Windows resets the postgres bridge. After exhaustion
+   * the original error propagates so the caller can decide whether
+   * to abort the round or attempt a fresh start.
+   */
+  private async withDbRetry<T>(
+    label: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const delays = [200, 1_000, 3_000];
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < delays.length + 1; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        lastErr = err;
+        const code = (err as { code?: string })?.code;
+        // P1001 = "Can't reach database server". P1017 = "Server has
+        // closed the connection". Both are the transient cases worth
+        // retrying. Anything else (validation, constraint) is a logic
+        // bug — fail fast so it shows up loudly in logs.
+        const isTransient = code === 'P1001' || code === 'P1017';
+        if (!isTransient || attempt >= delays.length) break;
+        this.logger.warn(
+          `[${label}] transient DB error (${code}); retrying in ${delays[attempt]}ms (attempt ${attempt + 1}/${delays.length})`,
+        );
+        await new Promise((r) => setTimeout(r, delays[attempt]));
+      }
+    }
+    throw lastErr;
+  }
+
+  /**
+   * Recover from a half-mutated state when a lifecycle DB write
+   * permanently fails. Clears in-memory bets / timers and schedules
+   * a fresh BETTING phase after a short cooldown so the engine
+   * self-heals instead of going silent.
+   */
+  private async recoverAfterFailure(label: string): Promise<void> {
+    this.logger.error(
+      `[${label}] permanent failure — resetting state and restarting after 5s`,
+    );
+    if (this.state.phaseTimer) clearTimeout(this.state.phaseTimer);
+    if (this.state.tickTimer) clearInterval(this.state.tickTimer);
+    this.state.phaseTimer = null;
+    this.state.tickTimer = null;
+    this.state.current = null;
+    this.state.bets.clear();
+    this.state.phase = 'BETTING';
+    this.state.currentMultiplier = 1.0;
+    setTimeout(() => {
+      this.startBettingPhase().catch((e) =>
+        this.logger.error(
+          `[${label}] recovery startBettingPhase failed: ${(e as Error).message}`,
+        ),
+      );
+    }, 5_000);
+  }
+
+  /**
    * Mark rounds that were in BETTING/RUNNING when the previous
    * process died as CRASHED so they don't haunt the live view.
    * Restore `lastRoundNumber` and `roundsUsedInCurrentSeed` from
@@ -199,10 +270,22 @@ export class RoundLifecycleService {
     if (!this.state.current) return;
     this.state.phase = 'RUNNING';
     this.state.current.startedAt = Date.now();
-    await this.prisma.aviatorRound.update({
-      where: { id: this.state.current.roundId },
-      data: { status: 'RUNNING', startedAt: new Date(this.state.current.startedAt) },
-    });
+    try {
+      await this.withDbRetry('startRunningPhase', () =>
+        this.prisma.aviatorRound.update({
+          where: { id: this.state.current!.roundId },
+          data: { status: 'RUNNING', startedAt: new Date(this.state.current!.startedAt) },
+        }),
+      );
+    } catch (err) {
+      // Permanent DB failure — abandon this round, schedule a fresh
+      // BETTING phase instead of leaving the engine silently jammed.
+      this.logger.error(
+        `startRunningPhase DB update failed: ${(err as Error).message}`,
+      );
+      await this.recoverAfterFailure('startRunningPhase');
+      return;
+    }
     this.gateway.emit('GAME_RUNNING', {
       roundId: this.state.current.roundId,
       startedAt: this.state.current.startedAt,

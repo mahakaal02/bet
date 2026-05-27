@@ -1,0 +1,196 @@
+# ─── Kalki — Dockerized development environment ───────────────────────────
+#
+# This Makefile drives the `docker compose` stack defined in
+# docker-compose.yml. It is SEPARATE from the root `Makefile` (which
+# builds + pushes prod images to Docker Hub).
+#
+# Common workflow:
+#
+#   make -f Makefile.dev up               # boot the entire stack
+#   make -f Makefile.dev logs             # tail every service
+#   make -f Makefile.dev shell svc=bet    # /bin/sh inside one container
+#   make -f Makefile.dev down             # stop containers (data kept)
+#   make -f Makefile.dev clean            # stop + drop volumes (DATA LOSS)
+#
+# For PowerShell users without `make`, the equivalent commands live in
+# scripts/dev.ps1 (PowerShell) and scripts/dev.sh (POSIX) — same target
+# names, just `./scripts/dev.ps1 up` instead of `make -f Makefile.dev up`.
+
+COMPOSE      ?= docker compose
+COMPOSE_DEV  := $(COMPOSE) -f docker-compose.yml
+COMPOSE_PROD := $(COMPOSE) -f docker-compose.yml -f docker-compose.prod.yml
+
+# Services declared in the dev compose. Used by the `shell` / `logs`
+# targets to validate the `svc=` argument.
+SERVICES := backend bet auctions aviator admin postgres redis proxy adminer redis-commander mailpit backend-worker
+
+.DEFAULT_GOAL := help
+
+# ─── Bring-up / tear-down ─────────────────────────────────────────────────
+
+.PHONY: env
+env:  ## Create .env from .env.example if it doesn't exist
+	@if [ ! -f .env ]; then \
+	  cp .env.example .env; \
+	  echo "Created .env from .env.example — review and edit if needed."; \
+	else \
+	  echo ".env already exists; not overwriting."; \
+	fi
+
+.PHONY: up
+up: env  ## Start the dev stack (build images if missing)
+	$(COMPOSE_DEV) up -d --build
+	@echo
+	@echo "Stack is up. Open:"
+	@echo "  http://localhost:$${PROXY_HTTP_PORT:-8000}     (proxy — bet at /, auctions at /auctions/, aviator at /aviator/, admin at /admin/)"
+	@echo "  http://localhost:$${BACKEND_PORT:-4000}       (backend API direct)"
+	@echo "  http://localhost:$${BET_PORT:-3100}           (bet direct)"
+	@echo "  http://localhost:$${AUCTIONS_PORT:-3200}      (auctions direct)"
+	@echo "  http://localhost:$${AVIATOR_PORT:-3000}       (aviator direct)"
+	@echo "  http://localhost:$${ADMIN_PORT:-5173}         (admin direct)"
+	@echo "  http://localhost:$${ADMINER_PORT:-8080}       (Adminer — Postgres GUI)"
+	@echo "  http://localhost:$${REDIS_COMMANDER_PORT:-8081} (redis-commander, admin/admin)"
+	@echo "  http://localhost:$${MAILPIT_HTTP_PORT:-8025}  (Mailpit — captured outbound mail)"
+
+.PHONY: up-prod
+up-prod: env  ## Boot with the production Dockerfiles (no bind mounts, real builds)
+	$(COMPOSE_PROD) up -d --build
+
+.PHONY: worker
+worker: env  ## Boot the stack INCLUDING the cron-only worker pod
+	$(COMPOSE_DEV) --profile worker up -d --build
+
+.PHONY: down
+down:  ## Stop containers (named volumes preserved)
+	$(COMPOSE_DEV) down
+
+.PHONY: stop
+stop:  ## Pause containers without removing them
+	$(COMPOSE_DEV) stop
+
+.PHONY: start
+start:  ## Resume previously stopped containers
+	$(COMPOSE_DEV) start
+
+.PHONY: restart
+restart:  ## Restart all services in place
+	$(COMPOSE_DEV) restart
+
+.PHONY: clean
+clean:  ## DESTRUCTIVE: stop containers AND delete every volume (db, redis, uploads)
+	@printf "About to remove ALL named volumes (postgres, redis, uploads, node_modules)\n"
+	@printf "Type yes to continue: "; read ans; [ "$$ans" = "yes" ] || { echo "Aborted."; exit 1; }
+	$(COMPOSE_DEV) down -v
+	@echo "Stack stopped, all volumes removed."
+
+# ─── Build / pull ─────────────────────────────────────────────────────────
+
+.PHONY: build
+build:  ## Build all dev images without starting them
+	$(COMPOSE_DEV) build
+
+.PHONY: rebuild
+rebuild:  ## Force-rebuild from scratch (no cache); doesn't touch volumes
+	$(COMPOSE_DEV) build --no-cache --pull
+
+.PHONY: pull
+pull:  ## Pull the latest postgres/redis/adminer/etc. base images
+	$(COMPOSE_DEV) pull
+
+# ─── Observability ────────────────────────────────────────────────────────
+
+.PHONY: logs
+logs:  ## Tail logs for all services (Ctrl-C to exit)
+	$(COMPOSE_DEV) logs -f --tail=200
+
+.PHONY: log
+log:  ## Tail logs for ONE service: make -f Makefile.dev log svc=backend
+	@if [ -z "$(svc)" ]; then echo "Usage: make -f Makefile.dev log svc=<one of: $(SERVICES)>"; exit 1; fi
+	$(COMPOSE_DEV) logs -f --tail=200 $(svc)
+
+.PHONY: ps
+ps:  ## Show the stack's container status
+	$(COMPOSE_DEV) ps
+
+.PHONY: ports
+ports:  ## Show host ↔ container port mappings
+	$(COMPOSE_DEV) ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+
+# ─── Shells ───────────────────────────────────────────────────────────────
+
+.PHONY: shell
+shell:  ## Open /bin/sh in a service: make -f Makefile.dev shell svc=backend
+	@if [ -z "$(svc)" ]; then echo "Usage: make -f Makefile.dev shell svc=<service>"; exit 1; fi
+	$(COMPOSE_DEV) exec $(svc) sh
+
+.PHONY: bash
+bash:  ## Open bash in a service (Debian-based images only)
+	@if [ -z "$(svc)" ]; then echo "Usage: make -f Makefile.dev bash svc=<service>"; exit 1; fi
+	$(COMPOSE_DEV) exec $(svc) bash
+
+.PHONY: psql
+psql:  ## Open psql against the chosen DB: make -f Makefile.dev psql db=uniquebid|bet
+	@db=$${db:-uniquebid}; \
+	$(COMPOSE_DEV) exec postgres psql -U $${POSTGRES_USER:-kalki} -d $$db
+
+.PHONY: redis-cli
+redis-cli:  ## Open redis-cli
+	$(COMPOSE_DEV) exec redis redis-cli
+
+# ─── Database ─────────────────────────────────────────────────────────────
+
+.PHONY: migrate
+migrate:  ## Apply pending Prisma migrations on backend + bet
+	$(COMPOSE_DEV) exec backend npx prisma migrate deploy
+	$(COMPOSE_DEV) exec bet     npx prisma migrate deploy
+
+.PHONY: migrate-create
+migrate-create:  ## Create a new backend migration: make ... migrate-create name=add_foo
+	@if [ -z "$(name)" ]; then echo "Usage: make -f Makefile.dev migrate-create name=<migration_name> [svc=backend|bet]"; exit 1; fi
+	@svc=$${svc:-backend}; \
+	$(COMPOSE_DEV) exec $$svc npx prisma migrate dev --name $(name)
+
+.PHONY: seed
+seed:  ## Seed both backend and bet databases
+	$(COMPOSE_DEV) exec backend npm run prisma:seed
+	$(COMPOSE_DEV) exec bet     npm run prisma:seed
+
+.PHONY: db-reset
+db-reset:  ## DESTRUCTIVE: drop and re-create both databases, then re-migrate + re-seed
+	@printf "About to DROP the uniquebid and bet databases. Type yes to continue: "; read ans; [ "$$ans" = "yes" ] || { echo "Aborted."; exit 1; }
+	$(COMPOSE_DEV) exec backend npx prisma migrate reset --force --skip-generate
+	$(COMPOSE_DEV) exec bet     npx prisma migrate reset --force --skip-generate
+	@echo "Both databases reset, re-migrated, and re-seeded."
+
+.PHONY: db-dump
+db-dump:  ## Dump both DBs to ./backups/<timestamp>.sql.gz
+	@mkdir -p backups
+	@ts=$$(date -u +%Y%m%dT%H%M%SZ); \
+	for db in uniquebid bet; do \
+	  out=backups/$$db-$$ts.sql.gz; \
+	  echo "Dumping $$db → $$out"; \
+	  $(COMPOSE_DEV) exec -T postgres pg_dump -U $${POSTGRES_USER:-kalki} -d $$db | gzip > $$out; \
+	done
+
+# ─── Tests / linting (run inside the container so node_modules match) ─────
+
+.PHONY: test
+test:  ## Run backend unit tests + bet vitest suite
+	$(COMPOSE_DEV) exec backend npm test
+	$(COMPOSE_DEV) exec bet     npm test
+
+.PHONY: lint
+lint:  ## Lint backend (the only service with an eslint script wired up)
+	$(COMPOSE_DEV) exec backend npm run lint
+
+# ─── Help ─────────────────────────────────────────────────────────────────
+
+.PHONY: help
+help:  ## Show this help (auto-generated from ## comments)
+	@awk 'BEGIN{FS=":.*##"; printf "Kalki — Dockerized development\n\nUsage: make -f Makefile.dev <target> [arg=value]\n\nTargets:\n"} \
+	/^[a-zA-Z0-9_-]+:.*##/ { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@echo
+	@echo "Variables (override via env or `make ... var=value`):"
+	@echo "  svc=<service>    used by shell / log / migrate-create"
+	@echo "  db=<dbname>      used by psql (default: uniquebid)"
+	@echo "  name=<name>      used by migrate-create"

@@ -1,0 +1,16 @@
+node_modules
+.next
+.turbo
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.idea
+.vscode
+.git
+.gitignore
+.dockerignore
+Dockerfile*
+docker-compose*.y*ml
+README.md

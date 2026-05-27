@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionToken } from "@/lib/session";
 import { backend, BackendUnauthorized, type Auction } from "@/lib/backend";
 import { detectCountry, type CountryCode } from "@/lib/locale-detect";
+import { loadFxRates } from "@/lib/fx";
 import {
   DEFAULT_LOCALE,
   buildLocalizedMetadata,
@@ -138,10 +139,14 @@ export default async function HubPage({
 
   // Run upstream calls in parallel; either is allowed to fail
   // independently — the design has loading-state cards for both.
+  // The FX rate fetch is added to the same batch so it's pulled at
+  // the cost of one extra cached HTTP round-trip on cold revalidate
+  // (6h cache window, so most requests hit Next's data cache).
   const settled = await Promise.allSettled([
     backend.publicGet<Auction[]>("/auctions"),
     fetchTrendingMarkets(),
     detectCountry(),
+    loadFxRates(),
   ]);
   const auctionsResult: Auction[] =
     settled[0].status === "fulfilled" ? settled[0].value : [];
@@ -149,6 +154,8 @@ export default async function HubPage({
     settled[1].status === "fulfilled" ? settled[1].value : [];
   const country: CountryCode =
     settled[2].status === "fulfilled" ? settled[2].value : "IN";
+  const fxRates =
+    settled[3].status === "fulfilled" ? settled[3].value.rates : {};
 
   const liveAuctions = auctionsResult.filter((a) => a.status === "LIVE");
   const shuffledAuctions = shuffle(liveAuctions);
@@ -206,6 +213,7 @@ export default async function HubPage({
       }}
       recentAuctions={recentAuctions}
       recentMarkets={recentMarkets}
+      fxRates={fxRates}
     />
   );
 }

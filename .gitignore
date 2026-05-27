@@ -21,3 +21,16 @@ app/build/
 app/.cxx/
 local.properties
 **/.prisma/
+
+# ─── Docker dev environment ─────────────────────────────────────────
+# Local .env files (never commit secrets); .env.example IS committed.
+.env
+.env.local
+# Mounted secrets directory (Firebase JSON, etc.) — keep the dir + its
+# .gitignore but never the files inside.
+docker/secrets/*
+!docker/secrets/.gitignore
+# Database dumps written by `make -f Makefile.dev db-dump`.
+backups/
+# Backup of the old .claude.settings.local.json — re-created by Claude.
+.claude.settings.local.json.bak

@@ -1,0 +1,23 @@
+# Aviator (Next.js 15) — DEVELOPMENT image.
+#
+# No DB of its own; consumes the backend's Socket.IO crash stream
+# (NEXT_PUBLIC_API_URL points at the backend service in compose).
+FROM node:20-alpine
+
+WORKDIR /app
+
+RUN apk add --no-cache tini curl
+
+ENV PATH=/app/node_modules/.bin:$PATH \
+    NODE_ENV=development \
+    CHOKIDAR_USEPOLLING=true \
+    WATCHPACK_POLLING=true \
+    NEXT_TELEMETRY_DISABLED=1
+
+COPY package.json package-lock.json* ./
+RUN npm ci --no-audit --no-fund
+
+EXPOSE 3000
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["sh", "-c", "exec npm run dev -- --hostname 0.0.0.0"]
