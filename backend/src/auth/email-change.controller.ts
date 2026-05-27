@@ -12,6 +12,7 @@ import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { AuthedUser, CurrentUser } from './current-user.decorator';
 import { EmailChangeService } from './email-change.service';
+import { DenyImpersonated } from '../foundation/decorators/deny-impersonated.decorator';
 
 /**
  * Email-change HTTP surface (Roadmap §F-USER-11).
@@ -59,6 +60,10 @@ export class EmailChangeController {
     return this.service.pending(user.id).then((p) => p ?? { pending: null });
   }
 
+  // Email is a recovery channel; changing it from an impersonated
+  // session would let the admin lock the user out of their own
+  // account (PR-ARCH-AUDIT, Stage A).
+  @DenyImpersonated()
   @UseGuards(JwtAuthGuard)
   @Throttle({ email_change_request: { limit: 3, ttl: 60_000 } })
   @HttpCode(200)
@@ -80,6 +85,7 @@ export class EmailChangeController {
     return { ok: true };
   }
 
+  @DenyImpersonated()
   @UseGuards(JwtAuthGuard)
   @HttpCode(200)
   @Post('me/email-change/cancel')

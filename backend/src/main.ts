@@ -5,6 +5,7 @@ import { WsAdapter } from '@nestjs/platform-ws';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './foundation/filters/all-exceptions.filter';
 
 /**
  * Two-mode bootstrap (PR-WORKER-EXTRACT, Roadmap §Q2 hardening).
@@ -41,6 +42,10 @@ async function bootstrapApi(): Promise<void> {
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }),
   );
+  // Standardized error envelope (PR-ARCH-AUDIT, Stage A). Success
+  // responses remain raw to avoid breaking existing clients; only
+  // non-2xx is normalized.
+  app.useGlobalFilters(new AllExceptionsFilter());
   app.useWebSocketAdapter(new WsAdapter(app));
 
   // CORS — admin SPA uses httpOnly cookies (PR-ADMIN-COOKIE-AUTH),

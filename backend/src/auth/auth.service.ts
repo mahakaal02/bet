@@ -313,7 +313,21 @@ export class AuthService {
     // RG also runs on every authed request — a freshly self-excluded
     // user shouldn't be able to ride out the day on a still-valid JWT.
     await this.rg.assertCanLogin(user.id);
-    return this.sanitize(user);
+    const sanitized = this.sanitize(user);
+    // Attach impersonation metadata so ImpersonationScopeGuard can
+    // detect and 403 on @DenyImpersonated endpoints. Stripped from
+    // the wire shape via AuthedUser interface — present on the
+    // request object only.
+    if (payload.purpose === 'impersonation' && payload.actorId) {
+      return {
+        ...sanitized,
+        _impersonation: {
+          actorId: payload.actorId,
+          impersonationId: payload.impersonationId ?? null,
+        },
+      };
+    }
+    return sanitized;
   }
 
   private issue(
