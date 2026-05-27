@@ -449,19 +449,27 @@ export function LoginLanding({
     setBusy(true);
     setError(null);
     try {
-      // For signup vs. login we call the same endpoint — the backend
-      // figures out whether to create or authenticate based on the
-      // request shape. The form UX differentiates only in copy.
-      const res = await fetch("/api/auth/login", {
+      // The two modes hit DIFFERENT endpoints. The old code routed
+      // both through `/api/auth/login` with an `intent: 'signup'`
+      // hint — but the backend's `/auth/login` ignores that field
+      // (it just calls `bcrypt.compare` against an existing user),
+      // so signup attempts silently fell into the login validation
+      // path and a brand-new email always read as "invalid
+      // credentials." Routing by mode here is the actual fix.
+      //
+      //   login  → POST /api/auth/login        → backend /auth/login
+      //   signup → POST /api/auth/register     → backend /auth/register
+      //
+      // Both return the same `{ok, …}` envelope and (on success)
+      // set the session cookie server-side. The signup proxy omits
+      // `username`; the backend derives one from the email
+      // (see AuthService.allocateUsernameForEmail).
+      const endpoint =
+        mode === "signup" ? "/api/auth/register" : "/api/auth/login";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: loginId,
-          password,
-          // signup hint — backend may use this to choose between
-          // create-or-auth semantics. Same shape as the legacy form.
-          intent: mode === "signup" ? "signup" : "login",
-        }),
+        body: JSON.stringify({ email: loginId, password }),
       });
       const body = (await res.json().catch(() => ({}))) as {
         message?: string;
@@ -469,9 +477,17 @@ export function LoginLanding({
         challengeToken?: string;
       };
       if (!res.ok) {
-        setError(body.message ?? "Sign-in failed.");
+        setError(
+          body.message ??
+            (mode === "signup"
+              ? "Sign-up failed."
+              : "Sign-in failed."),
+        );
         return;
       }
+      // 2FA challenge is login-only — fresh signups have no second
+      // factor configured yet, so the registration response always
+      // lands on the immediate-success path.
       if (body.needs2FA && body.challengeToken) {
         setChallengeToken(body.challengeToken);
         setMode("2fa");

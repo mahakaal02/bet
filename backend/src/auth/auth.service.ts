@@ -67,11 +67,24 @@ export class AuthService {
     const rounds = Number(this.config.get('BCRYPT_ROUNDS') ?? 10);
     const passwordHash = await bcrypt.hash(dto.password, rounds);
 
+    // Pick a username. If the caller supplied one (legacy clients,
+    // admin scripts) we honour it verbatim — the DTO already
+    // validated the regex. If not (the hub's email-only signup
+    // form), we derive one from the email's local part with a
+    // small handful of suffixed retries on collision, mirroring
+    // `TelegramAuthService.allocateUsername`.
+    //
+    // The unique constraint on `username` is enforced by Prisma;
+    // a P2002 here is still possible if a collision races our
+    // probe (two signups picking the same suffix in the same
+    // millisecond). We re-raise as a 409 with a generic message.
+    const username = dto.username ?? (await this.allocateUsernameForEmail(dto.email));
+
     try {
       const user = await this.prisma.user.create({
         data: {
           email: dto.email.toLowerCase(),
-          username: dto.username,
+          username,
           passwordHash,
         },
       });
@@ -82,6 +95,71 @@ export class AuthService {
       }
       throw e;
     }
+  }
+
+  /**
+   * Derive a unique username from an email address. Strategy:
+   *
+   *   1. Take the email's local part (everything before `@`),
+   *      lower-case it, strip any character outside `[a-z0-9_]`,
+   *      clamp to 20 chars.
+   *   2. If that yields ≥3 chars and the slug isn't already taken,
+   *      use it.
+   *   3. Otherwise append a 3-digit random suffix and retry up
+   *      to 5 times — collisions on a 13-char base + 3 random
+   *      digits are ~1-in-1000.
+   *   4. Final fallback: `usr_<6 random digits>`, retried until
+   *      we get a unique value (the suffix space is 10^6, so a
+   *      single probe is overwhelmingly likely to succeed; the
+   *      bounded loop is defensive).
+   *
+   * Pure picker — does NOT create the row. The caller's
+   * `prisma.user.create` is the source of truth for uniqueness
+   * (we just narrow the window of races).
+   */
+  private async allocateUsernameForEmail(rawEmail: string): Promise<string> {
+    const local = rawEmail.split('@', 1)[0] ?? '';
+    const sanitised = local
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, '')
+      .slice(0, 20);
+
+    const candidates: string[] = [];
+    if (sanitised.length >= 3) candidates.push(sanitised);
+
+    const base = sanitised.length >= 3 ? sanitised.slice(0, 17) : '';
+    if (base) {
+      for (let i = 0; i < 5; i++) {
+        const suffix = String(Math.floor(Math.random() * 900) + 100);
+        candidates.push(`${base}${suffix}`.slice(0, 20));
+      }
+    }
+
+    for (const candidate of candidates) {
+      const existing = await this.prisma.user.findUnique({
+        where: { username: candidate },
+        select: { id: true },
+      });
+      if (!existing) return candidate;
+    }
+
+    // Hard fallback — random 6-digit suffix, looped just in case.
+    // 10 retries × 10^6 suffix space puts the probability of
+    // total failure below 10^-60 even at platform scale.
+    for (let i = 0; i < 10; i++) {
+      const candidate = `usr_${Math.floor(Math.random() * 1_000_000)
+        .toString()
+        .padStart(6, '0')}`;
+      const existing = await this.prisma.user.findUnique({
+        where: { username: candidate },
+        select: { id: true },
+      });
+      if (!existing) return candidate;
+    }
+
+    throw new ConflictException(
+      'Could not allocate a unique username for this email.',
+    );
   }
 
   async login(dto: LoginDto, trustedDeviceToken?: string | null) {
