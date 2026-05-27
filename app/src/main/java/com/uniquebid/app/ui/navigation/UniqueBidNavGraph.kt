@@ -6,7 +6,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.uniquebid.app.ui.screens.auctions.AuctionsWebScreen
 import com.uniquebid.app.ui.screens.auth.LoginScreen
-import com.uniquebid.app.ui.screens.auth.RegisterScreen
 import com.uniquebid.app.ui.screens.aviator.AviatorScreen
 import com.uniquebid.app.ui.screens.bet.BetScreen
 import com.uniquebid.app.ui.screens.hub.HubScreen
@@ -47,17 +46,12 @@ fun UniqueBidNavGraph() {
                         popUpTo(Route.Login.path) { inclusive = true }
                     }
                 },
-                onRegisterClick = { nav.navigate(Route.Register.path) },
-            )
-        }
-        composable(Route.Register.path) {
-            RegisterScreen(
-                onRegistered = {
-                    nav.navigate(Route.Hub.path) {
-                        popUpTo(Route.Login.path) { inclusive = true }
-                    }
-                },
-                onBack = { nav.popBackStack() },
+                // Sign-up is integrated into the LoginLanding's tab toggle
+                // on the web side (PR #110), so there's no native Register
+                // destination to navigate to. `onRegisterClick` is kept in
+                // LoginScreen's signature (annotated @Suppress) but wired
+                // to a no-op here.
+                onRegisterClick = { /* handled by web LoginLanding */ },
             )
         }
         composable(Route.Hub.path) {
