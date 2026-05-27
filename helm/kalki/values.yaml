@@ -69,8 +69,17 @@ sharedSecret:
   # clear "set TELEGRAM_BOT_TOKEN + NEXT_PUBLIC_TELEGRAM_BOT" message.
   # Override in the in-cluster `kalki-helm-values` Secret (same
   # pattern as the postgres password rotation runbook above).
+  # Bot token stays empty in source — it's a server-side secret and
+  # must be provided via the in-cluster `kalki-helm-values` overlay
+  # Secret. See the runbook in the PR description for the kubectl
+  # command. Never commit the actual token to this file.
   telegramBotToken: ""
-  telegramBotUsername: ""
+  # Bot @username (without the leading @). PUBLIC by design — gets
+  # baked into client chunks at build time and read by lib/telegram.ts
+  # at runtime to construct the OAuth widget URL. Committed inline so
+  # Flux git-sync deploys it on the next pod roll; no in-cluster
+  # Secret edit needed.
+  telegramBotUsername: "kalkibet_bot"
 postgres:
   enabled: true
   image: postgres:16-alpine
