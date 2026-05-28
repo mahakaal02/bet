@@ -37,6 +37,28 @@ import { AllExceptionsFilter } from './foundation/filters/all-exceptions.filter'
 const logger = new Logger('Bootstrap');
 const ROLE = (process.env.KALKI_ROLE ?? 'api').toLowerCase();
 
+// ── Resilience: keep the process alive on a fire-and-forget rejection ──
+//
+// The Aviator round-lifecycle drives BETTING → RUNNING → CRASHED via
+// `setTimeout/setInterval(() => void this.<phase>())`. Those discard the
+// promise, so a transient DB blip (Prisma P1001 "can't reach database")
+// inside a tick surfaces as an UNHANDLED rejection. Node's default
+// (`--unhandled-rejections=throw`) then exits the process — taking down
+// auth, markets, wallet, pricing and every other API for ALL users
+// because they share this one process. A single round's DB hiccup must
+// not do that. Log it loudly and keep serving; the lifecycle self-heals
+// on its next tick (and orphaned rounds are reconciled on restart).
+//
+// Scoped to logging only — we do NOT swallow `uncaughtException` (a
+// synchronous throw can leave state corrupt), just async rejections
+// from these background timers.
+process.on('unhandledRejection', (reason: unknown) => {
+  const e = reason as { code?: string; message?: string } | undefined;
+  logger.error(
+    `unhandledRejection (process kept alive): ${e?.code ?? ''} ${e?.message ?? String(reason)}`,
+  );
+});
+
 async function bootstrapApi(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.useGlobalPipes(

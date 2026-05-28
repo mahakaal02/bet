@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/Badge";
 import { WithdrawForm } from "@/components/WithdrawForm";
 import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
-import { MIN_WITHDRAW_COINS } from "@/lib/coins";
+import { MIN_WITHDRAW_COINS, WITHDRAW_EMAIL_VERIFY_THRESHOLD_COINS } from "@/lib/coins";
+import { fetchLocalizedPricing, coinValueLabel } from "@/lib/pricing";
 import { fmtCoins, timeAgo } from "@/lib/utils";
 import {
   DEFAULT_LOCALE,
@@ -65,7 +66,7 @@ export default async function WithdrawPage({
     redirect(buildAuthRedirect("/wallet/withdraw", sp, locale));
   }
 
-  const [wallet, me, history] = await Promise.all([
+  const [wallet, me, history, localized] = await Promise.all([
     db.wallet.findUnique({ where: { userId: u.id }, select: { balance: true } }),
     db.user.findUnique({
       where: { id: u.id },
@@ -76,9 +77,13 @@ export default async function WithdrawPage({
       orderBy: { createdAt: "desc" },
       take: 20,
     }),
+    fetchLocalizedPricing(locale),
   ]);
 
   if (me?.banned) redirect(lp("/wallet"));
+
+  // Estimated local-currency value of the balance (1000-pack anchor).
+  const estValue = coinValueLabel(wallet?.balance ?? 0, localized);
 
   return (
     <main className="min-h-screen pb-20">
@@ -95,6 +100,14 @@ export default async function WithdrawPage({
         <p className="text-sm text-slate-400">
           {tr("withdraw.subtext", { amount: fmtCoins(MIN_WITHDRAW_COINS) })}
         </p>
+        {estValue && (
+          <p className="mt-1 text-sm text-slate-300">
+            {tr("withdraw.estValue", {
+              coins: fmtCoins(wallet?.balance ?? 0),
+              value: estValue,
+            })}
+          </p>
+        )}
 
         <Card className="mt-4">
           <CardHeader>
@@ -106,9 +119,11 @@ export default async function WithdrawPage({
             </span>
           </CardHeader>
 
-          {!me?.emailVerified ? (
-            <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
-              {tr("withdraw.verifyEmail")}{" "}
+          {!me?.emailVerified && (
+            <p className="mb-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+              {tr("withdraw.emailThresholdNote", {
+                amount: fmtCoins(WITHDRAW_EMAIL_VERIFY_THRESHOLD_COINS),
+              })}{" "}
               <Link
                 href={lp("/profile")}
                 className="underline hover:text-amber-100"
@@ -116,12 +131,11 @@ export default async function WithdrawPage({
                 {tr("profile.heading")}
               </Link>
             </p>
-          ) : (
-            <WithdrawForm
-              available={wallet?.balance ?? 0}
-              min={MIN_WITHDRAW_COINS}
-            />
           )}
+          <WithdrawForm
+            available={wallet?.balance ?? 0}
+            min={MIN_WITHDRAW_COINS}
+          />
 
           <div className="mt-3 flex items-start gap-2 rounded-md border border-slate-800 bg-slate-950/40 p-2 text-[11px] text-slate-400">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-400" />
@@ -148,7 +162,7 @@ export default async function WithdrawPage({
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-mono">
-                        ₹{fmtCoins(w.amountCoins)}
+                        {fmtCoins(w.amountCoins)} {tr("wallet.coins")}
                       </span>
                       <Badge
                         tone={

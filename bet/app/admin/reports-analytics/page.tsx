@@ -41,7 +41,7 @@ const TEMPLATES = [
   {
     type: "withdrawals",
     title: "Withdrawal log",
-    description: "Approved withdrawals with Razorpay payout references — useful for GST returns.",
+    description: "Approved withdrawals with payout references — useful for GST returns.",
     range: "Last 90 days",
   },
   {

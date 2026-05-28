@@ -14,16 +14,26 @@ const BET_BASE = (
  *
  *   - Auctions    → /auctions (this app, sidebar route)
  *   - Aviator     → /aviator/analytics (this app, sidebar route)
- *   - Exchange    → ${BET_BASE}/admin with a 60s SSO token for handoff
+ *   - Exchange    → ${BET_BASE}/api/auth/sso?token=…&next=/admin
  *
  * The Auctions and Aviator tiles are internal SPA links — no token
  * hand-off needed because the admin's session cookie is already
  * scoped to this origin. The Exchange tile leaves to the Bet app,
  * which lives on a different origin, so we fetch a short-lived JWT
- * via `/auth/admin/sso-token` (PR-ADMIN-COOKIE-AUTH) and attach it
- * to the URL. The long-lived session JWT lives in an httpOnly
- * cookie that JS can't read — minting a 60s token on demand keeps
- * the handoff working without ever exposing the durable credential.
+ * via `/auth/admin/sso-token` (PR-ADMIN-COOKIE-AUTH) and hand it to
+ * Bet's SSO endpoint. The long-lived session JWT lives in an
+ * httpOnly cookie that JS can't read — minting a 60s token on
+ * demand keeps the handoff working without exposing the durable
+ * credential.
+ *
+ * We target `/api/auth/sso` DIRECTLY (not `/admin?token=…`): Bet's
+ * middleware normally diverts any `?token=` request to that SSO
+ * route, but its matcher deliberately excludes `/admin`, so a
+ * `/admin?token=…` URL would skip the bridge entirely, hit the
+ * unauthenticated admin layout, and bounce to the user login page.
+ * Hitting the SSO route ourselves verifies the token, mints a Bet
+ * session cookie, and 307s straight to `next=/admin` — landing the
+ * operator in the Exchange admin console, not the player login.
  */
 export default function Hub() {
   const user = getUser();
@@ -38,19 +48,26 @@ export default function Hub() {
         '/auth/admin/sso-token',
         {},
       );
-      // Open in a new tab — same as the previous `<a target="_blank">`
-      // behaviour. Using `window.open` (vs setting href + .click())
-      // sidesteps the browser quirk where some popup blockers count
-      // a non-user-initiated `.click()` as suspect.
+      // Hand the token to Bet's SSO consumer with `next=/admin` so it
+      // exchanges the token for a Bet session and lands on the admin
+      // console. Open in a new tab — using `window.open` (vs href +
+      // .click()) sidesteps the popup-blocker quirk where a non-user-
+      // initiated `.click()` is treated as suspect.
+      const ssoUrl = new URL(`${BET_BASE}/api/auth/sso`);
+      ssoUrl.searchParams.set('token', res.token);
+      ssoUrl.searchParams.set('next', '/admin');
+      window.open(ssoUrl.toString(), '_blank', 'noopener,noreferrer');
+    } catch {
+      // Token mint failed (e.g. the admin's own session expired). Open
+      // the SSO route without a token: it redirects to Bet's sign-in,
+      // which itself bounces to the Kalki hub login — the operator can
+      // re-authenticate there. There's no valid path into the Exchange
+      // admin without a token, so this is the safest degradation.
       window.open(
-        `${BET_BASE}/admin?token=${encodeURIComponent(res.token)}`,
+        `${BET_BASE}/api/auth/sso?next=/admin`,
         '_blank',
         'noopener,noreferrer',
       );
-    } catch {
-      // Fall back to opening without the token; the user will see
-      // Bet's own sign-in screen if their session there has expired.
-      window.open(`${BET_BASE}/admin`, '_blank', 'noopener,noreferrer');
     } finally {
       setOpening(false);
     }
@@ -99,8 +116,39 @@ export default function Hub() {
             icon="📈"
           />
         </div>
+
+        {/* Platform-wide consoles that aren't tied to a single product.
+            These live behind the sidebar Layout, which the three-tile
+            hub doesn't render — so we surface direct links here. The
+            coin economy (incl. PPP regional pricing) is global: coins
+            are universal, only the local fiat purchase price varies per
+            country, and that grid is managed under "Regional pricing". */}
+        <div className="mt-10">
+          <div className="text-[11px] uppercase tracking-widest text-white/50 mb-3">
+            Platform &amp; coin economy
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <QuickLink to="/pricing" label="🌍 Regional pricing (PPP)" />
+            <QuickLink to="/coin-settings" label="Coin economy" />
+            <QuickLink to="/coin-packs" label="Coin packs" />
+            <QuickLink to="/withdrawals" label="Withdrawals" />
+            <QuickLink to="/analytics" label="Analytics" />
+            <QuickLink to="/settings" label="Runtime settings" />
+          </div>
+        </div>
       </div>
     </div>
+  );
+}
+
+function QuickLink({ to, label }: { to: string; label: string }) {
+  return (
+    <Link
+      to={to}
+      className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 transition hover:border-brand-gold/50 hover:bg-white/10 hover:text-brand-gold"
+    >
+      {label}
+    </Link>
   );
 }
 

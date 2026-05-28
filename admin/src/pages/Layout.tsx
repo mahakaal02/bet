@@ -44,6 +44,7 @@ export default function Layout() {
           <SideLink to="/auctions/new" label="New auction" />
           <SideLink to="/coin-settings" label="Coin economy" />
           <SideLink to="/coin-packs" label="Coin packs" />
+          <SideLink to="/pricing" label="Regional pricing" />
           <SideLink to="/withdrawals" label="Withdrawals" />
           <SideLink to="/reconciliation" label="Reconciliation" />
           <SideLink to="/kyc" label="KYC review" />

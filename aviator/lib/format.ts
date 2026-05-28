@@ -1,12 +1,11 @@
 /**
  * Tiny number formatters shared by every panel. Centralised so a
- * future unit change (we're on coins; 1 coin = ₹1 by platform decree,
- * see `bet/lib/coins.ts`) is one edit.
+ * future unit change is one edit.
  *
- * History: surfaces used to display ₹ amounts. The product moved to
- * a unified-wallet model where balances and bets are expressed in
- * coins, so the UI was updated to match — same numeric values, just
- * a "coins" suffix instead of a "₹" prefix.
+ * Balances and bets are expressed in coins. The local-currency VALUE
+ * of a balance (what the user paid per coin) is derived separately from
+ * the backend's PPP pricing — see `lib/useCoinValue.ts` — and shown
+ * alongside the coin count on the wallet panel.
  */
 
 /**

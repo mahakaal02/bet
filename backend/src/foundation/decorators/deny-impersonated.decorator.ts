@@ -15,7 +15,7 @@ export const DENY_IMPERSONATED_KEY = 'denyImpersonated';
  * routes (so the admin can see what the user sees) but MUST NOT be
  * allowed to:
  *
- *   - top up the wallet via Razorpay (real money)
+ *   - top up the wallet (real money)
  *   - request a withdrawal
  *   - delete the account / request data export
  *   - place bids / aviator bets with real coins

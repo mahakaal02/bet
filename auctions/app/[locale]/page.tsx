@@ -4,6 +4,7 @@ import { getSessionToken } from "@/lib/session";
 import { backend, BackendUnauthorized, type Auction } from "@/lib/backend";
 import { detectCountry, type CountryCode } from "@/lib/locale-detect";
 import { loadFxRates } from "@/lib/fx";
+import { fetchCoinValueLabel } from "@/lib/coin-value";
 import {
   DEFAULT_LOCALE,
   buildLocalizedMetadata,
@@ -58,6 +59,20 @@ function exchangeBaseServer(): string {
     /\/$/,
     "",
   );
+}
+
+/** Docker-internal base URL for SERVER-TO-SERVER calls to the Exchange
+ *  (bet). `NEXT_PUBLIC_EXCHANGE_URL` is the BROWSER origin
+ *  (`localhost:3100`/`:8000`); inside the auctions container that host
+ *  resolves to the container itself, so an SSR fetch there is refused.
+ *  We must hit the compose service name (`http://bet:3100`). Set via
+ *  `EXCHANGE_INTERNAL_URL`; falls back to localhost for non-Docker dev. */
+function exchangeInternalBase(): string {
+  return (
+    process.env.EXCHANGE_INTERNAL_URL ??
+    process.env.NEXT_PUBLIC_EXCHANGE_URL ??
+    "http://localhost:3100"
+  ).replace(/\/$/, "");
 }
 
 function aviatorBaseServer(): string {
@@ -157,6 +172,10 @@ export default async function HubPage({
   const fxRates =
     settled[3].status === "fulfilled" ? settled[3].value.rates : {};
 
+  // PPP-based local-currency value of the wallet (1000-pack anchor),
+  // resolved for the user's region. null → hub falls back to coins-only.
+  const coinValue = await fetchCoinValueLabel(country, me?.coinBalance ?? 0);
+
   const liveAuctions = auctionsResult.filter((a) => a.status === "LIVE");
   const shuffledAuctions = shuffle(liveAuctions);
   const featuredAuction = shuffledAuctions[0] ?? null;
@@ -214,6 +233,7 @@ export default async function HubPage({
       recentAuctions={recentAuctions}
       recentMarkets={recentMarkets}
       fxRates={fxRates}
+      coinValue={coinValue}
     />
   );
 }
@@ -247,7 +267,7 @@ function shuffle<T>(input: T[]): T[] {
  *  loading placeholder. */
 async function fetchTrendingMarkets(): Promise<HubMarket[]> {
   try {
-    const res = await fetch(`${exchangeBaseServer()}/api/markets/trending?limit=10`, {
+    const res = await fetch(`${exchangeInternalBase()}/api/markets/trending?limit=10`, {
       cache: "no-store",
     });
     if (!res.ok) return [];

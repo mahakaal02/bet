@@ -149,8 +149,6 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-10}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
-      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
-      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
       FIREBASE_CREDENTIALS_PATH: ${FIREBASE_CREDENTIALS_PATH:-}
       # KYC cipher: nullish-coalesce in app code (`?? JWT_SECRET`) does NOT
       # fall back on an empty string, so we must NOT pass an empty value.
@@ -256,9 +254,6 @@ services:
       AUCTIONS_BACKEND_URL: http://backend:4000
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
-      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
-      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
       NOWPAYMENTS_API_KEY: ${NOWPAYMENTS_API_KEY:-}
       NOWPAYMENTS_IPN_SECRET: ${NOWPAYMENTS_IPN_SECRET:-}
       NOWPAYMENTS_SANDBOX: ${NOWPAYMENTS_SANDBOX:-true}
@@ -304,6 +299,11 @@ services:
       NEXT_PUBLIC_EXCHANGE_URL: ${EXCHANGE_URL:-http://localhost:3100}
       NEXT_PUBLIC_ADMIN_URL: ${ADMIN_URL:-http://localhost:5173}
       AUCTIONS_BACKEND_URL: http://backend:4000
+      # Docker-internal Exchange (bet) URL for server-to-server fetches
+      # (e.g. trending markets on the hub). NEXT_PUBLIC_EXCHANGE_URL is
+      # the browser origin (localhost) and is unreachable from inside
+      # this container.
+      EXCHANGE_INTERNAL_URL: http://bet:3100
       NEXTAUTH_URL: ${AUCTIONS_URL:-http://localhost:3200}
     ports:
       - "${AUCTIONS_PORT:-3200}:3200"
@@ -369,7 +369,8 @@ services:
       - ./admin:/app
       - admin-node-modules:/app/node_modules
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:5173 || exit 1"]
+      # base: '/admin/' — root now 404s, so probe the served base path.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5173/admin/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12

@@ -33,7 +33,7 @@ import { ImpersonationScopeGuard } from './guards/impersonation-scope.guard';
  * token. Foundation contributes the two BetWallet dispatchers
  * (debit + credit). Feature modules contribute their own
  * dispatchers as they ship (FCM in PR-NOTIFY-2, SES in
- * PR-NOTIFY-3, Razorpay refund in PR-REFUND-1).
+ * PR-NOTIFY-3, payment refund in PR-REFUND-1).
  *
  * Cache layers and worker scale-out (BullMQ, separate worker
  * pods) wire in dedicated follow-up PRs.

@@ -203,27 +203,158 @@ model CoinSettings {
   updatedAt          DateTime @updatedAt
 }
 
-// Admin-defined SKUs users can purchase. Razorpay orders reference these by id.
+// Admin-defined SKUs users can purchase. Coin-purchase orders reference these by id.
 model CoinPack {
   id        String   @id @default(uuid())
   coins     Int
-  priceInr  Decimal  @db.Decimal(10, 2)
+  /// DEPRECATED legacy India fiat price (INR). The admin no longer
+  /// collects INR — packs are priced in USD (`baseUsdPrice`) and every
+  /// local price (including India's ₹) is PPP-derived from it. Nullable
+  /// + retained only so historical rows and the CSV importer don't
+  /// break; nothing reads it as a source of truth anymore.
+  priceInr  Decimal? @db.Decimal(10, 2)
+  /// Canonical USD anchor for PPP-derived regional pricing. Every
+  /// localized price is computed from this value (see PRICING.md).
+  /// Required for new packs (the admin enters USD); the column stays
+  /// nullable so pre-PPP rows + seeds don't break and the pricing sync
+  /// can skip + warn on any legacy pack still missing it.
+  baseUsdPrice Decimal? @db.Decimal(10, 2)
+  /// Stable store SKU mapped to Apple App Store / Google Play product
+  /// IDs. Unique so the app-store mapping layer can resolve a tier.
+  sku       String?  @unique
   active    Boolean  @default(true)
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
 
-  orders    PaymentOrder[]
+  orders          PaymentOrder[]
+  regionalPricing RegionalCoinPricing[]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PPP (Purchasing Power Parity) regional pricing — see backend/PRICING.md.
+//
+// Design: gameplay coin economy is GLOBAL (a 5-coin entry fee is 5 coins
+// everywhere). Only the FIAT price a user pays to BUY coins varies by
+// country, Steam/Netflix-style. Prices are synced ONCE A YEAR into an
+// immutable snapshot so the user-facing price is stable and predictable
+// (no daily forex jitter, no app-store review churn).
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum PricingSnapshotStatus {
+  DRAFT      // generated, not yet published — admin can review/edit
+  PUBLISHED  // the single active set serving GET /pricing/current
+  ARCHIVED   // a prior year's published set, kept for history
+  FAILED     // a sync run that errored partway — kept for forensics
+}
+
+/// One yearly pricing-generation run. Exactly one row is
+/// `status = PUBLISHED` at a time (enforced in app logic on publish).
+model PricingSnapshot {
+  id              String                @id @default(uuid())
+  /// The calendar year this pricing set is effective for. Unique so a
+  /// re-run for the same year REPLACES rather than duplicates (the
+  /// sync is idempotent — upsert keyed on this).
+  effectiveYear   Int                   @unique
+  status          PricingSnapshotStatus @default(DRAFT)
+  isActive        Boolean               @default(false)
+  /// Country whose multiplier is normalized to 1.0 (default "US").
+  baselineCountry String                @default("US")
+  forexSource     String // e.g. "exchangerate.host"
+  pppSource       String // e.g. "api.worldbank.org NY.GDP.PCAP.PP.CD"
+  /// Admin user id for a manual /admin/pricing/sync run; null = cron.
+  generatedBy     String?
+  notes           String?
+  generatedAt     DateTime              @default(now())
+
+  rows       RegionalCoinPricing[]
+  forexRates ForexRateSnapshot[]
+  pppFactors PppFactorSnapshot[]
+
+  @@index([isActive])
+  @@index([status])
+}
+
+/// Yearly USD→currency rate snapshot. NOT real-time — frozen at sync.
+model ForexRateSnapshot {
+  id            String   @id @default(uuid())
+  snapshotId    String
+  effectiveYear Int
+  currencyCode  String // ISO 4217, e.g. "INR"
+  /// 1 USD = `usdRate` units of `currencyCode`.
+  usdRate       Decimal  @db.Decimal(18, 6)
+  source        String
+  generatedAt   DateTime @default(now())
+
+  snapshot PricingSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@unique([snapshotId, currencyCode])
+  @@index([effectiveYear])
+}
+
+/// Yearly PPP affordability factor per country, normalized against the
+/// snapshot's baseline country (US = 1.0).
+model PppFactorSnapshot {
+  id                   String   @id @default(uuid())
+  snapshotId           String
+  effectiveYear        Int
+  countryCode          String // ISO 3166-1 alpha-2
+  /// Raw upstream value before normalization (GDP per capita PPP, or a
+  /// PPP conversion factor). Kept for audit + admin display.
+  rawPppValue          Decimal? @db.Decimal(18, 6)
+  /// Affordability multiplier in [floor, ceil], normalized vs baseline.
+  normalizedMultiplier Decimal  @db.Decimal(8, 4)
+  source               String
+  /// True when the upstream had no datum for this country and we used
+  /// a regional/default fallback — surfaced in the admin "suspicious"
+  /// log.
+  isFallback           Boolean  @default(false)
+  generatedAt          DateTime @default(now())
+
+  snapshot PricingSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@unique([snapshotId, countryCode])
+  @@index([effectiveYear])
+}
+
+/// The final per-country, per-pack fiat price. Columns mirror the spec's
+/// `regional_coin_pricing` table 1:1 so each row is a self-contained,
+/// auditable record of how the price was derived.
+model RegionalCoinPricing {
+  id                   String   @id @default(uuid())
+  snapshotId           String
+  coinPackId           String
+  countryCode          String // ISO 3166-1 alpha-2
+  currencyCode         String // ISO 4217
+  baseUsdPrice         Decimal  @db.Decimal(10, 2)
+  forexRate            Decimal  @db.Decimal(18, 6)
+  pppMultiplier        Decimal  @db.Decimal(8, 4)
+  /// base_usd_price × ppp_multiplier × forex_rate, BEFORE rounding.
+  calculatedLocalPrice Decimal  @db.Decimal(14, 4)
+  /// calculatedLocalPrice after country-specific psychological rounding.
+  roundedFinalPrice    Decimal  @db.Decimal(14, 2)
+  effectiveYear        Int
+  generatedAt          DateTime @default(now())
+  sourceExchangeRate   String
+  sourcePppData        String
+  isActive             Boolean  @default(false)
+
+  snapshot PricingSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  coinPack CoinPack        @relation(fields: [coinPackId], references: [id], onDelete: Cascade)
+
+  @@unique([snapshotId, coinPackId, countryCode])
+  @@index([countryCode, isActive])
+  @@index([effectiveYear])
 }
 
 // Local audit row for coin movements driven by this backend (auction bids,
-// Razorpay top-ups). The canonical ledger lives on Bet; these rows exist
+// coin purchases). The canonical ledger lives on Bet; these rows exist
 // purely for backend-side reconciliation + idempotency on payment webhooks.
 model CoinTransaction {
   id        String   @id @default(uuid())
   userId    String
   delta     Int      // positive = credit, negative = debit
-  reason    String   // "razorpay_purchase" | "bid_cost" | "admin_grant" | "refund"
-  reference String?  // razorpay payment_id, bid id, etc — used for idempotency
+  reason    String   // "coin_purchase" | "bid_cost" | "admin_grant" | "refund"
+  reference String?  // payment id, bid id, etc — used for idempotency
   metadata  Json?
   createdAt DateTime @default(now())
 
@@ -233,16 +364,20 @@ model CoinTransaction {
   @@unique([reason, reference], name: "uniq_reason_reference")
 }
 
-// Razorpay order — discriminated by `kind`:
+// Coin-purchase / wallet-topup order, discriminated by `kind`:
 //   COIN_PACK    : buys auction coins (coinPackId set, coins > 0)
-//   WALLET_TOPUP : tops up the user's INR wallet (coinPackId null, coins 0)
+//   WALLET_TOPUP : tops up the user's wallet (coinPackId null)
+//
+// Provider-neutral after the Razorpay removal — the Razorpay order/
+// payment id columns were dropped. Currently has no live creator in
+// the backend (the only top-up path is Bet's crypto checkout); kept
+// for historical rows + the PromoCodeRedemption.paymentOrderId
+// reference.
 model PaymentOrder {
   id              String   @id @default(uuid())
   userId          String
   kind            PaymentOrderKind @default(COIN_PACK)
   coinPackId      String?
-  razorpayOrderId String   @unique
-  razorpayPaymentId String?
   amountInr       Decimal  @db.Decimal(10, 2)
   coins           Int      @default(0)
   status          PaymentStatus @default(PENDING)
@@ -508,7 +643,6 @@ enum OutboxKind {
   BET_WALLET_CREDIT
   FCM_PUSH
   SES_EMAIL
-  RAZORPAY_REFUND
   ADMIN_AUDIT_REPLAY
 }
 

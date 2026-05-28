@@ -7,7 +7,7 @@ import { AuditLogService } from '../foundation/audit-log.service';
  * Daily reconciliation (Roadmap §F-ADMIN-5).
  *
  * The auctions backend keeps a *local* `CoinTransaction` log for every
- * coin movement it drives (bid debits, Razorpay credits, refunds,
+ * coin movement it drives (bid debits, purchase credits, refunds,
  * admin grants). Bet (Kalki Exchange) is the canonical wallet. These
  * two should agree at all times — when they don't, money is being
  * lost or duplicated and we want to know within 24h.

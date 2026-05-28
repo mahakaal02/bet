@@ -121,7 +121,7 @@ describe('AnalyticsService.funnel', () => {
         { id: 'u-3', createdAt: inWindow, emailVerified: false, phoneVerified: false },
       ],
       kycVerifications: [{ userId: 'u-1', tier: 'TIER_1' }],
-      coinTxns: [{ userId: 'u-1', createdAt: inWindow, reason: 'razorpay_purchase' }],
+      coinTxns: [{ userId: 'u-1', createdAt: inWindow, reason: 'coin_purchase' }],
       bids: [{ userId: 'u-1', createdAt: inWindow }],
     });
     const r = await svc.funnel({ from: new Date('2026-05-01'), to: now });

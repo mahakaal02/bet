@@ -152,6 +152,27 @@ export class RoundLifecycleService {
   }
 
   async startBettingPhase(): Promise<void> {
+    // A transient DB blip (P1001 "can't reach DB") during betting-phase
+    // setup — e.g. the crash-engine refreshConfig() settings read — must
+    // NOT crash the whole backend. The lifecycle schedules this via
+    // `setTimeout(() => void this.startBettingPhase())`, which discards
+    // the promise, so any throw here would surface as an UNHANDLED
+    // rejection and kill the Node process (taking the API, admin,
+    // pricing — everything — down with it). Catch it and self-heal via
+    // the same recovery path startRunningPhase uses: reset state +
+    // reschedule a fresh BETTING phase after a short cooldown. Once
+    // Postgres is back, the next attempt succeeds and the engine resumes.
+    try {
+      await this.startBettingPhaseInner();
+    } catch (err) {
+      this.logger.error(
+        `startBettingPhase failed (${(err as { code?: string })?.code ?? 'unknown'}): ${(err as Error).message}`,
+      );
+      await this.recoverAfterFailure('startBettingPhase');
+    }
+  }
+
+  private async startBettingPhaseInner(): Promise<void> {
     this.state.phase = 'BETTING';
     this.state.bets.clear();
     this.state.currentMultiplier = 1.0;

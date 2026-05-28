@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import { COIN_PACKS } from "@/lib/coin-packs";
+import { MIN_TOPUP_COINS } from "@/lib/coins";
 import {
   createInvoice,
   isConfigured,
@@ -11,6 +12,34 @@ import {
   successReturnUrl,
   cancelReturnUrl,
 } from "@/lib/nowpayments";
+
+const MAX_CUSTOM_COINS = 10_000_000;
+const BACKEND = (
+  process.env.AUCTIONS_BACKEND_URL ??
+  process.env.NEXT_PUBLIC_BACKEND_URL ??
+  "http://localhost:4000"
+).replace(/\/$/, "");
+
+/** USD price per coin, from the US (baseline) 1000-coin pack. Used to
+ *  quote a custom-amount crypto invoice — NOWPayments only takes a few
+ *  fiat currencies on `price_currency`, so we always charge in USD. */
+async function usdPerCoin(): Promise<number | null> {
+  try {
+    const res = await fetch(`${BACKEND}/pricing/current?country=US`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as {
+      packs?: Array<{ coins: number; price: string }>;
+    };
+    const p = body?.packs?.find((x) => x.coins === 1000);
+    const v = p ? Number(p.price) : NaN;
+    return Number.isFinite(v) && v > 0 ? v / 1000 : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * POST /api/wallet/topup/crypto/order  (PR-BET-NOWPAYMENTS)
@@ -29,9 +58,14 @@ import {
  * For a tighter rate, swap in a forex fetch (cached) in a follow-up.
  */
 
-const Body = z.object({
-  packId: z.string().min(1),
-});
+const Body = z
+  .object({
+    packId: z.string().min(1).optional(),
+    coins: z.number().int().min(MIN_TOPUP_COINS).max(MAX_CUSTOM_COINS).optional(),
+  })
+  .refine((b) => !!b.packId || typeof b.coins === "number", {
+    message: "packId or coins required",
+  });
 
 const INR_PER_USD = 83; // approximate; see above
 
@@ -57,9 +91,34 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
-  const pack = COIN_PACKS.find((p) => p.id === parsed.data.packId);
-  if (!pack) {
-    return NextResponse.json({ error: "unknown_pack" }, { status: 404 });
+  // Resolve the order's coins + USD price: a known pack, or a custom
+  // amount priced SERVER-SIDE (anti-arbitrage — never trust a client
+  // fiat figure).
+  let orderPackId: string;
+  let orderCoins: number;
+  let priceUsd: number;
+  let amountInr: number;
+  let description: string;
+  if (parsed.data.packId) {
+    const pack = COIN_PACKS.find((p) => p.id === parsed.data.packId);
+    if (!pack) {
+      return NextResponse.json({ error: "unknown_pack" }, { status: 404 });
+    }
+    orderPackId = pack.id;
+    orderCoins = pack.coins;
+    priceUsd = Math.max(1, Math.round((pack.priceInr / INR_PER_USD) * 100) / 100);
+    amountInr = pack.priceInr;
+    description = `Kalki Exchange — ${pack.coins.toLocaleString("en-IN")} coins (₹${pack.priceInr})`;
+  } else {
+    orderCoins = parsed.data.coins!;
+    const perCoin = await usdPerCoin();
+    if (perCoin == null) {
+      return NextResponse.json({ error: "pricing_unavailable" }, { status: 503 });
+    }
+    orderPackId = "custom";
+    priceUsd = Math.max(1, Math.round(orderCoins * perCoin * 100) / 100);
+    amountInr = Math.round(priceUsd * INR_PER_USD);
+    description = `Kalki Exchange — ${orderCoins.toLocaleString("en-IN")} coins (custom)`;
   }
 
   // Create the local order row FIRST so we have a stable `order_id`
@@ -69,15 +128,12 @@ export async function POST(req: Request) {
   const order = await db.cryptoPaymentOrder.create({
     data: {
       userId: u.id,
-      packId: pack.id,
-      amountInr: pack.priceInr,
-      coins: pack.coins,
+      packId: orderPackId,
+      amountInr,
+      coins: orderCoins,
       status: "PENDING",
     },
   });
-
-  // Round to 2dp so NOWPayments accepts it without re-quoting.
-  const priceUsd = Math.max(1, Math.round((pack.priceInr / INR_PER_USD) * 100) / 100);
 
   let invoice;
   try {
@@ -85,7 +141,7 @@ export async function POST(req: Request) {
       orderId: order.id,
       priceAmount: priceUsd,
       priceCurrency: "usd",
-      description: `Kalki Exchange — ${pack.coins.toLocaleString("en-IN")} coins (₹${pack.priceInr})`,
+      description,
       ipnCallbackUrl: ipnCallbackUrl(),
       successUrl: successReturnUrl(order.id),
       cancelUrl: cancelReturnUrl(order.id),

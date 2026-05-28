@@ -59,6 +59,9 @@ export type Permission =
   | 'aviator.payout_cap_edit'
   | 'aviator.seed_rotate'
   | 'aviator.chat_moderate'
+  // PPP regional pricing (see backend/PRICING.md)
+  | 'pricing.view'
+  | 'pricing.sync'
   // Generic SystemSetting + feature flags
   | 'settings.view'
   | 'settings.edit'
@@ -99,6 +102,11 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'reconciliation.run',
     'kyc.view',
     'kyc.review',
+    // Regional pricing is a finance concern — FINANCE can view + run
+    // the annual sync. ADMIN gets it via the '*' wildcard; AUDITOR
+    // gets 'pricing.view' via the '*.view' wildcard automatically.
+    'pricing.view',
+    'pricing.sync',
   ],
   MODERATOR: [
     'user.view',

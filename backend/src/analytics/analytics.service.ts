@@ -63,12 +63,12 @@ export class AnalyticsService {
       },
     });
 
-    // Step 5 — first deposit (any razorpay_purchase CoinTransaction).
+    // Step 5 — first deposit (any paid coin-purchase CoinTransaction).
     const firstDeposit = await this.prisma.user.count({
       where: {
         ...inWindow,
         coinTxns: {
-          some: { reason: 'razorpay_purchase' },
+          some: { reason: 'coin_purchase' },
         },
       },
     });
@@ -164,7 +164,7 @@ export class AnalyticsService {
       where: {
         userId: { in: candidates },
         createdAt: { gte: from, lt: to },
-        reason: 'razorpay_purchase',
+        reason: 'coin_purchase',
       },
       select: { userId: true },
       distinct: ['userId'],

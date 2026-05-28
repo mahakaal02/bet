@@ -13,27 +13,47 @@ interface Props {
   min: number;
 }
 
-type Method = "UPI" | "BANK";
+type Method = "UPI" | "BANK" | "CRYPTO";
+
+const CRYPTO_NETWORKS = [
+  "USDT-TRC20",
+  "USDT-ERC20",
+  "USDT-BEP20",
+  "USDC-ERC20",
+  "BTC",
+  "ETH",
+] as const;
+
+const SWIFT_RE = /^[A-Za-z0-9]{8}([A-Za-z0-9]{3})?$/;
+const IBAN_RE = /^[A-Za-z0-9 ]{4,40}$/;
+const WALLET_RE = /^[A-Za-z0-9:_.\-]{20,120}$/;
 
 /**
- * Withdrawal form. Two payout methods, switched via tab:
+ * Withdrawal form. Three payout methods, switched via tab:
+ *   - UPI    : India UPI id (name@bank)
+ *   - BANK   : GLOBAL transfer — beneficiary, bank name, country,
+ *              SWIFT/BIC, account number / IBAN
+ *   - CRYPTO : network/asset + destination wallet address
  *
- *   - UPI: single field, validated against the standard `name@bank` shape
- *   - BANK: account number + IFSC (regex-validated) + beneficiary name
- *
- * Client validation mirrors the server-side Zod schema; the server is the
- * authority — these client checks just give faster feedback. Amount input
- * is bound to the wallet balance so a user can't even type a number > what
- * they have.
+ * Client validation mirrors the server-side Zod; the server is the
+ * authority. Fully localized via `withdrawForm.*` keys.
  */
 export function WithdrawForm({ available, min }: Props) {
   const router = useRouter();
   const [method, setMethod] = useState<Method>("UPI");
   const [amount, setAmount] = useState<string>(String(min));
+  // UPI
   const [upiId, setUpiId] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
-  const [ifsc, setIfsc] = useState("");
+  // Global bank
   const [beneficiaryName, setBeneficiaryName] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [bankCountry, setBankCountry] = useState("");
+  const [swiftBic, setSwiftBic] = useState("");
+  const [accountIban, setAccountIban] = useState("");
+  // Crypto
+  const [network, setNetwork] = useState<(typeof CRYPTO_NETWORKS)[number]>("USDT-TRC20");
+  const [walletAddress, setWalletAddress] = useState("");
+
   const [busy, setBusy] = useState(false);
   const [, startTransition] = useTransition();
   const { t: tr } = useTranslation();
@@ -45,9 +65,13 @@ export function WithdrawForm({ available, min }: Props) {
   const methodValid =
     method === "UPI"
       ? /^[\w.\-]{2,256}@[\w]{2,64}$/.test(upiId)
-      : /^\d{6,20}$/.test(accountNumber) &&
-        /^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc.toUpperCase()) &&
-        beneficiaryName.trim().length >= 2;
+      : method === "BANK"
+        ? beneficiaryName.trim().length >= 2 &&
+          bankName.trim().length >= 2 &&
+          bankCountry.trim().length >= 2 &&
+          SWIFT_RE.test(swiftBic.trim()) &&
+          IBAN_RE.test(accountIban.trim())
+        : WALLET_RE.test(walletAddress.trim());
 
   const valid = amountValid && methodValid;
 
@@ -57,18 +81,23 @@ export function WithdrawForm({ available, min }: Props) {
     try {
       const body =
         method === "UPI"
-          ? {
-              payoutMethod: "UPI",
-              amountCoins: amt,
-              upiId: upiId.trim(),
-            }
-          : {
-              payoutMethod: "BANK",
-              amountCoins: amt,
-              accountNumber: accountNumber.trim(),
-              ifsc: ifsc.trim().toUpperCase(),
-              beneficiaryName: beneficiaryName.trim(),
-            };
+          ? { payoutMethod: "UPI", amountCoins: amt, upiId: upiId.trim() }
+          : method === "BANK"
+            ? {
+                payoutMethod: "BANK",
+                amountCoins: amt,
+                beneficiaryName: beneficiaryName.trim(),
+                bankName: bankName.trim(),
+                bankCountry: bankCountry.trim(),
+                swiftBic: swiftBic.trim().toUpperCase(),
+                accountIban: accountIban.trim().toUpperCase(),
+              }
+            : {
+                payoutMethod: "CRYPTO",
+                amountCoins: amt,
+                network,
+                walletAddress: walletAddress.trim(),
+              };
       const res = await fetch("/api/wallet/withdraw", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -80,11 +109,13 @@ export function WithdrawForm({ available, min }: Props) {
         return;
       }
       toast(tr("withdrawForm.submitSuccess"), "ok");
-      // Clear form for the next request and refresh server-rendered list.
       setUpiId("");
-      setAccountNumber("");
-      setIfsc("");
       setBeneficiaryName("");
+      setBankName("");
+      setBankCountry("");
+      setSwiftBic("");
+      setAccountIban("");
+      setWalletAddress("");
       setAmount(String(min));
       startTransition(() => router.refresh());
     } finally {
@@ -92,10 +123,13 @@ export function WithdrawForm({ available, min }: Props) {
     }
   }
 
+  const labelCls =
+    "mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500";
+
   return (
     <div className="space-y-3">
       <div className="flex gap-2">
-        {(["UPI", "BANK"] as Method[]).map((m) => (
+        {(["UPI", "BANK", "CRYPTO"] as Method[]).map((m) => (
           <button
             key={m}
             type="button"
@@ -107,15 +141,19 @@ export function WithdrawForm({ available, min }: Props) {
                 : "border-slate-700 bg-slate-900/60 text-slate-400 hover:text-slate-200",
             )}
           >
-            {m}
+            {tr(
+              m === "UPI"
+                ? "withdrawForm.methodUpi"
+                : m === "BANK"
+                  ? "withdrawForm.methodBank"
+                  : "withdrawForm.methodCrypto",
+            )}
           </button>
         ))}
       </div>
 
       <div>
-        <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-          {tr("withdrawForm.amountLabel")}
-        </label>
+        <label className={labelCls}>{tr("withdrawForm.amountLabel")}</label>
         <Input
           type="number"
           min={min}
@@ -127,10 +165,7 @@ export function WithdrawForm({ available, min }: Props) {
         />
         <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
           <span>
-            {tr("withdrawForm.amountMinMax", {
-              min: fmtCoins(min),
-              max: fmtCoins(available),
-            })}
+            {tr("withdrawForm.amountMinMax", { min: fmtCoins(min), max: fmtCoins(available) })}
           </span>
           {amountValid ? (
             <span className="text-emerald-300">
@@ -148,11 +183,9 @@ export function WithdrawForm({ available, min }: Props) {
         </div>
       </div>
 
-      {method === "UPI" ? (
+      {method === "UPI" && (
         <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-            {tr("withdrawForm.upiLabel")}
-          </label>
+          <label className={labelCls}>{tr("withdrawForm.upiLabel")}</label>
           <Input
             value={upiId}
             onChange={(e) => setUpiId(e.target.value.trim())}
@@ -163,46 +196,87 @@ export function WithdrawForm({ available, min }: Props) {
             spellCheck={false}
           />
         </div>
-      ) : (
+      )}
+
+      {method === "BANK" && (
         <>
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-              {tr("withdrawForm.accountNumberLabel")}
-            </label>
-            <Input
-              value={accountNumber}
-              onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))}
-              placeholder={tr("withdrawForm.accountNumberPlaceholder")}
-              maxLength={20}
-              disabled={busy}
-              inputMode="numeric"
-            />
+            <label className={labelCls}>{tr("withdrawForm.beneficiaryLabel")}</label>
+            <Input value={beneficiaryName} onChange={(e) => setBeneficiaryName(e.target.value)} maxLength={120} disabled={busy} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-              {tr("withdrawForm.ifscLabel")}
-            </label>
-            <Input
-              value={ifsc}
-              onChange={(e) => setIfsc(e.target.value.toUpperCase())}
-              placeholder={tr("withdrawForm.ifscPlaceholder")}
-              maxLength={11}
+            <label className={labelCls}>{tr("withdrawForm.bankNameLabel")}</label>
+            <Input value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder={tr("withdrawForm.bankNamePlaceholder")} maxLength={120} disabled={busy} />
+          </div>
+          <div>
+            <label className={labelCls}>{tr("withdrawForm.bankCountryLabel")}</label>
+            <Input value={bankCountry} onChange={(e) => setBankCountry(e.target.value)} placeholder={tr("withdrawForm.bankCountryPlaceholder")} maxLength={80} disabled={busy} />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className={labelCls}>{tr("withdrawForm.swiftLabel")}</label>
+              <Input
+                value={swiftBic}
+                onChange={(e) => setSwiftBic(e.target.value.toUpperCase())}
+                placeholder={tr("withdrawForm.swiftPlaceholder")}
+                maxLength={11}
+                disabled={busy}
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>{tr("withdrawForm.ibanLabel")}</label>
+              <Input
+                value={accountIban}
+                onChange={(e) => setAccountIban(e.target.value.toUpperCase())}
+                placeholder={tr("withdrawForm.ibanPlaceholder")}
+                maxLength={40}
+                disabled={busy}
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+            </div>
+          </div>
+        </>
+      )}
+
+      {method === "CRYPTO" && (
+        <>
+          <div>
+            <label className={labelCls}>{tr("withdrawForm.cryptoNetworkLabel")}</label>
+            <select
+              value={network}
+              onChange={(e) => setNetwork(e.target.value as (typeof CRYPTO_NETWORKS)[number])}
               disabled={busy}
-              autoCapitalize="characters"
+              className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-cyan-500 focus:outline-none"
+            >
+              {CRYPTO_NETWORKS.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>{tr("withdrawForm.cryptoAddressLabel")}</label>
+            <Input
+              value={walletAddress}
+              onChange={(e) => setWalletAddress(e.target.value.trim())}
+              placeholder={tr("withdrawForm.cryptoAddressPlaceholder")}
+              maxLength={120}
+              disabled={busy}
+              autoCapitalize="off"
               autoCorrect="off"
               spellCheck={false}
             />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-              {tr("withdrawForm.beneficiaryLabel")}
-            </label>
-            <Input
-              value={beneficiaryName}
-              onChange={(e) => setBeneficiaryName(e.target.value)}
-              maxLength={80}
-              disabled={busy}
-            />
+            {walletAddress.length > 0 && !WALLET_RE.test(walletAddress.trim()) && (
+              <div className="mt-1 text-[11px] text-rose-300">
+                {tr("withdrawForm.errInvalidWallet")}
+              </div>
+            )}
           </div>
         </>
       )}

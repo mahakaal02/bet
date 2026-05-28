@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { isConfigured as razorpayConfigured, publicKeyId } from "@/lib/razorpay";
 import { isConfigured as cryptoConfigured } from "@/lib/nowpayments";
 import { db } from "@/lib/db";
 
@@ -9,13 +8,10 @@ import { db } from "@/lib/db";
  * Single source of truth for which top-up paths the wallet UI should
  * surface. Pure read — never reveals secrets. Returns:
  *
- *   razorpayConfigured  — true when RAZORPAY_KEY_ID + KEY_SECRET set.
- *                         Kept for back-compat; not currently enabled
- *                         in prod helm.
- *   razorpayKeyId       — public key, safe to embed in the page.
  *   instantTopupEnabled — dev convenience (ALLOW_INSTANT_TOPUP=true).
  *   cryptoConfigured    — true when NOWPAYMENTS_API_KEY set. Lights
- *                         up the "Pay with crypto" CTA.
+ *                         up the "Pay with crypto" CTA. The only live
+ *                         payment path after the Razorpay removal.
  *   chatAppDownloadUrl  — super-admin-controlled fallback link
  *                         (PR-BET-ADMIN-FOLLOWUPS). Shown only when
  *                         NO payment path is configured.
@@ -36,8 +32,6 @@ export async function GET() {
     /* DB blip — leave URL empty */
   }
   return NextResponse.json({
-    razorpayConfigured: razorpayConfigured(),
-    razorpayKeyId: publicKeyId(),
     instantTopupEnabled: process.env.ALLOW_INSTANT_TOPUP === "true",
     cryptoConfigured: cryptoConfigured(),
     chatAppDownloadUrl,

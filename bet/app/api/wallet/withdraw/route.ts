@@ -3,25 +3,50 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
-import { MIN_WITHDRAW_COINS } from "@/lib/coins";
+import {
+  MIN_WITHDRAW_COINS,
+  WITHDRAW_EMAIL_VERIFY_THRESHOLD_COINS,
+} from "@/lib/coins";
 import { rateLimit } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 
+const amountField = z.number().int().min(MIN_WITHDRAW_COINS).max(10_000_000);
+
 const UpiBody = z.object({
   payoutMethod: z.literal("UPI"),
-  amountCoins: z.number().int().min(MIN_WITHDRAW_COINS).max(10_000_000),
+  amountCoins: amountField,
   upiId: z.string().regex(/^[\w.\-]{2,256}@[\w]{2,64}$/, "valid UPI ID"),
 });
 
+// Global bank transfer: SWIFT/BIC + account number / IBAN + bank name +
+// country + beneficiary. Validations are intentionally loose (formats
+// vary worldwide); the admin verifies before paying out.
 const BankBody = z.object({
   payoutMethod: z.literal("BANK"),
-  amountCoins: z.number().int().min(MIN_WITHDRAW_COINS).max(10_000_000),
-  accountNumber: z.string().regex(/^\d{6,20}$/),
-  ifsc: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/),
-  beneficiaryName: z.string().min(2).max(80),
+  amountCoins: amountField,
+  beneficiaryName: z.string().min(2).max(120),
+  bankName: z.string().min(2).max(120),
+  bankCountry: z.string().min(2).max(80),
+  swiftBic: z.string().regex(/^[A-Za-z0-9]{8}([A-Za-z0-9]{3})?$/, "valid SWIFT/BIC"),
+  accountIban: z.string().regex(/^[A-Za-z0-9 ]{4,40}$/, "account number / IBAN"),
 });
 
-const Body = z.discriminatedUnion("payoutMethod", [UpiBody, BankBody]);
+// Crypto payout: network/asset + destination wallet address.
+const CryptoBody = z.object({
+  payoutMethod: z.literal("CRYPTO"),
+  amountCoins: amountField,
+  network: z.enum([
+    "USDT-TRC20",
+    "USDT-ERC20",
+    "USDT-BEP20",
+    "USDC-ERC20",
+    "BTC",
+    "ETH",
+  ]),
+  walletAddress: z.string().regex(/^[A-Za-z0-9:_.\-]{20,120}$/, "wallet address"),
+});
+
+const Body = z.discriminatedUnion("payoutMethod", [UpiBody, BankBody, CryptoBody]);
 
 /**
  * Submit a withdrawal request. Atomic: locks the coins (debits the wallet,
@@ -58,7 +83,12 @@ export async function POST(req: Request) {
   if (!me || me.banned) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  if (!me.emailVerified) {
+  // Email verification is only required for larger payouts. Small
+  // withdrawals (≤ threshold) go through without it.
+  if (
+    data.amountCoins > WITHDRAW_EMAIL_VERIFY_THRESHOLD_COINS &&
+    !me.emailVerified
+  ) {
     return NextResponse.json({ error: "email_not_verified" }, { status: 403 });
   }
 
@@ -74,11 +104,18 @@ export async function POST(req: Request) {
   const payoutDetails =
     data.payoutMethod === "UPI"
       ? { upiId: data.upiId }
-      : {
-          accountNumber: data.accountNumber,
-          ifsc: data.ifsc,
-          beneficiaryName: data.beneficiaryName,
-        };
+      : data.payoutMethod === "BANK"
+        ? {
+            beneficiaryName: data.beneficiaryName,
+            bankName: data.bankName,
+            bankCountry: data.bankCountry,
+            swiftBic: data.swiftBic.toUpperCase(),
+            accountIban: data.accountIban.replace(/\s+/g, "").toUpperCase(),
+          }
+        : {
+            network: data.network,
+            walletAddress: data.walletAddress,
+          };
 
   try {
     const result = await db.$transaction(async (tx) => {
@@ -123,7 +160,7 @@ export async function POST(req: Request) {
         data: {
           userId: u.id,
           title: "Withdrawal submitted",
-          body: `₹${data.amountCoins} requested via ${data.payoutMethod}. We'll review and process it within 24h.`,
+          body: `${data.amountCoins.toLocaleString()} coins requested via ${data.payoutMethod}. We'll review and process it within 24h.`,
           href: "/wallet",
         },
       });

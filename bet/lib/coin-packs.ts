@@ -7,7 +7,7 @@ import { COIN_RATE_INR } from "@/lib/coins";
  *
  * Hard-coded so an admin-edited catalog can't drift from the 1:1 rule.
  *
- * The Razorpay verify step uses the pack id (never the client-supplied
+ * The server verify step uses the pack id (never the client-supplied
  * price), so a tampered client can't request a 5000-coin pack for ₹100.
  */
 export interface CoinPack {

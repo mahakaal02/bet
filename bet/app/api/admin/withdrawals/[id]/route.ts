@@ -7,7 +7,7 @@ import { logger } from "@/lib/logger";
 const Body = z.object({
   action: z.enum(["approve", "reject", "mark_paid"]),
   note: z.string().max(280).optional(),
-  /** Razorpay payout id, captured when marking paid. */
+  /** Payout reference id, captured when marking paid. */
   paidReference: z.string().max(120).optional(),
 });
 
@@ -23,7 +23,7 @@ const Body = z.object({
  * of the user's payout method for the audit trail.
  *
  * Approve is intentionally separate from mark_paid so an admin can queue
- * payouts in bulk inside Razorpay's payouts dashboard, then come back and
+ * payouts in bulk via the payout provider's dashboard, then come back and
  * tick each one as paid with the resulting reference.
  */
 export async function POST(
@@ -119,7 +119,7 @@ export async function POST(
             status: "PAID",
             paidReference,
             paidAt: new Date(),
-            // Note may carry the Razorpay transaction id detail; keep it.
+            // Note may carry the payout transaction id detail; keep it.
             decisionNote: note ?? w.decisionNote,
           },
         });

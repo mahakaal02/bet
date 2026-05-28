@@ -85,7 +85,7 @@ export class CsvExportService {
 
   /**
    * Coin-transaction ledger export. Includes reference column so
-   * finance can join back to Razorpay payment ids etc.
+   * finance can join back to payment ids etc.
    */
   async *exportCoinTransactions(input: { from?: Date; to?: Date }): AsyncGenerator<string> {
     yield csvRow(['id', 'createdAt', 'userId', 'delta', 'reason', 'reference']);

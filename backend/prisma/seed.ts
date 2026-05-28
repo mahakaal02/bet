@@ -55,18 +55,42 @@ async function main() {
     demoUserIds[`user${i}`] = u.id;
   }
 
+  // `baseUsdPrice` is the canonical USD anchor the PPP pricing system
+  // derives every regional price from (see backend/PRICING.md). `sku`
+  // maps to the Apple/Google store product id. `priceInr` stays as the
+  // legacy India INR price (the sync also produces an IN row that
+  // ops can compare against it).
+  // Aligned to the bet (Kalki Exchange) wallet tiers (100/500/1000/
+  // 5000) so the PPP system produces a localized price for the exact
+  // packs the wallet sells. `priceInr` stays at the legacy 1:1 value
+  // (legacy INR path); the localized fiat price the user sees
+  // comes from RegionalCoinPricing.
   const packs = [
-    { id: 'pack-50',  coins: 50,  priceInr: '250.00',  sortOrder: 0 },
-    { id: 'pack-120', coins: 120, priceInr: '500.00',  sortOrder: 1 },
-    { id: 'pack-300', coins: 300, priceInr: '1100.00', sortOrder: 2 },
+    { id: 'pack-100',  coins: 100,  priceInr: '100.00',  baseUsdPrice: '0.99',  sku: 'coins_100',  sortOrder: 0 },
+    { id: 'pack-500',  coins: 500,  priceInr: '500.00',  baseUsdPrice: '3.99',  sku: 'coins_500',  sortOrder: 1 },
+    { id: 'pack-1000', coins: 1000, priceInr: '1000.00', baseUsdPrice: '6.99',  sku: 'coins_1000', sortOrder: 2 },
+    { id: 'pack-5000', coins: 5000, priceInr: '5000.00', baseUsdPrice: '29.99', sku: 'coins_5000', sortOrder: 3 },
   ];
   for (const p of packs) {
     await prisma.coinPack.upsert({
       where: { id: p.id },
-      update: {},
-      create: { id: p.id, coins: p.coins, priceInr: p.priceInr, sortOrder: p.sortOrder },
+      update: { baseUsdPrice: p.baseUsdPrice, sku: p.sku, coins: p.coins, priceInr: p.priceInr, sortOrder: p.sortOrder },
+      create: {
+        id: p.id,
+        coins: p.coins,
+        priceInr: p.priceInr,
+        baseUsdPrice: p.baseUsdPrice,
+        sku: p.sku,
+        sortOrder: p.sortOrder,
+      },
     });
   }
+  // Retire the pre-alignment pack tiers so the PPP sync (which only
+  // prices `active: true` packs) and the wallet stop surfacing them.
+  await prisma.coinPack.updateMany({
+    where: { id: { in: ['pack-50', 'pack-120', 'pack-300'] } },
+    data: { active: false },
+  });
 
   // ─── Auctions ────────────────────────────────────────────────────────
   //
