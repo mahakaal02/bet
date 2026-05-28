@@ -86,6 +86,12 @@ const SECTIONS: NavSection[] = [
         match: ["/admin/markets"],
       },
       {
+        href: "/admin/groups",
+        label: "Events",
+        icon: IconChart,
+        match: ["/admin/groups"],
+      },
+      {
         href: "/admin/markets/new",
         label: "New market",
         icon: IconPlus,

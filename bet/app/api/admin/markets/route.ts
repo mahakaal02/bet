@@ -11,6 +11,10 @@ const Body = z.object({
   resolutionSource: z.string().max(500).nullish().or(z.literal("")),
   endsAt: z.string().datetime(),
   featured: z.boolean().optional(),
+  // Optional event/group assignment (additive). Omitted → standalone market,
+  // exactly as before grouped markets existed.
+  groupId: z.string().nullish(),
+  groupSortOrder: z.number().int().min(0).max(100_000).nullish(),
 });
 
 export async function POST(req: Request) {
@@ -27,6 +31,19 @@ export async function POST(req: Request) {
     );
   }
 
+  // Validate the optional group up front so a bad id is a clean 400 rather
+  // than an opaque FK violation.
+  const groupId = parsed.data.groupId || null;
+  if (groupId) {
+    const group = await db.marketGroup.findUnique({
+      where: { id: groupId },
+      select: { id: true },
+    });
+    if (!group) {
+      return NextResponse.json({ error: "group_not_found" }, { status: 400 });
+    }
+  }
+
   const slug = await uniqueSlug(parsed.data.title);
   const market = await db.market.create({
     data: {
@@ -39,6 +56,8 @@ export async function POST(req: Request) {
       endsAt: new Date(parsed.data.endsAt),
       featured: parsed.data.featured ?? false,
       createdById: u.id,
+      groupId,
+      groupSortOrder: parsed.data.groupSortOrder ?? null,
       pricePoints: { create: { yesPrice: 0.5, noPrice: 0.5 } },
     },
   });

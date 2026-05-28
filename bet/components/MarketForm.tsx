@@ -17,7 +17,11 @@ interface MarketFormProps {
     resolutionSource: string | null;
     endsAt: string;
     featured: boolean;
+    groupId?: string | null;
+    groupSortOrder?: number | null;
   };
+  /** Available events/groups to optionally attach this market to. */
+  groups?: { id: string; title: string }[];
 }
 
 const CATEGORIES: MarketCategory[] = [
@@ -28,7 +32,7 @@ const CATEGORIES: MarketCategory[] = [
   "ENTERTAINMENT",
 ];
 
-export function MarketForm({ market }: MarketFormProps) {
+export function MarketForm({ market, groups = [] }: MarketFormProps) {
   const router = useRouter();
   const editing = !!market;
   const [busy, setBusy] = useState(false);
@@ -40,6 +44,9 @@ export function MarketForm({ market }: MarketFormProps) {
     resolutionSource: market?.resolutionSource ?? "",
     endsAt: market ? toLocalDatetime(market.endsAt) : defaultEndsAt(),
     featured: market?.featured ?? false,
+    groupId: market?.groupId ?? "",
+    groupSortOrder:
+      market?.groupSortOrder != null ? String(market.groupSortOrder) : "",
   });
 
   async function onSubmit(e: React.FormEvent) {
@@ -56,6 +63,13 @@ export function MarketForm({ market }: MarketFormProps) {
         body: JSON.stringify({
           ...form,
           endsAt: new Date(form.endsAt).toISOString(),
+          // "" → standalone (API coerces falsy groupId to null). Sort order is
+          // only meaningful inside a group; numeric or null on the wire.
+          groupId: form.groupId || null,
+          groupSortOrder:
+            form.groupId && form.groupSortOrder !== ""
+              ? Number(form.groupSortOrder)
+              : null,
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -152,6 +166,37 @@ export function MarketForm({ market }: MarketFormProps) {
           placeholder="The Associated Press / official press release / …"
         />
       </Field>
+      {(groups.length > 0 || form.groupId) && (
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Event / group (optional)">
+            <select
+              value={form.groupId}
+              onChange={(e) => setForm({ ...form, groupId: e.target.value })}
+              className="h-10 w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 text-sm"
+            >
+              <option value="">— None (standalone) —</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.title}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Sort order in event">
+            <Input
+              type="number"
+              min={0}
+              value={form.groupSortOrder}
+              disabled={!form.groupId}
+              onChange={(e) =>
+                setForm({ ...form, groupSortOrder: e.target.value })
+              }
+              placeholder="0"
+            />
+          </Field>
+        </div>
+      )}
+
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"

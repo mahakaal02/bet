@@ -12,6 +12,9 @@ const Body = z
     resolutionSource: z.string().max(500).nullish().or(z.literal("")),
     endsAt: z.string().datetime(),
     featured: z.boolean().optional(),
+    // Assign to (or, with null, detach from) an event/group. Additive.
+    groupId: z.string().nullish(),
+    groupSortOrder: z.number().int().min(0).max(100_000).nullish(),
   })
   .partial();
 
@@ -39,10 +42,26 @@ export async function PATCH(
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
 
+  if (parsed.data.groupId) {
+    const group = await db.marketGroup.findUnique({
+      where: { id: parsed.data.groupId },
+      select: { id: true },
+    });
+    if (!group) {
+      return NextResponse.json({ error: "group_not_found" }, { status: 400 });
+    }
+  }
+
   const updated = await db.market.update({
     where: { id },
     data: {
       ...(parsed.data.title !== undefined && { title: parsed.data.title }),
+      ...(parsed.data.groupId !== undefined && {
+        groupId: parsed.data.groupId || null,
+      }),
+      ...(parsed.data.groupSortOrder !== undefined && {
+        groupSortOrder: parsed.data.groupSortOrder ?? null,
+      }),
       ...(parsed.data.description !== undefined && {
         description: parsed.data.description,
       }),

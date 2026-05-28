@@ -30,6 +30,19 @@ export default async function MarketOverviewPage({
   const market = await db.market.findUnique({ where: { id } });
   if (!market) notFound();
 
+  // Groups this market may be (re)assigned to. Include the market's current
+  // group even if RESOLVED/CANCELLED so the current selection always renders.
+  const groups = await db.marketGroup.findMany({
+    where: {
+      OR: [
+        { status: { in: ["OPEN", "CLOSED"] } },
+        ...(market.groupId ? [{ id: market.groupId }] : []),
+      ],
+    },
+    orderBy: [{ featured: "desc" }, { sortOrder: "asc" }, { createdAt: "desc" }],
+    select: { id: true, title: true },
+  });
+
   const canResolve = market.status === "OPEN" || market.status === "CLOSED";
   const isFinal = market.status === "RESOLVED" || market.status === "CANCELLED";
 
@@ -101,7 +114,10 @@ export default async function MarketOverviewPage({
               resolutionSource: market.resolutionSource,
               endsAt: market.endsAt.toISOString(),
               featured: market.featured,
+              groupId: market.groupId,
+              groupSortOrder: market.groupSortOrder,
             }}
+            groups={groups}
           />
         </Card>
       )}
