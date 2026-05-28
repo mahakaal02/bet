@@ -15,7 +15,7 @@ interface Props {
  * Per-row action strip on /admin/withdrawals.
  *
  *   PENDING  → Approve / Reject
- *   APPROVED → Mark paid (requires Razorpay payout reference)
+ *   APPROVED → Mark paid (requires a payout reference)
  *
  * Each action submits to POST /api/admin/withdrawals/[id] with the matching
  * verb. The server enforces the state machine; this UI just narrows the
@@ -47,7 +47,7 @@ export function WithdrawalActions({ id, status }: Props) {
       }
       toast(
         action === "approve"
-          ? "Approved — process payout in Razorpay then mark paid."
+          ? "Approved — process the payout externally, then mark paid."
           : action === "reject"
             ? "Rejected — coins refunded."
             : "Marked paid.",
@@ -96,7 +96,7 @@ export function WithdrawalActions({ id, status }: Props) {
           <Input
             value={paidRef}
             onChange={(e) => setPaidRef(e.target.value.trim())}
-            placeholder="Razorpay payout id (required)"
+            placeholder="payout reference id (required)"
             disabled={busy}
             autoCapitalize="off"
             spellCheck={false}
@@ -119,7 +119,7 @@ function prettyError(code?: string): string {
     case "invalid_state":
       return "Already decided — refresh the page.";
     case "missing_paid_reference":
-      return "Paste the Razorpay payout id first.";
+      return "Paste the payout reference id first.";
     case "not_found":
       return "That withdrawal vanished.";
     default:

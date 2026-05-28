@@ -213,7 +213,7 @@ export class ReferralsService {
 
     const minDeposit = await this.settings.getInt('referral.qualification_deposit_min_coins', 1000);
     const deposits = await this.prisma.coinTransaction.aggregate({
-      where: { userId: refereeUserId, reason: 'razorpay_purchase' },
+      where: { userId: refereeUserId, reason: 'coin_purchase' },
       _sum: { delta: true },
     });
     const totalDeposited = deposits._sum.delta ?? 0;

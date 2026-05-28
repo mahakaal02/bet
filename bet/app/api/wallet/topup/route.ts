@@ -4,30 +4,38 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { findPack } from "@/lib/coin-packs";
+import { MIN_TOPUP_COINS } from "@/lib/coins";
 import { rateLimit } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { publish, Channels } from "@/lib/pubsub";
 
-const Body = z.object({
-  packId: z.string().min(1).max(40),
-  /**
-   * Razorpay-style payment receipt. Optional in the MVP flow (we credit
-   * instantly via the placeholder path); required once a real PG is wired
-   * — at which point the route validates the signature before crediting.
-   */
-  paymentRef: z.string().max(120).optional(),
-});
+const MAX_CUSTOM_COINS = 10_000_000;
+
+const Body = z
+  .object({
+    /** A predefined pack… */
+    packId: z.string().min(1).max(40).optional(),
+    /** …or a custom coin amount (the "Custom amount" card). */
+    coins: z.number().int().min(MIN_TOPUP_COINS).max(MAX_CUSTOM_COINS).optional(),
+    /**
+     * Payment receipt reference. Optional in the MVP flow (we credit
+     * instantly via the placeholder path); a real PG would supply + verify
+     * it before crediting.
+     */
+    paymentRef: z.string().max(120).optional(),
+  })
+  .refine((b) => !!b.packId || typeof b.coins === "number", {
+    message: "packId or coins required",
+  });
 
 /**
  * DEV-ONLY instant top-up. Gated behind `ALLOW_INSTANT_TOPUP=true` so a
- * production deploy can never credit a wallet without a verified Razorpay
- * payment.
+ * production deploy can never credit a wallet without a verified payment.
  *
- * Real top-up flow:
- *   POST /api/wallet/topup/order   → server creates Razorpay order
- *   open Razorpay Checkout          (client)
- *   POST /api/wallet/topup/verify  → server verifies HMAC, credits wallet
- *   POST /api/webhooks/razorpay    → payment.captured webhook, idempotent
+ * Live top-up flow (post-Razorpay removal):
+ *   POST /api/wallet/topup/crypto/order → NOWPayments hosted invoice
+ *   user pays on the hosted checkout      (off-site)
+ *   POST /api/webhooks/nowpayments       → IPN credits wallet, idempotent
  *
  * Instant top-up exists so a dev without payment creds can exercise the
  * rest of the platform (markets, orderbook, withdrawals).
@@ -53,9 +61,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
 
-  const pack = findPack(parsed.data.packId);
-  if (!pack) {
-    return NextResponse.json({ error: "unknown_pack" }, { status: 400 });
+  // Resolve how many coins to credit: a known pack, or a custom amount.
+  let coinsToCredit: number;
+  let meta: Record<string, unknown>;
+  if (parsed.data.packId) {
+    const pack = findPack(parsed.data.packId);
+    if (!pack) {
+      return NextResponse.json({ error: "unknown_pack" }, { status: 400 });
+    }
+    coinsToCredit = pack.coins;
+    meta = { packId: pack.id, priceInr: pack.priceInr };
+  } else {
+    coinsToCredit = parsed.data.coins!;
+    meta = { custom: true, coins: coinsToCredit };
   }
 
   // Without a real PG, every successful POST is a fresh credit. We mint a
@@ -87,27 +105,27 @@ export async function POST(req: Request) {
 
       const wallet = await tx.wallet.update({
         where: { userId: u.id },
-        data: { balance: { increment: pack.coins } },
+        data: { balance: { increment: coinsToCredit } },
       });
       await tx.transaction.create({
         data: {
           userId: u.id,
-          delta: pack.coins,
+          delta: coinsToCredit,
           kind: "wallet_topup",
           reference: paymentRef,
-          metadata: { packId: pack.id, priceInr: pack.priceInr },
+          metadata: meta,
         },
       });
       await tx.notification.create({
         data: {
           userId: u.id,
           title: "Wallet topped up",
-          body: `${pack.coins.toLocaleString()} coins added. Spend them in markets, auctions or Aviator.`,
+          body: `${coinsToCredit.toLocaleString()} coins added. Spend them in markets, auctions or Aviator.`,
           href: "/profile",
         },
       });
       return {
-        credited: pack.coins,
+        credited: coinsToCredit,
         balance: wallet.balance,
         duplicate: false,
       };
@@ -116,7 +134,11 @@ export async function POST(req: Request) {
     publish(Channels.user(u.id), { type: "notification", at: Date.now() });
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
-    logger.error(e, { route: "/api/wallet/topup", userId: u.id, packId: pack.id });
+    logger.error(e, {
+      route: "/api/wallet/topup",
+      userId: u.id,
+      packId: parsed.data.packId ?? "custom",
+    });
     return NextResponse.json({ error: "internal" }, { status: 500 });
   }
 }

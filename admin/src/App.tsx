@@ -11,6 +11,7 @@ import CreateAuction from './pages/CreateAuction';
 import EditAuction from './pages/EditAuction';
 import CoinSettings from './pages/CoinSettings';
 import CoinPacks from './pages/CoinPacks';
+import Pricing from './pages/Pricing';
 import Withdrawals from './pages/Withdrawals';
 import AviatorAnalytics from './pages/AviatorAnalytics';
 import AviatorControls from './pages/AviatorControls';
@@ -88,6 +89,7 @@ export default function App() {
         <Route path="auctions/:id/bids" element={<AuctionBids />} />
         <Route path="coin-settings" element={<CoinSettings />} />
         <Route path="coin-packs" element={<CoinPacks />} />
+        <Route path="pricing" element={<Pricing />} />
         <Route path="withdrawals" element={<Withdrawals />} />
         <Route path="aviator/analytics" element={<AviatorAnalytics />} />
         <Route path="aviator/controls" element={<AviatorControls />} />

@@ -12,12 +12,12 @@ export function signupCoins(): number {
 /**
  * 1 coin = ₹1, by platform decree. Kept as a constant (rather than env-
  * driven) so any future promotional rate would have to be a deliberate
- * code change with audit. Razorpay quotes in paise (1 INR = 100 paise),
+ * code change with audit. Payment gateways quote in paise (1 INR = 100 paise),
  * so payment handlers multiply this by 100 themselves.
  */
 export const COIN_RATE_INR = 1 as const;
 
-/** Min top-up in coins (= ₹ same). Razorpay's test mode rejects orders
+/** Min top-up in coins (= ₹ same). Payment gateways reject sub-₹1 orders
  *  below ₹1 anyway; we set a higher floor so the payments UX is sane. */
 export const MIN_TOPUP_COINS = 100;
 
@@ -29,4 +29,12 @@ export const MIN_TOPUP_COINS = 100;
  *  `min` and the helper text. The Aviator `WalletPanel`'s encash
  *  threshold mirrors this so the "Encash unlocks at …" hint stays
  *  in sync with the server contract. */
-export const MIN_WITHDRAW_COINS = 2000;
+export const MIN_WITHDRAW_COINS = 2999;
+
+/**
+ * Withdrawals at or below this size do NOT require a verified email —
+ * keeps the common small cash-out friction-free. Above it, email
+ * verification is required (anti-fraud on larger payouts). Enforced
+ * server-side in `app/api/wallet/withdraw/route.ts`.
+ */
+export const WITHDRAW_EMAIL_VERIFY_THRESHOLD_COINS = 20000;

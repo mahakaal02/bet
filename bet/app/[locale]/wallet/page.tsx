@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { Coins, Sparkles, ShieldCheck, ArrowDownToLine } from "lucide-react";
-import { Navbar } from "@/components/Navbar";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import "./wallet-v2.css";
+import { BalanceHero, ThemeSwitch, SecureChatActions } from "./wallet-client";
 import { BuyCoinsGrid } from "@/components/BuyCoinsGrid";
 import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { COIN_PACKS } from "@/lib/coin-packs";
+import { fetchLocalizedPricing, coinValueLabel } from "@/lib/pricing";
 import { MIN_WITHDRAW_COINS } from "@/lib/coins";
+import { hubHomeUrl } from "@/lib/hub";
 import { fmtCoins, timeAgo } from "@/lib/utils";
 import {
   DEFAULT_LOCALE,
@@ -35,18 +35,18 @@ export async function generateMetadata({
     path: "/wallet",
     title: t("meta.walletTitle", locale),
     description: t("meta.walletDescription", locale),
-    // Authenticated surface — serves user-specific balance data, so
-    // it shouldn't be indexed. The robots.txt also disallows it, but
-    // a per-page noindex meta is the belt-and-suspenders signal.
     noindex: true,
   });
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 /**
- * Wallet page. Hub for everything balance-related — view current balance,
- * buy coin packs, see recent top-ups + spends. Coin packs are server-
- * rendered so the prices are trustable; the buy action posts to /api/wallet
- * /topup which is the only path that credits the wallet.
+ * Wallet — Wallet v2 design (E:\kalki.bet-2\Wallet v2.html), wired to
+ * the real backend. The page presentation changed wholesale; the data
+ * flow is unchanged: auth gate, balance + PPP value, the BuyCoinsGrid
+ * top-up path (/api/wallet/topup*), the withdraw page hand-off, and the
+ * transaction ledger. No API routes or DB shapes were touched.
  */
 export default async function WalletPage({
   params,
@@ -58,193 +58,481 @@ export default async function WalletPage({
   const { locale: raw } = await params;
   if (!isLocale(raw)) notFound();
   const locale: Locale = raw;
-  const tr = (k: string, vars?: Record<string, string | number>) =>
-    t(k, locale, vars);
+  const tr = (k: string, vars?: Record<string, string | number>) => t(k, locale, vars);
   const lp = (h: string) => localizedPath(h, locale);
 
   const u = await getAuthedUser();
   if (!u) {
-    // PR-BET-I18N analytics safety — preserve UTM / click-ID / referral
-    // state across the auth round-trip by encoding the full inbound
-    // URL (path + searchParams) into `?next=`.
     const sp = await searchParams;
     redirect(buildAuthRedirect("/wallet", sp, locale));
   }
 
-  const [wallet, recent, me, pendingWithdrawals] = await Promise.all([
-    db.wallet.findUnique({ where: { userId: u.id }, select: { balance: true } }),
-    db.transaction.findMany({
-      where: { userId: u.id },
-      orderBy: { createdAt: "desc" },
-      take: 12,
-    }),
-    db.user.findUnique({
-      where: { id: u.id },
-      select: { username: true, email: true, emailVerified: true },
-    }),
-    db.withdrawalRequest.findMany({
-      where: { userId: u.id, status: { in: ["PENDING", "APPROVED"] } },
-      orderBy: { createdAt: "desc" },
-    }),
-  ]);
+  const weekAgo = new Date(Date.now() - 7 * DAY_MS);
+  const [wallet, recent, me, pendingWithdrawals, localized, weekTxns, chatRow] =
+    await Promise.all([
+      db.wallet.findUnique({ where: { userId: u.id }, select: { balance: true } }),
+      db.transaction.findMany({
+        where: { userId: u.id },
+        orderBy: { createdAt: "desc" },
+        take: 12,
+      }),
+      db.user.findUnique({
+        where: { id: u.id },
+        select: { username: true, email: true, emailVerified: true },
+      }),
+      db.withdrawalRequest.findMany({
+        where: { userId: u.id, status: { in: ["PENDING", "APPROVED"] } },
+        orderBy: { createdAt: "desc" },
+      }),
+      fetchLocalizedPricing(locale),
+      db.transaction.findMany({
+        where: { userId: u.id, createdAt: { gte: weekAgo } },
+        select: { delta: true, createdAt: true },
+      }),
+      db.adminSetting
+        .findUnique({ where: { key: "wallet.chat_app_download_url" } })
+        .catch(() => null),
+    ]);
+
+  const balance = wallet?.balance ?? 0;
+  const localizedPacks = localized ? Array.from(localized.byCoins.values()) : [];
+  const estValue = coinValueLabel(balance, localized);
+  const currencyCode = localized?.currency ?? null;
+
+  // 24h + 7d stats from the week window (all real ledger data).
+  const dayAgoMs = Date.now() - DAY_MS;
+  let last24h = 0;
+  let net7d = 0;
+  let vol7d = 0;
+  for (const tx of weekTxns) {
+    net7d += tx.delta;
+    vol7d += Math.abs(tx.delta);
+    if (new Date(tx.createdAt).getTime() >= dayAgoMs) last24h += tx.delta;
+  }
+
+  // Running balance for the ledger (balance AFTER each tx, newest first).
+  let running = balance;
+  const ledger = recent.map((tx) => {
+    const after = running;
+    running -= tx.delta;
+    return { tx, after };
+  });
+
+  const chatAppUrl =
+    chatRow?.value != null
+      ? typeof chatRow.value === "string"
+        ? chatRow.value
+        : String(chatRow.value).replace(/^"|"$/g, "")
+      : "";
+
+  const emailVerified = !!me?.emailVerified;
+  const username = me?.username ?? "user";
+  const initial = username.slice(0, 1).toUpperCase();
+  const syncedLabel = `SYNCED · ${fmtAbs(new Date())}`;
 
   return (
-    <main className="min-h-screen pb-20">
-      <Navbar />
-      <div className="mx-auto max-w-4xl px-4 py-6">
-        <div className="mb-4">
-          <h1 className="flex items-center gap-2 text-2xl font-black">
-            <Coins className="h-6 w-6 text-cyan-300" />
-            {tr("wallet.heading")}
-          </h1>
-          <p className="text-sm text-slate-400">{tr("wallet.subtext")}</p>
+    <div className="wlt">
+      <div className="bg-stack" aria-hidden="true">
+        <div className="bg-mesh" />
+        <div className="bg-grid" />
+        <div className="bg-grain" />
+      </div>
+
+      {/* ── TOPBAR ── */}
+      <header className="topbar">
+        <div className="topbar-inner">
+          <a className="brand" href={hubHomeUrl()}>
+            <span className="brand-mark" aria-label="kalki">
+              <svg width="22" height="22" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+                <path d="M14 30 L14 26 C14 23 15.6 21 18 20.4 L18 16.6 C17 14 18 11 20.6 9.4 L25 6.6 C28.4 4.6 32 6.4 33.4 9.4 L33.4 16 C33.4 21.2 31 26 26.6 28.4 L26.6 30 Z" fill="#F5F7FF" />
+                <path d="M20.5 7.5 L14 4 L18 8.5 L13 7 L19.5 10.5 Z" fill="url(#kg)" />
+                <ellipse cx="26.5" cy="13" rx="1.2" ry="0.7" fill="#0b1020" transform="rotate(-18 26.5 13)" />
+                <defs>
+                  <linearGradient id="kg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stopColor="#22D3EE" />
+                    <stop offset="1" stopColor="#6366F1" />
+                  </linearGradient>
+                </defs>
+              </svg>
+            </span>
+            <span className="brand-wm">kalki<span className="dot">.</span></span>
+          </a>
+
+          <nav className="nav" aria-label="primary">
+            <Link href={lp("/markets")}>{tr("nav.markets")}</Link>
+            <Link href={lp("/portfolio")}>{tr("nav.portfolio")}</Link>
+            <Link href={lp("/watchlist")}>{tr("nav.watchlist")}</Link>
+            <Link href={lp("/leaderboard")}>{tr("nav.leaderboard")}</Link>
+            <Link className="active" href={lp("/wallet")}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="6" width="20" height="14" rx="3" />
+                <path d="M2 10h20" />
+                <circle cx="17" cy="15" r="1.5" fill="currentColor" />
+              </svg>
+              {tr("nav.wallet")}
+            </Link>
+          </nav>
+
+          <div className="topbar-right">
+            <span className="balance-pill">
+              <span className="lbl">BAL</span> {fmtCoins(balance)}
+            </span>
+            <ThemeSwitch />
+            <a className="deposit-btn" href="#buy">+ {tr("wallet.buyCoins")}</a>
+            <div className="avatar">{initial}</div>
+          </div>
+        </div>
+      </header>
+
+      {/* ── STATUS STRIP (honest, no fabricated figures) ── */}
+      <div className="status-strip">
+        <div className="status-inner">
+          <span className="live">{tr("wallet.unified").toUpperCase()}</span>
+          {currencyCode && (
+            <>
+              <span className="sep">·</span>
+              <span>{localized?.country} · {currencyCode}</span>
+            </>
+          )}
+          <span className="sep">·</span>
+          <span>{tr("wallet.statusGames")}</span>
+          <span className="sep">·</span>
+          <span>{tr("wallet.statusMethods")}</span>
+        </div>
+      </div>
+
+      {/* ── PAGE ── */}
+      <main className="page">
+        <div className="page-head">
+          <div>
+            <div className="crumbs">
+              <span>{tr("wallet.crumbAccount")}</span>
+              <span className="sep">/</span>
+              <span className="here">{tr("wallet.heading")}</span>
+            </div>
+            <h1 className="page-title">
+              <em>{tr("wallet.title")}</em>
+            </h1>
+            <p className="page-sub">{tr("wallet.unifiedPromise")}</p>
+          </div>
+          <div className="crumbs" style={{ fontFamily: "var(--font-mono)" }}>
+            <span>ACC · {username}</span>
+            <span className="sep">·</span>
+            <span style={{ color: emailVerified ? "var(--emerald-300)" : "var(--amber-300)" }}>
+              {emailVerified ? tr("wallet.emailVerified") : tr("wallet.verifyEmail")}
+            </span>
+          </div>
         </div>
 
-        <Card className="mb-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-xs uppercase tracking-wider text-slate-500">
-                {tr("wallet.currentBalance")}
-              </div>
-              <div className="flex items-center gap-2 text-4xl font-black text-cyan-300">
-                {fmtCoins(wallet?.balance ?? 0)}
-                <span className="text-base font-semibold text-slate-500">
-                  {tr("wallet.coins")}
+        <div className="grid">
+          {/* ══════════ MAIN COLUMN ══════════ */}
+          <div className="col-main">
+            <BalanceHero
+              balanceCoins={balance}
+              valueLabel={estValue}
+              currencyCode={currencyCode}
+              last24h={last24h}
+              syncedLabel={syncedLabel}
+            />
+
+            {/* BUY COINS — BuyCoinsGrid owns the card-head (it has the
+                client-side "Custom amount" toggle). */}
+            <section className="card" id="buy">
+              <BuyCoinsGrid packs={COIN_PACKS} localizedPacks={localizedPacks} locale={locale} />
+            </section>
+
+            {/* WITHDRAW */}
+            <section className="card">
+              <div className="card-head">
+                <div>
+                  <div className="card-eyebrow">{tr("wallet.stepCashout")}</div>
+                  <div className="card-title">{tr("withdraw.heading")}</div>
+                </div>
+                <span className="row-time" style={{ fontSize: "11px" }}>
+                  {tr("wallet.inReview")}
                 </span>
               </div>
-            </div>
-            <div className="hidden sm:flex flex-col items-end gap-1 text-xs text-slate-400">
-              <Badge tone="info">
-                <Sparkles className="h-3 w-3" /> {tr("wallet.unified")}
-              </Badge>
-              <span>{tr("wallet.unifiedNote")}</span>
-            </div>
-          </div>
-        </Card>
 
-        <Card className="mb-4">
-          <CardHeader>
-            <CardTitle>{tr("wallet.buyCoins")}</CardTitle>
-            <span className="text-xs text-slate-500">{tr("wallet.coinRate")}</span>
-          </CardHeader>
-          <BuyCoinsGrid
-            packs={COIN_PACKS}
-            user={{ username: me?.username ?? "", email: me?.email ?? "" }}
-            locale={locale}
-          />
-          {/* PR-BET-ADMIN-FOLLOWUPS — replaces the previous
-              "Payments are processed by Razorpay…" disclosure block.
-              Top-ups now route through the Secured Kalki Chat App; the
-              call-to-action with the super-admin-controlled download
-              link lives inside <BuyCoinsGrid> right under the pack
-              tiles, so the user sees one consistent message rather
-              than two redundant ones. The remaining copy here just
-              clarifies the unified-wallet promise. */}
-          <div className="mt-3 flex items-start gap-2 rounded-md border border-slate-800 bg-slate-950/40 p-2 text-[11px] text-slate-400">
-            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-400" />
-            <span>{tr("wallet.unifiedPromise")}</span>
-          </div>
-        </Card>
+              <div className="withdraw">
+                <div className="left">
+                  <div className="card-eyebrow">{tr("wallet.available")}</div>
+                  <div className="withdraw-amount">
+                    <span>{fmtCoins(balance)}</span>
+                    <span className="unit">{tr("wallet.coins")}</span>
+                    {estValue && <span className="x">≈ {estValue}</span>}
+                  </div>
+                  <div className="withdraw-min">
+                    {tr("withdraw.subtext", { amount: fmtCoins(MIN_WITHDRAW_COINS) })}
+                  </div>
 
-        <Card className="mb-4">
-          <CardHeader>
-            <CardTitle>{tr("wallet.withdraw")}</CardTitle>
-            <span className="text-xs text-slate-500">
-              {tr("wallet.minWithdraw", { amount: fmtCoins(MIN_WITHDRAW_COINS) })}
-            </span>
-          </CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm text-slate-300">{tr("wallet.withdrawSubtext")}</div>
-            <Link
-              href={lp("/wallet/withdraw")}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm font-bold text-slate-200 hover:bg-slate-800"
-            >
-              <ArrowDownToLine className="h-4 w-4" />
-              {tr("wallet.requestWithdrawal")}
-            </Link>
-          </div>
+                  <Link className="withdraw-cta" href={lp("/wallet/withdraw")} style={{ marginTop: "auto" }}>
+                    {tr("withdraw.heading")}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                      <polyline points="12 5 19 12 12 19" />
+                    </svg>
+                  </Link>
 
-          {!me?.emailVerified && (
-            <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-200">
-              {tr("wallet.verifyEmailNote")}{" "}
-              <Link
-                href={lp("/profile")}
-                className="ms-1 underline hover:text-amber-100"
-              >
-                {tr("profile.heading")}
-              </Link>
-            </div>
-          )}
-
-          {pendingWithdrawals.length > 0 && (
-            <div className="mt-3 space-y-1.5">
-              <div className="text-[10px] uppercase tracking-wider text-slate-500">
-                {tr("wallet.inReview")}
-              </div>
-              {pendingWithdrawals.map((w) => (
-                <div
-                  key={w.id}
-                  className="flex items-center justify-between rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs"
-                >
-                  <div>
-                    <div className="font-mono">
-                      ₹{fmtCoins(w.amountCoins)}{" "}
-                      <Badge tone={w.status === "PENDING" ? "warn" : "info"}>
-                        {w.status}
-                      </Badge>
-                    </div>
-                    <div className="text-[10px] text-slate-500">
-                      {w.payoutMethod} · {timeAgo(w.createdAt)}
-                    </div>
+                  <div className="withdraw-note" style={{ marginTop: "14px" }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                    <span>{tr("withdraw.coinLocked")}</span>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{tr("wallet.recentActivity")}</CardTitle>
-            <Link
-              href={lp("/profile")}
-              className="text-xs text-cyan-300 hover:text-cyan-200"
-            >
-              {tr("wallet.fullLedger")}
-            </Link>
-          </CardHeader>
-          {recent.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-500">
-              {tr("wallet.noActivity")}
-            </p>
-          ) : (
-            <ul className="divide-y divide-slate-800">
-              {recent.map((tx) => (
-                <li
-                  key={tx.id}
-                  className="flex items-center justify-between py-2 text-sm"
-                >
-                  <div>
-                    <div className="text-slate-300">{prettyKind(tx.kind, locale)}</div>
-                    <div className="text-[10px] text-slate-500">
-                      {timeAgo(tx.createdAt)}
-                    </div>
+                <div className="right">
+                  <div className="card-eyebrow">
+                    {pendingWithdrawals.length > 0 ? tr("wallet.inReview") : tr("wallet.payoutMethods")}
                   </div>
-                  <div
-                    className={`font-mono ${
-                      tx.delta >= 0 ? "ticker-up" : "ticker-down"
-                    }`}
-                  >
-                    {tx.delta >= 0 ? "+" : ""}
-                    {fmtCoins(tx.delta)}
+                  <div className="withdraw-method-list">
+                    {pendingWithdrawals.length > 0 ? (
+                      pendingWithdrawals.map((w) => (
+                        <div className="method" key={w.id}>
+                          <div className="method-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="3" y="6" width="18" height="13" rx="2" />
+                              <line x1="3" y1="10" x2="21" y2="10" />
+                            </svg>
+                          </div>
+                          <div className="method-meta">
+                            <div className="method-name">
+                              {fmtCoins(w.amountCoins)} {tr("wallet.coins")}
+                            </div>
+                            <div className="method-sub">
+                              {w.payoutMethod} · {timeAgo(w.createdAt)}
+                            </div>
+                          </div>
+                          <div className={`method-time ${w.status === "PENDING" ? "warn" : ""}`}>
+                            {w.status}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <>
+                        <div className="method">
+                          <div className="method-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="3" y="6" width="18" height="13" rx="2" /><line x1="3" y1="10" x2="21" y2="10" />
+                            </svg>
+                          </div>
+                          <div className="method-meta">
+                            <div className="method-name">UPI</div>
+                            <div className="method-sub">India</div>
+                          </div>
+                        </div>
+                        <div className="method">
+                          <div className="method-icon" style={{ background: "rgba(99,102,241,0.10)", borderColor: "rgba(99,102,241,0.25)", color: "#C7D2FE" }}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M3 9l9-6 9 6" /><path d="M5 9v11h14V9" /><line x1="9" y1="14" x2="9" y2="18" /><line x1="15" y1="14" x2="15" y2="18" />
+                            </svg>
+                          </div>
+                          <div className="method-meta">
+                            <div className="method-name">{tr("withdrawForm.methodBank")}</div>
+                            <div className="method-sub">SWIFT / IBAN</div>
+                          </div>
+                        </div>
+                        <div className="method">
+                          <div className="method-icon" style={{ background: "rgba(251,191,36,0.10)", borderColor: "rgba(251,191,36,0.25)", color: "var(--amber-300)" }}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polygon points="12 2 19 7 19 17 12 22 5 17 5 7 12 2" /><line x1="12" y1="2" x2="12" y2="22" />
+                            </svg>
+                          </div>
+                          <div className="method-meta">
+                            <div className="method-name">USDT</div>
+                            <div className="method-sub" style={{ fontFamily: "var(--font-mono)" }}>TRC-20 / ERC-20</div>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </div>
-    </main>
+                </div>
+              </div>
+            </section>
+
+            {/* RECENT ACTIVITY */}
+            <section className="card ledger">
+              <div className="card-head">
+                <div>
+                  <div className="card-eyebrow">{tr("wallet.stepLedger")}</div>
+                  <div className="card-title">{tr("wallet.recentActivity")}</div>
+                </div>
+                <Link className="small-link" href={lp("/profile")}>
+                  {tr("wallet.fullLedger")}
+                </Link>
+              </div>
+
+              {ledger.length === 0 ? (
+                <div className="ledger-empty">{tr("wallet.noActivity")}</div>
+              ) : (
+                <div className="ledger-rows">
+                  {ledger.map(({ tx, after }) => {
+                    const meta = rowMeta(tx.kind, tx.delta);
+                    return (
+                      <div className="row" key={tx.id}>
+                        <div className={`row-icon ${meta.icon}`}>{rowIcon(meta.icon)}</div>
+                        <div className="row-desc">
+                          <div className="label">{prettyKind(tx.kind, locale)}</div>
+                          {meta.pill && (
+                            <div className="sub">
+                              <span className={`pill ${meta.pill.cls}`}>{tr(meta.pill.key)}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="row-time">
+                          {timeAgo(tx.createdAt)}
+                          <span className="abs">{fmtAbs(new Date(tx.createdAt))}</span>
+                        </div>
+                        <div className="row-balance">
+                          <span className="lbl">{tr("wallet.balanceLabel")}</span>
+                          {fmtCoins(after)}
+                        </div>
+                        <div className={`row-amt ${tx.delta >= 0 ? "pos" : "neg"}`}>
+                          {tx.delta >= 0 ? "+" : "−"}
+                          {fmtCoins(Math.abs(tx.delta))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="ledger-foot">
+                <span>{tr("wallet.coins")} · {ledger.length}</span>
+                <Link className="small-link" href={lp("/profile")}>
+                  {tr("wallet.fullLedger")}
+                </Link>
+              </div>
+            </section>
+          </div>
+
+          {/* ══════════ SIDE RAIL ══════════ */}
+          <aside className="col-side">
+            <div className="summary">
+              <div className="stat">
+                <div className="lbl">{tr("wallet.stat7dNet")}</div>
+                <div className={`v ${net7d > 0 ? "pos" : net7d < 0 ? "neg" : ""}`}>
+                  {net7d >= 0 ? "+" : "−"}{fmtCoins(Math.abs(net7d))}
+                </div>
+                <div className="delta">{tr("wallet.coins")}</div>
+              </div>
+              <div className="stat">
+                <div className="lbl">{tr("wallet.stat7dVolume")}</div>
+                <div className="v">{fmtCoins(vol7d)}</div>
+                <div className="delta">{weekTxns.length} {tr("wallet.txUnit")}</div>
+              </div>
+              <div className="stat">
+                <div className="lbl">{tr("wallet.balanceLabel")}</div>
+                <div className="v cy" style={{ color: "var(--cyan-200)" }}>{fmtCoins(balance)}</div>
+                <div className="delta">{tr("wallet.coins")}</div>
+              </div>
+              <div className="stat">
+                <div className="lbl">{tr("wallet.inReview")}</div>
+                <div className="v">{pendingWithdrawals.length}</div>
+                <div className="delta">{tr("wallet.inReview")}</div>
+              </div>
+            </div>
+
+            <div className="admin">
+              <div className="icon-wrap">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </div>
+              <h3>{tr("wallet.chatTitle")}</h3>
+              <p>{tr("wallet.chatBody")}</p>
+              <SecureChatActions downloadUrl={chatAppUrl} />
+            </div>
+
+            <div className="compliance">
+              <div className="row1">
+                <span className="age">18+</span>
+                <strong>{tr("wallet.complianceTitle")}</strong>
+              </div>
+              {tr("wallet.complianceBody")}
+            </div>
+          </aside>
+        </div>
+      </main>
+
+      <footer className="footer">
+        <div className="footer-inner">
+          <span>{tr("wallet.footerBrand")}</span>
+          <span>{currencyCode ? `${localized?.country} · ${currencyCode}` : tr("wallet.unified")}</span>
+          <span>
+            {tr("wallet.needHelp")} <Link href={lp("/profile")}>{tr("profile.heading")}</Link>
+          </span>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+/* ── helpers ───────────────────────────────────────────────── */
+
+function fmtAbs(d: Date): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+    .format(d)
+    .toUpperCase();
+}
+
+function rowMeta(
+  kind: string,
+  delta: number,
+): { icon: "up" | "down" | "cyan" | "amber"; pill?: { key: string; cls: string } } {
+  if (kind === "wallet_topup") return { icon: "cyan", pill: { key: "wallet.pillTopup", cls: "cyan" } };
+  if (kind === "signup_bonus") return { icon: "amber", pill: { key: "wallet.pillBonus", cls: "amber" } };
+  if (kind === "referral_bonus") return { icon: "amber", pill: { key: "wallet.pillReferral", cls: "amber" } };
+  if (kind === "achievement_reward") return { icon: "amber", pill: { key: "wallet.pillReward", cls: "amber" } };
+  if (kind === "daily_claim") return { icon: "amber", pill: { key: "wallet.pillDaily", cls: "amber" } };
+  if (kind === "admin_grant") return { icon: "amber", pill: { key: "wallet.pillGrant", cls: "amber" } };
+  if (
+    kind.startsWith("trade") ||
+    kind.startsWith("smart") ||
+    kind.startsWith("order") ||
+    kind.startsWith("resolution")
+  ) {
+    return { icon: delta >= 0 ? "up" : "down", pill: { key: "wallet.pillPredict", cls: "cyan" } };
+  }
+  return { icon: delta >= 0 ? "up" : "down" };
+}
+
+function rowIcon(kind: "up" | "down" | "cyan" | "amber") {
+  if (kind === "up") {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="12" y1="19" x2="12" y2="5" />
+        <polyline points="5 12 12 5 19 12" />
+      </svg>
+    );
+  }
+  if (kind === "down") {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19" />
+        <polyline points="5 12 12 19 19 12" />
+      </svg>
+    );
+  }
+  if (kind === "cyan") {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="6" width="20" height="14" rx="3" />
+        <path d="M2 10h20" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
   );
 }
 

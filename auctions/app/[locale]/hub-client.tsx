@@ -367,6 +367,12 @@ export interface HubClientProps {
    *  currencies ECB doesn't cover. Empty object when both upstreams
    *  fail — `convertFromINR` then renders the raw INR figure as-is. */
   fxRates: Partial<Record<string, number>>;
+  /** PPP-based local-currency value of the wallet balance, computed
+   *  server-side as balance × (1000-coin pack price / 1000) for the
+   *  user's region. null when no pricing is published — the widget
+   *  then shows coins only. Reflects the SSR-resolved country; an
+   *  in-page country switch updates it on the next refresh. */
+  coinValue?: string | null;
 }
 
 /** True for `http(s)://...` URLs — used to decide whether the game
@@ -607,6 +613,7 @@ export function HubClient({
   recentAuctions,
   recentMarkets,
   fxRates,
+  coinValue,
 }: HubClientProps) {
   const [country, setCountry] = useState<CountryCode>(initialCountry);
   const [locMenuOpen, setLocMenuOpen] = useState(false);
@@ -983,11 +990,18 @@ export function HubClient({
               <span className="unit">{tr("wallet_coins_unit")}</span>
             </div>
             <div className="wallet-equiv">
-              ≈&nbsp;<b>
-                <span>{locale.currency}</span>
-                <span>{balDisplay}</span>
-              </b>
-              &nbsp;·&nbsp;<span>{tr("wallet_topup_from")}</span>&nbsp;<span>{locale.currency}</span>100
+              {/* PPP-based value of the balance (what the user paid per
+                  coin), computed server-side from the 1000-coin pack
+                  price. Falls back to coins-only when unavailable. */}
+              {coinValue ? (
+                <>
+                  ≈&nbsp;<b>{coinValue}</b>
+                </>
+              ) : (
+                <span>
+                  {balDisplay}&nbsp;{tr("wallet_coins_unit")}
+                </span>
+              )}
             </div>
           </div>
           <div className="wallet-actions">

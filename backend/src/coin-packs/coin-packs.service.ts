@@ -3,14 +3,15 @@ import { PrismaService } from '../prisma/prisma.service';
 
 export interface CreateCoinPackInput {
   coins: number;
-  priceInr: string;
+  /** USD anchor price; PPP derives every local price from this. */
+  baseUsdPrice: string;
   active?: boolean;
   sortOrder?: number;
 }
 
 export interface UpdateCoinPackInput {
   coins?: number;
-  priceInr?: string;
+  baseUsdPrice?: string;
   active?: boolean;
   sortOrder?: number;
 }
@@ -22,13 +23,13 @@ export class CoinPacksService {
   listActive() {
     return this.prisma.coinPack.findMany({
       where: { active: true },
-      orderBy: [{ sortOrder: 'asc' }, { priceInr: 'asc' }],
+      orderBy: [{ sortOrder: 'asc' }, { coins: 'asc' }],
     });
   }
 
   listAll() {
     return this.prisma.coinPack.findMany({
-      orderBy: [{ sortOrder: 'asc' }, { priceInr: 'asc' }],
+      orderBy: [{ sortOrder: 'asc' }, { coins: 'asc' }],
     });
   }
 
@@ -38,14 +39,24 @@ export class CoinPacksService {
     return pack;
   }
 
+  /**
+   * Create a pack, enforcing ONE pack per coin amount. A coin count is
+   * a single sellable offer, so adding a pack for N coins replaces any
+   * existing pack(s) of N coins. The delete cascades the pack's
+   * RegionalCoinPricing rows (FK onDelete: Cascade) and nulls any
+   * historical PaymentOrder.coinPackId (nullable FK), so it's safe.
+   */
   create(input: CreateCoinPackInput) {
-    return this.prisma.coinPack.create({
-      data: {
-        coins: input.coins,
-        priceInr: input.priceInr,
-        active: input.active ?? true,
-        sortOrder: input.sortOrder ?? 0,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      await tx.coinPack.deleteMany({ where: { coins: input.coins } });
+      return tx.coinPack.create({
+        data: {
+          coins: input.coins,
+          baseUsdPrice: input.baseUsdPrice,
+          active: input.active ?? true,
+          sortOrder: input.sortOrder ?? 0,
+        },
+      });
     });
   }
 

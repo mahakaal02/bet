@@ -34,6 +34,7 @@ import { CsvModule } from './csv/csv.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { StorageModule } from './storage/storage.module';
+import { PricingModule } from './pricing/pricing.module';
 import { ImpersonationScopeGuard } from './foundation/guards/impersonation-scope.guard';
 
 @Module({
@@ -77,6 +78,7 @@ import { ImpersonationScopeGuard } from './foundation/guards/impersonation-scope
     AnalyticsModule,
     CampaignsModule,
     StorageModule,
+    PricingModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

@@ -89,7 +89,6 @@ model User {
   orders         Order[]
   reportsFiled   Report[] @relation("Reporter")
   reportsResolved Report[] @relation("Resolver")
-  payments        PaymentOrder[]
   cryptoPayments  CryptoPaymentOrder[]
   withdrawals     WithdrawalRequest[]
   withdrawalsDecided WithdrawalRequest[] @relation("WithdrawalDecider")
@@ -620,42 +619,12 @@ model AdminLog {
   @@index([createdAt(sort: Desc)])
 }
 
-// ───── Payments (Razorpay) ─────────────────────────────────────────────────
-
-enum PaymentOrderStatus {
-  PENDING
-  CAPTURED
-  FAILED
-}
-
-/// One row per Razorpay order created when a user clicks "Buy" on /wallet.
-/// The (razorpayOrderId) is the idempotency key — replays of the verify
-/// webhook find this row and short-circuit.
-model PaymentOrder {
-  id                String   @id @default(cuid())
-  userId            String
-  packId            String   // matches lib/coin-packs.ts
-  amountInr         Int      // rupees (whole — Razorpay quotes in paise, we store in INR)
-  coins             Int      // coins to credit on capture
-  razorpayOrderId   String   @unique
-  razorpayPaymentId String?  @unique
-  status            PaymentOrderStatus @default(PENDING)
-  createdAt         DateTime @default(now()) @db.Timestamptz(6)
-  capturedAt        DateTime? @db.Timestamptz(6)
-  failureReason     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt(sort: Desc)])
-  @@index([status, createdAt(sort: Desc)])
-}
-
 // ───── Withdrawals ─────────────────────────────────────────────────────────
 
 enum WithdrawalStatus {
   PENDING     // user submitted, admin not yet reviewed
   APPROVED    // admin approved, payout in flight
-  PAID        // payout completed (Razorpay payout id captured)
+  PAID        // payout completed (payout reference id captured)
   REJECTED    // admin rejected, coins refunded
   CANCELLED   // user cancelled before admin review
 }
@@ -663,13 +632,14 @@ enum WithdrawalStatus {
 enum PayoutMethod {
   UPI
   BANK
+  CRYPTO
 }
 
 /// User-initiated withdrawal of coins → INR. Locks the coins on creation
 /// (debits Wallet.balance, the audit row carries the negative delta);
 /// REJECTED / CANCELLED refund them via an inverse credit. APPROVED is
-/// terminal once the admin clicks — actual payout goes through Razorpay
-/// Payouts in production.
+/// terminal once the admin clicks — actual payout is processed
+/// externally and the reference recorded.
 model WithdrawalRequest {
   id            String   @id @default(cuid())
   userId        String
@@ -681,7 +651,7 @@ model WithdrawalRequest {
   decisionNote  String?
   decidedById   String?
   decidedAt     DateTime? @db.Timestamptz(6)
-  paidReference String?  // Razorpay payout id once the transfer completes
+  paidReference String?  // payout reference id once the transfer completes
   paidAt        DateTime? @db.Timestamptz(6)
   /// IP + user-agent at submission time — useful for the admin audit page
   /// (multi-device patterns, geo anomalies).
@@ -855,17 +825,14 @@ model ApiLog {
 
 // ───── NOWPayments crypto top-ups (PR-BET-NOWPAYMENTS) ─────────────────────
 //
-// Parallel to PaymentOrder (which is Razorpay-only). Crypto needs a
-// different shape: invoices instead of orders, IPN callbacks instead
-// of client-side signature verification, status machine with
-// "confirming" + "partially_paid" states. Keeping them separate avoids
-// dropping the Razorpay flow (still wired, just unused in prod) and
-// keeps the foreign-key story clean — no NULL razorpay* columns when
-// a row is actually crypto.
+// The platform's sole payment path (Razorpay was removed). Crypto's
+// shape: hosted invoices instead of orders, IPN callbacks instead of
+// client-side signature verification, and a status machine with
+// "confirming" + "partially_paid" states.
 //
 // A `Transaction(kind='deposit', reference='nowpayments:<paymentId>')`
-// row is written on IPN-finished — same idempotency guarantee the
-// Razorpay path uses, so duplicate IPN deliveries are harmless.
+// row is written on IPN-finished, giving idempotency so duplicate IPN
+// deliveries are harmless.
 
 model CryptoPaymentOrder {
   id               String   @id @default(cuid())

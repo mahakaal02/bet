@@ -3,6 +3,7 @@
 import { useGame } from '@/lib/store';
 import { getToken } from '@/lib/auth';
 import { formatCoins } from '@/lib/format';
+import { useCoinValue } from '@/lib/useCoinValue';
 import { useTranslation } from '@/lib/i18n/client';
 
 /**
@@ -52,6 +53,7 @@ function exchangeUrl(path: string): string {
 export default function WalletPanel() {
   const walletBalance = useGame((s) => s.walletBalance);
   const canWithdraw = (walletBalance ?? 0) >= WITHDRAW_MIN;
+  const coinValue = useCoinValue(walletBalance);
   const { t } = useTranslation();
   const remaining = Math.max(0, WITHDRAW_MIN - (walletBalance ?? 0));
   const pct = canWithdraw
@@ -77,6 +79,11 @@ export default function WalletPanel() {
           <div className="font-mono text-2xl lg:text-3xl font-black leading-tight text-text-primary tabular-nums">
             {formatCoins(walletBalance)}
           </div>
+          {coinValue && (
+            <div className="text-[11px] font-semibold text-text-secondary tabular-nums">
+              ≈ {coinValue}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button

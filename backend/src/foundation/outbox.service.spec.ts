@@ -183,7 +183,7 @@ describe('OutboxService', () => {
     });
 
     it('reschedules row when no dispatcher is registered for its kind', async () => {
-      const r = row({ kind: OutboxKind.RAZORPAY_REFUND });
+      const r = row({ kind: OutboxKind.ADMIN_AUDIT_REPLAY });
       const updateMock = jest.fn(async (_args: any) => r);
       const prismaMock = {
         $queryRaw: jest.fn(async () => [r]),

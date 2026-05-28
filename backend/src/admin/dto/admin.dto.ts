@@ -28,10 +28,12 @@ export class UpsertCoinPackDto {
   @Min(1)
   coins?: number;
 
+  // USD anchor price. Every regional/local price is PPP-derived from
+  // this (see PRICING.md). INR is no longer accepted as an input.
   @IsOptional()
   @IsString()
   @Matches(DECIMAL_REGEX)
-  priceInr?: string;
+  baseUsdPrice?: string;
 
   @IsOptional()
   @IsBoolean()
@@ -47,9 +49,11 @@ export class CreateCoinPackDto {
   @Min(1)
   coins!: number;
 
+  // USD anchor price (required). The PPP engine converts this into
+  // every supported local currency; admins no longer enter INR.
   @IsString()
   @Matches(DECIMAL_REGEX)
-  priceInr!: string;
+  baseUsdPrice!: string;
 
   @IsOptional()
   @IsBoolean()
