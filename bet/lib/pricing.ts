@@ -190,26 +190,26 @@ export async function fetchLocalizedPricing(
   try {
     const h = await headers();
     const jar = await cookies();
-    // Region resolution order:
-    //   1. `kalki_locale` cookie — the user's EXPLICIT country choice
-    //      from the hub switcher. Wins so "change country → change
-    //      price" works, and so local dev (no edge geo header) still
-    //      reflects the picked country.
-    //   2. cf-ipcountry / x-vercel-ip-country — real edge geo in prod.
-    //   3. Accept-Language — browser locale fallback.
-    // We forward the resolved country to the backend as cf-ipcountry
-    // (its medium-trust geo slot) plus Accept-Language as a backstop.
-    // Region resolution order:
-    //   1. UI locale → region (es/fr/pt) — the language the user chose.
-    //   2. `kalki_locale` cookie — explicit hub country pick.
-    //   3. cf-ipcountry / x-vercel / x-real-country — real edge geo (prod).
+    // Region resolution order — the WALLET CURRENCY follows the country
+    // the user explicitly picks on the Kalki hub switcher, so that pick
+    // is authoritative:
+    //   1. `kalki_locale` cookie — the hub country picker. Wins so
+    //      "change country on the hub → change wallet currency" works,
+    //      regardless of which UI language the user is reading in.
+    //      (In prod the cookie must carry Domain=.cloud.podstack.ai to
+    //      cross from the hub subdomain to bet — see auctions
+    //      lib/locale-constants.ts `localeCookieString`.)
+    //   2. UI locale → region (es/fr/pt) — only when no hub pick exists.
+    //   3. cf-ipcountry / x-vercel / x-real-country — edge geo, if any.
     //   4. (Accept-Language, forwarded below; backend maps it.)
     //   5. backend default (US baseline).
-    const localeRegion = localeToCountry(localeHint);
+    // We forward the resolved country to the backend as cf-ipcountry
+    // (its medium-trust geo slot) plus Accept-Language as a backstop.
     const explicit = jar.get(LOCALE_COOKIE)?.value?.toUpperCase() || null;
+    const localeRegion = localeToCountry(localeHint);
     const geo =
-      localeRegion ??
       explicit ??
+      localeRegion ??
       h.get("cf-ipcountry") ??
       h.get("x-vercel-ip-country") ??
       h.get("x-real-country") ??
