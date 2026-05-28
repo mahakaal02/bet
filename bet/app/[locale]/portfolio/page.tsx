@@ -287,7 +287,6 @@ export default async function PortfolioPage({
               {tr("nav.portfolio")}
             </Link>
             <Link href={lp("/watchlist")}>{tr("nav.watchlist")}</Link>
-            <Link href={lp("/leaderboard")}>{tr("nav.leaderboard")}</Link>
             <Link href={lp("/wallet")}>{tr("nav.wallet")}</Link>
           </nav>
           <div className="topbar-right">

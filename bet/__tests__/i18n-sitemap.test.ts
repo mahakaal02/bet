@@ -143,7 +143,6 @@ describe("buildSitemapEntries", () => {
 
   it("includes /markets + landing pages, excludes auth + authenticated + admin routes", () => {
     expect(SITEMAP_STATIC_PATHS).toContain("/markets");
-    expect(SITEMAP_STATIC_PATHS).toContain("/leaderboard");
     expect(SITEMAP_STATIC_PATHS).toContain("/achievements");
     // PR-SINGLE-LOGIN — bet no longer hosts /login or /register; the
     // hub owns the canonical sign-in surface and indexes it from its

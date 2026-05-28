@@ -249,7 +249,6 @@ export default async function WatchlistPage({
               </svg>
               {tr("nav.watchlist")}
             </Link>
-            <Link href={lp("/leaderboard")}>{tr("nav.leaderboard")}</Link>
             <Link href={lp("/wallet")}>{tr("nav.wallet")}</Link>
           </nav>
           <div className="topbar-right">
