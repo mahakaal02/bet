@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { Coins, Star, User, Trophy, BarChart3, ShieldCheck, Home } from "lucide-react";
+import { Coins, Star, User, BarChart3, ShieldCheck, Home } from "lucide-react";
 import useSWR from "swr";
 import { fmtCoins } from "@/lib/utils";
 import { NotificationsBell } from "@/components/NotificationsBell";
@@ -61,11 +61,6 @@ export function Navbar() {
               label={t("nav.watchlist")}
             />
           )}
-          <NavLink
-            href={localizedPath("/leaderboard", locale)}
-            icon={<Trophy className="h-4 w-4" />}
-            label={t("nav.leaderboard")}
-          />
           {data?.user.isAdmin && (
             <NavLink
               href="/admin"
@@ -137,11 +132,6 @@ export function Navbar() {
           href={localizedPath("/portfolio", locale)}
           icon={<BarChart3 className="h-4 w-4" />}
           label={t("nav.portfolio")}
-        />
-        <NavLink
-          href={localizedPath("/leaderboard", locale)}
-          icon={<Trophy className="h-4 w-4" />}
-          label={t("nav.leaderboardMobile")}
         />
         {data?.user.isAdmin && (
           <NavLink

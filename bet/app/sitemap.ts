@@ -60,7 +60,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 export const SITEMAP_STATIC_PATHS = [
   "/",
   "/markets",
-  "/leaderboard",
   "/achievements",
 ] as const;
 

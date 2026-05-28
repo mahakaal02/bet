@@ -8,7 +8,6 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ActivityTicker } from "@/components/ActivityTicker";
 import { FeaturedCarousel } from "@/components/FeaturedCarousel";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { db } from "@/lib/db";
 import { priceYes } from "@/lib/amm";
@@ -84,7 +83,7 @@ export default async function LocalizedLandingPage({
   // Same parallel reads the (English) landing page does. Each query
   // is keyed on shared DB state that's identical across locales, so
   // there's no per-locale cache fragmentation.
-  const [featured, trending, leaderboard, stats] = await Promise.all([
+  const [featured, trending, stats] = await Promise.all([
     db.market.findMany({
       where: { status: "OPEN", featured: true },
       orderBy: { trendingScore: "desc" },
@@ -94,11 +93,6 @@ export default async function LocalizedLandingPage({
       where: { status: "OPEN" },
       orderBy: { trendingScore: "desc" },
       take: 6,
-    }),
-    db.user.findMany({
-      orderBy: { xp: "desc" },
-      take: 5,
-      select: { id: true, username: true, image: true, xp: true, level: true },
     }),
     db.$transaction([
       db.market.count(),
@@ -199,31 +193,6 @@ export default async function LocalizedLandingPage({
             );
           })}
         </ul>
-      </section>
-
-      {/* Leaderboard. */}
-      <section className="mx-auto max-w-5xl px-4 pb-16">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-300">
-          {tr("landing.leaderboardHeader")}
-        </h2>
-        <Card className="overflow-hidden">
-          <ul className="divide-y divide-slate-800">
-            {leaderboard.map((u, i) => (
-              <li
-                key={u.id}
-                className="flex items-center gap-3 px-4 py-2.5 text-sm"
-              >
-                <span className="w-5 font-mono text-slate-500">{i + 1}</span>
-                <span className="flex-1 font-semibold text-slate-100">
-                  @{u.username}
-                </span>
-                <span className="font-mono text-slate-400">
-                  Lv {u.level} · {fmtCoins(u.xp)} XP
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
       </section>
 
       <ActivityTicker />

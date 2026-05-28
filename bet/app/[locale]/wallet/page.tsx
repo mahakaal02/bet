@@ -162,7 +162,6 @@ export default async function WalletPage({
             <Link href={lp("/markets")}>{tr("nav.markets")}</Link>
             <Link href={lp("/portfolio")}>{tr("nav.portfolio")}</Link>
             <Link href={lp("/watchlist")}>{tr("nav.watchlist")}</Link>
-            <Link href={lp("/leaderboard")}>{tr("nav.leaderboard")}</Link>
             <Link className="active" href={lp("/wallet")}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2" y="6" width="20" height="14" rx="3" />

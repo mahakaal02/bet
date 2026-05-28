@@ -244,7 +244,6 @@ export default async function MarketsPage({
             </Link>
             <Link href={lp("/portfolio")}>{tr("nav.portfolio")}</Link>
             <Link href={lp("/watchlist")}>{tr("nav.watchlist")}</Link>
-            <Link href={lp("/leaderboard")}>{tr("nav.leaderboard")}</Link>
             <Link href={lp("/wallet")}>{tr("nav.wallet")}</Link>
           </nav>
 
