@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { findPack } from "@/lib/coin-packs";
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
 
   // Resolve how many coins to credit: a known pack, or a custom amount.
   let coinsToCredit: number;
-  let meta: Record<string, unknown>;
+  let meta: Prisma.InputJsonObject;
   if (parsed.data.packId) {
     const pack = findPack(parsed.data.packId);
     if (!pack) {
