@@ -76,7 +76,7 @@ html[data-theme="neon"] .wl::after { content:''; position: fixed; inset: 0; z-in
 .wl .topbar { position: sticky; top: 0; z-index: 50; height: var(--topbar-h); backdrop-filter: blur(12px) saturate(140%); -webkit-backdrop-filter: blur(12px) saturate(140%); background: rgba(11,16,32,.78); border-bottom: 1px solid var(--color-divider); }
 .wl .topbar-inner { max-width: 1320px; margin: 0 auto; height: 100%; padding: 0 24px; display: flex; align-items: center; gap: 28px; }
 .wl .brand { display: inline-flex; align-items: center; gap: 10px; }
-.wl .brand-mark { width: 34px; height: 34px; border-radius: 9px; background: radial-gradient(60% 60% at 30% 25%, rgba(var(--brand-a-rgb),0.18), transparent 70%), linear-gradient(180deg, #0a1126, #050913); border: 1px solid rgba(var(--brand-a-rgb),0.24); box-shadow: 0 8px 18px -8px rgba(var(--brand-a-rgb),0.4), inset 0 0 0 1px rgba(255,255,255,0.02); display: grid; place-items: center; overflow: hidden; }
+.wl .brand-mark { width: 34px; height: 34px; border-radius: 9px; object-fit: contain; display: block; }
 .wl .brand-wm { font-family: var(--font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.04em; line-height: 1; background: var(--grad-brand); -webkit-background-clip: text; background-clip: text; color: transparent; display: inline-flex; align-items: baseline; }
 .wl .brand-wm .dot { color: var(--cyan-400); -webkit-text-fill-color: var(--cyan-400); padding-left: 1px; }
 html[data-theme="neon"] .wl .brand-wm { text-shadow: var(--glow-text); }

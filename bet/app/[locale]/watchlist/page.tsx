@@ -229,16 +229,9 @@ export default async function WatchlistPage({
       {/* ── TOPBAR ── */}
       <header className="topbar">
         <div className="topbar-inner">
-          <a className="brand" href={hubHomeUrl()}>
-            <span className="brand-mark" aria-label="kalki">
-              <svg width="22" height="22" viewBox="0 0 36 36" fill="none" aria-hidden="true">
-                <path d="M14 30 L14 26 C14 23 15.6 21 18 20.4 L18 16.6 C17 14 18 11 20.6 9.4 L25 6.6 C28.4 4.6 32 6.4 33.4 9.4 L33.4 16 C33.4 21.2 31 26 26.6 28.4 L26.6 30 Z" fill="#F5F7FF" />
-                <path d="M20.5 7.5 L14 4 L18 8.5 L13 7 L19.5 10.5 Z" fill="url(#kg)" />
-                <ellipse cx="26.5" cy="13" rx="1.2" ry="0.7" fill="#0b1020" transform="rotate(-18 26.5 13)" />
-                <defs><linearGradient id="kg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#22D3EE" /><stop offset="1" stopColor="#6366F1" /></linearGradient></defs>
-              </svg>
-            </span>
-            <span className="brand-wm">kalki<span className="dot">.</span></span>
+          <a className="brand" href={hubHomeUrl()} aria-label="Kalki Exchange">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="brand-mark" src="/kalki-logo.png" alt="Kalki Exchange" width={34} height={34} />
           </a>
           <nav className="nav" aria-label="primary">
             <Link href={lp("/markets")}>{tr("nav.markets")}</Link>
