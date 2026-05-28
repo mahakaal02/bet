@@ -207,7 +207,7 @@ backend:
       limits: {cpu: 500m, memory: 512Mi}
 bet:
   image: kalki-bet
-  imageTag: 20260528T183339Z-f51255a # {"$imagepolicy": "flux-system:kalki-bet:tag"}
+  imageTag: 20260528T190131Z-bc69241 # {"$imagepolicy": "flux-system:kalki-bet:tag"}
   port: 3100
   replicas: 1
   prismaMigrate: true
