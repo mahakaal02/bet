@@ -241,7 +241,7 @@ bet:
     limits: {cpu: 1000m, memory: 1Gi}
 auctions:
   image: kalki-auctions
-  imageTag: 20260528T162258Z-7d22b32 # {"$imagepolicy": "flux-system:kalki-auctions:tag"}
+  imageTag: 20260528T211716Z-4aa6e94 # {"$imagepolicy": "flux-system:kalki-auctions:tag"}
   port: 3200
   replicas: 1
   resources:
