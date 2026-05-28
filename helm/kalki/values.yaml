@@ -241,7 +241,7 @@ bet:
     limits: {cpu: 1000m, memory: 1Gi}
 auctions:
   image: kalki-auctions
-  imageTag: 20260527T194323Z-4be924e # {"$imagepolicy": "flux-system:kalki-auctions:tag"}
+  imageTag: 20260528T162258Z-7d22b32 # {"$imagepolicy": "flux-system:kalki-auctions:tag"}
   port: 3200
   replicas: 1
   resources:
@@ -257,7 +257,7 @@ aviator:
     limits: {cpu: 500m, memory: 512Mi}
 admin:
   image: kalki-admin
-  imageTag: 20260527T194337Z-4be924e # {"$imagepolicy": "flux-system:kalki-admin:tag"}
+  imageTag: 20260528T162249Z-7d22b32 # {"$imagepolicy": "flux-system:kalki-admin:tag"}
   port: 80
   replicas: 1
   resources:
