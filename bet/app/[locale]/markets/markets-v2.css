@@ -208,7 +208,7 @@ html[data-theme="neon"] .mkt .yn-tag.no  { color: var(--rose-300); text-shadow: 
 .mkt .topbar { position: sticky; top: 0; z-index: 50; height: var(--topbar-h); backdrop-filter: blur(12px) saturate(140%); -webkit-backdrop-filter: blur(12px) saturate(140%); background: rgba(11,16,32,.78); border-bottom: 1px solid var(--color-divider); }
 .mkt .topbar-inner { max-width: 1320px; margin: 0 auto; height: 100%; padding: 0 24px; display: flex; align-items: center; gap: 28px; }
 .mkt .brand { display: inline-flex; align-items: center; gap: 10px; }
-.mkt .brand-mark { width: 34px; height: 34px; border-radius: 9px; background: radial-gradient(60% 60% at 30% 25%, rgba(34,211,238,0.18), transparent 70%), linear-gradient(180deg, #0a1126, #050913); border: 1px solid rgba(34,211,238,0.24); box-shadow: 0 8px 18px -8px rgba(34,211,238,0.4), inset 0 0 0 1px rgba(255,255,255,0.02); display: grid; place-items: center; overflow: hidden; }
+.mkt .brand-mark { width: 34px; height: 34px; border-radius: 9px; object-fit: contain; display: block; }
 .mkt .brand-wm { font-family: var(--font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.04em; line-height: 1; background: var(--grad-brand); -webkit-background-clip: text; background-clip: text; color: transparent; display: inline-flex; align-items: baseline; }
 .mkt .brand-wm .dot { color: var(--cyan-400); -webkit-text-fill-color: var(--cyan-400); padding-left: 1px; }
 .mkt .nav { display: flex; align-items: center; gap: 4px; }
