@@ -50,10 +50,7 @@ import {
   type LanguageCode,
   type StringKey,
 } from "./locale-data";
-import {
-  LOCALE_COOKIE,
-  LOCALE_COOKIE_MAX_AGE_SECONDS,
-} from "@/lib/locale-constants";
+import { localeCookieString } from "@/lib/locale-constants";
 
 type AuthMode = "login" | "signup" | "2fa";
 
@@ -152,16 +149,9 @@ export function LoginLanding({
     setCountry(code);
     setLocMenuOpen(false);
     // Persist for next visit + tell server to re-resolve on next nav.
-    const secure = window.location.protocol === "https:";
-    document.cookie = [
-      `${LOCALE_COOKIE}=${code}`,
-      "path=/",
-      `max-age=${LOCALE_COOKIE_MAX_AGE_SECONDS}`,
-      "samesite=lax",
-      secure ? "secure" : "",
-    ]
-      .filter(Boolean)
-      .join("; ");
+    // `localeCookieString` adds Domain=.cloud.podstack.ai in prod so the
+    // pick reaches the bet wallet subdomain (see locale-constants.ts).
+    document.cookie = localeCookieString(code);
     // No router.refresh — page is rendered client-side from props
     // and the dictionary is full client-side. Saving locally is
     // enough; the cookie is honored on the next visit.

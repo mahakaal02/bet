@@ -213,9 +213,69 @@ model Market {
   orderMatches OrderMatch[]
   translations MarketTranslation[]
 
+  // ───── Grouped markets (additive — see MarketGroup below) ─────────────────
+  // Nullable: a market with groupId = null is a standalone market and trades,
+  // prices and settles EXACTLY as before. Grouping is metadata on top; nothing
+  // in the trading/settlement hot paths reads these columns.
+  groupId        String?
+  groupSortOrder Int?
+  group          MarketGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
   @@index([status, endsAt])
   @@index([category, status])
   @@index([trendingScore(sort: Desc)])
+  @@index([featured])
+  @@index([groupId])
+}
+
+// ───── Grouped markets (Kalshi-style events) ──────────────────────────────
+//
+// A MarketGroup ("event") ties several existing binary markets together for
+// display, ranking and (optionally) coordinated resolution — e.g. "Who will
+// win the election?" with one child market per candidate. PURELY ADDITIVE:
+// each child is still an ordinary YES/NO Market that trades and settles like a
+// standalone market; the group is a presentation + orchestration layer on top.
+// With zero MarketGroup rows the platform behaves identically to before.
+enum MarketGroupType {
+  EXCLUSIVE   // mutually-exclusive: exactly one child resolves YES, the rest NO; display normalized to 100%
+  INDEPENDENT // independent questions sharing an event shell; no normalization, no coupled resolution
+}
+
+enum MarketGroupStatus {
+  OPEN
+  CLOSED
+  RESOLVED
+  CANCELLED
+}
+
+model MarketGroup {
+  id          String            @id @default(cuid())
+  slug        String            @unique
+  title       String
+  description String?
+  category    MarketCategory
+  type        MarketGroupType   @default(EXCLUSIVE)
+  status      MarketGroupStatus @default(OPEN)
+  featured    Boolean           @default(false)
+  sortOrder   Int               @default(0)
+
+  // Group-level resolution audit (Phase 2). Payouts still run per child via the
+  // existing per-market settlement; these columns only record the group
+  // decision. resolvedWinnerMarketId is the child that resolved YES.
+  resolvedWinnerMarketId String?
+  resolvedAt             DateTime? @db.Timestamptz(6)
+  resolutionNote         String?
+
+  // Admin who created the group — plain column, no relation (mirrors
+  // Settlement.executedById) so the User model is left untouched.
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  markets Market[]
+
+  @@index([status, sortOrder])
+  @@index([category, status])
   @@index([featured])
 }
 

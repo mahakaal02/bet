@@ -22,6 +22,7 @@ import {
   type Locale,
   type MarketCategory,
 } from "@/lib/i18n";
+import { groupDisplayPrices } from "@/lib/market-group";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +94,10 @@ export default async function MarketsPage({
           : { trendingScore: "desc" };
 
   const where: Prisma.MarketWhereInput = {
+    // Grouped children collapse into their event's card (queried separately
+    // below), so they never appear as standalone cards or in the counts. With
+    // zero groups every market has groupId = null → identical to before.
+    groupId: null,
     ...(status !== "ALL" && {
       status: status as "OPEN" | "RESOLVED" | "CLOSED" | "CANCELLED",
     }),
@@ -132,6 +137,7 @@ export default async function MarketsPage({
     volAgg,
     catCounts,
     filteredCount,
+    groups,
   ] = await Promise.all([
     db.market.findMany({
       where,
@@ -141,7 +147,7 @@ export default async function MarketsPage({
     }),
     showFeatured
       ? db.market.findFirst({
-          where: { status: "OPEN" },
+          where: { status: "OPEN", groupId: null },
           orderBy: [{ featured: "desc" }, { trendingScore: "desc" }],
           include: {
             pricePoints: { orderBy: { recordedAt: "desc" }, take: 60 },
@@ -166,6 +172,26 @@ export default async function MarketsPage({
       _count: { _all: true },
     }),
     db.market.count({ where }),
+    // Grouped "events" honor the SAME status/category/search filters and
+    // collapse to one card alongside the standalone markets. Purely additive:
+    // with zero groups this is [] and the page renders exactly as before.
+    db.marketGroup.findMany({
+      where: {
+        ...(status !== "ALL" && {
+          status: status as "OPEN" | "RESOLVED" | "CLOSED" | "CANCELLED",
+        }),
+        ...(validCat !== "ALL" && { category: validCat as MarketCategory }),
+        ...(q && {
+          OR: [
+            { title: { contains: q, mode: "insensitive" as const } },
+            { description: { contains: q, mode: "insensitive" as const } },
+          ],
+        }),
+      },
+      include: { markets: { include: marketTranslationInclude(locale) } },
+      orderBy: [{ featured: "desc" }, { sortOrder: "asc" }, { createdAt: "desc" }],
+      take: 30,
+    }),
   ]);
 
   const featured = showFeatured ? featuredRaw : null;
@@ -200,6 +226,49 @@ export default async function MarketsPage({
     catCountMap.set(c.category, c._count._all);
     catCountAll += c._count._all;
   }
+
+  // Collapse each event to one card: rank its children by display-normalized
+  // YES share (resolution-adjusted so a settled winner shows 100%) and surface
+  // the leader + aggregate volume. Pure display math — never touches the AMM.
+  const groupCards = groups.map((g) => {
+    const exclusive = g.type === "EXCLUSIVE";
+    const resolved = g.status === "RESOLVED" || g.status === "CANCELLED";
+    const childPrices = g.markets.map((m) => ({
+      marketId: m.id,
+      yesPrice:
+        m.status === "RESOLVED"
+          ? m.resolvedAs === "YES"
+            ? 1
+            : m.resolvedAs === "NO"
+              ? 0
+              : priceYes({ yesShares: m.yesShares, noShares: m.noShares })
+          : priceYes({ yesShares: m.yesShares, noShares: m.noShares }),
+    }));
+    const pctById = new Map(
+      groupDisplayPrices(childPrices, exclusive).map((d) => [
+        d.marketId,
+        d.normalizedPct,
+      ]),
+    );
+    const leader = [...g.markets].sort(
+      (a, b) => (pctById.get(b.id) ?? 0) - (pctById.get(a.id) ?? 0),
+    )[0];
+    return {
+      id: g.id,
+      slug: g.slug,
+      title: g.title,
+      category: g.category,
+      childCount: g.markets.length,
+      volumeCoins: g.markets.reduce((s, m) => s + m.volumeCoins, 0),
+      leaderTitle: leader ? resolveMarketContent(leader, locale).title : null,
+      leaderPct: leader ? pctById.get(leader.id) ?? 0 : 0,
+      resolvedLabel: resolved
+        ? g.status === "CANCELLED"
+          ? tr("market.cancelled")
+          : tr("market.resolved")
+        : null,
+    };
+  });
 
   const username = me?.username ?? null;
   const initial = (username ?? "?").slice(0, 1).toUpperCase();
@@ -480,7 +549,7 @@ export default async function MarketsPage({
         </div>
 
         {/* ── SECTION HEAD + GRID ── */}
-        {markets.length === 0 ? (
+        {markets.length === 0 && groupCards.length === 0 ? (
           <div className="empty">{tr("market.noMatches")}</div>
         ) : (
           <>
@@ -494,8 +563,50 @@ export default async function MarketsPage({
               </div>
             </div>
 
-            {gridMarkets.length > 0 ? (
+            {gridMarkets.length > 0 || groupCards.length > 0 ? (
               <div className="grid">
+                {groupCards.map((g) => (
+                  <Link className="market" key={`g-${g.id}`} href={lp(`/events/${g.slug}`)}>
+                    <div className="market-top">
+                      <span className={`cat ${catClass(g.category)}`}>
+                        {formatCategory(g.category, locale)}
+                      </span>
+                      <span className="ends">
+                        {g.resolvedLabel ??
+                          tr("group.candidateCount", {
+                            count: g.childCount,
+                            s: g.childCount === 1 ? "" : "s",
+                          })}
+                      </span>
+                    </div>
+                    <div className="q">{g.title}</div>
+                    <div className="yn">
+                      <span className="ynbtn y" style={{ gridColumn: "1 / -1" }}>
+                        <span
+                          className="l"
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            letterSpacing: "0.01em",
+                          }}
+                        >
+                          {g.leaderTitle ?? tr("group.empty")}
+                        </span>
+                        <span className="p">{g.leaderTitle ? `${g.leaderPct}%` : "—"}</span>
+                      </span>
+                    </div>
+                    <div className="market-foot">
+                      <div className="lhs">
+                        <span>
+                          {tr("market.vol")} <strong>{fmtCoins(g.volumeCoins)}</strong>
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
                 {gridMarkets.map((m) => {
                   const p = priceYes({ yesShares: m.yesShares, noShares: m.noShares });
                   const localized = resolveMarketContent(m, locale);

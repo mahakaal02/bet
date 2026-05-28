@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { MarketForm } from "@/components/MarketForm";
+import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { hubLoginUrl } from "@/lib/hub";
 
@@ -11,6 +12,14 @@ export default async function NewMarketPage() {
   if (!u) redirect(hubLoginUrl());
   if (!u.isAdmin) redirect("/");
 
+  // Only OPEN/CLOSED groups can take new members — a RESOLVED/CANCELLED event
+  // is settled and frozen.
+  const groups = await db.marketGroup.findMany({
+    where: { status: { in: ["OPEN", "CLOSED"] } },
+    orderBy: [{ featured: "desc" }, { sortOrder: "asc" }, { createdAt: "desc" }],
+    select: { id: true, title: true },
+  });
+
   return (
     <>
       <div className="mx-auto max-w-2xl px-4 py-6">
@@ -19,7 +28,7 @@ export default async function NewMarketPage() {
           Once created, an AMM seeds 1000/1000 YES/NO shares — initial price 50/50.
         </p>
         <Card>
-          <MarketForm />
+          <MarketForm groups={groups} />
         </Card>
       </div>
     </>

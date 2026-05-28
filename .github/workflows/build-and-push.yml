@@ -82,6 +82,10 @@ jobs:
               NEXT_PUBLIC_BACKEND_URL=https://kalki-backend.cloud.podstack.ai
               NEXT_PUBLIC_EXCHANGE_URL=https://kalki-bet.cloud.podstack.ai
               NEXT_PUBLIC_ADMIN_URL=https://kalki-admin.cloud.podstack.ai
+              # Shared parent domain for the kalki_locale country cookie so
+              # the hub country pick reaches the bet wallet subdomain.
+              # Mirrors the backend's ADMIN_COOKIE_DOMAIN.
+              NEXT_PUBLIC_COOKIE_DOMAIN=.cloud.podstack.ai
               # PR-TELEGRAM-GO-LIVE — Telegram bot public username.
               # Reads from a REPO VARIABLE (not a secret) since the
               # value ships in client chunks at build time and isn't

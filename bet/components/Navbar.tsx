@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { Coins, Star, User, BarChart3, ShieldCheck, Home } from "lucide-react";
+import { Coins, Star, User, BarChart3, ShieldCheck, Home, Layers } from "lucide-react";
 import useSWR from "swr";
 import { fmtCoins } from "@/lib/utils";
 import { NotificationsBell } from "@/components/NotificationsBell";
@@ -48,6 +48,11 @@ export function Navbar() {
             href={localizedPath("/markets", locale)}
             icon={<Home className="h-4 w-4" />}
             label={t("nav.markets")}
+          />
+          <NavLink
+            href={localizedPath("/events", locale)}
+            icon={<Layers className="h-4 w-4" />}
+            label={t("nav.events")}
           />
           <NavLink
             href={localizedPath("/portfolio", locale)}
@@ -127,6 +132,11 @@ export function Navbar() {
           href={localizedPath("/markets", locale)}
           icon={<Home className="h-4 w-4" />}
           label={t("nav.markets")}
+        />
+        <NavLink
+          href={localizedPath("/events", locale)}
+          icon={<Layers className="h-4 w-4" />}
+          label={t("nav.events")}
         />
         <NavLink
           href={localizedPath("/portfolio", locale)}

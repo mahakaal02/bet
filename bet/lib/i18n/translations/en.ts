@@ -38,6 +38,9 @@ const en: Dictionary = {
     marketsTitle: "Prediction markets — trade real-world events",
     marketsDescription:
       "Browse open prediction markets, watch prices move in real time, and trade with your Kalki Bet coins.",
+    eventsTitle: "Events — multi-outcome prediction markets",
+    eventsDescription:
+      "Browse grouped events ranked by live odds. Each candidate is its own YES/NO market — compare the field and trade the outcome you believe in.",
     walletTitle: "Your wallet · Kalki Bet coins",
     walletDescription:
       "Top up, withdraw, and track every coin movement. One balance across Markets, Auctions and Aviator.",
@@ -85,6 +88,7 @@ const en: Dictionary = {
   nav: {
     home: "Home",
     markets: "Markets",
+    events: "Events",
     portfolio: "Portfolio",
     wallet: "Wallet",
     profile: "Profile",
@@ -406,6 +410,23 @@ const en: Dictionary = {
     errMarketEnded: "Market no longer accepting changes.",
     errInvalidPriceSize: "Check the new price (0.01–0.99) and size.",
     errReplaceGeneric: "Couldn't update the order.",
+  },
+
+  // ─── Grouped markets ("events") ──────────────────────────────
+  // An event bundles related YES/NO markets (one per candidate) into a
+  // single ranked list. Each row still trades as its own market.
+  group: {
+    heading: "Events",
+    eventCount: "{count} event{s}",
+    candidates: "candidates",
+    candidateCount: "{count} candidate{s}",
+    chance: "Chance",
+    buy: "Buy",
+    vol: "Vol",
+    showAll: "Show all {count}",
+    showLess: "Show less",
+    empty: "No candidates in this event yet.",
+    notFound: "Event not found",
   },
 
   wallet: {

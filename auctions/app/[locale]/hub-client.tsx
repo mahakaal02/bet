@@ -2,6 +2,7 @@
 
 import "./hub.css";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { localeCookieString } from "@/lib/locale-constants";
 
 /**
  * Locale dictionaries for the Kalki hub. Mirrors the shape used by
@@ -299,8 +300,6 @@ function buildMixedWinners(home: CountryCode): string[] {
     .flatMap(([, arr]) => arr.slice(0, 2));
   return [...local, ...others];
 }
-
-const LOCALE_COOKIE = "kalki_locale";
 
 export interface HubAuction {
   id: string;
@@ -634,14 +633,15 @@ export function HubClient({
   const auctionRemaining = auctionEndsAt ? formatHMS(auctionEndsAt - now) : "—";
   const marketRemaining = marketEndsAt ? formatHMS(marketEndsAt - now) : "—";
 
-  // Persist the user's locale choice in a 1-year cookie so the next
+  // Persist the user's country choice in a 1-year cookie so the next
   // visit lands on the same locale (same key the login page reads).
+  // `localeCookieString` adds Domain=.cloud.podstack.ai in prod so the
+  // pick reaches the bet wallet subdomain (see lib/locale-constants.ts).
   function applyCountry(c: CountryCode) {
     setCountry(c);
     setLocMenuOpen(false);
     if (typeof document !== "undefined") {
-      const maxAge = 60 * 60 * 24 * 365;
-      document.cookie = `${LOCALE_COOKIE}=${c}; path=/; max-age=${maxAge}; samesite=lax`;
+      document.cookie = localeCookieString(c);
     }
   }
 

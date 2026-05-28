@@ -23,6 +23,9 @@ const es: Partial<Dictionary> = {
     marketsTitle: "Mercados de predicción — opera eventos reales",
     marketsDescription:
       "Explora los mercados de predicción abiertos, observa cómo se mueven los precios en tiempo real y opera con tus monedas Kalki Bet.",
+    eventsTitle: "Eventos — mercados de predicción de varios resultados",
+    eventsDescription:
+      "Explora eventos agrupados ordenados por probabilidades en vivo. Cada candidato es su propio mercado SÍ/NO: compara las opciones y opera el resultado en el que crees.",
     walletTitle: "Tu billetera · monedas Kalki Bet",
     walletDescription:
       "Recarga, retira y registra cada movimiento de monedas. Un solo saldo en Mercados, Subastas y Aviator.",
@@ -70,6 +73,7 @@ const es: Partial<Dictionary> = {
   nav: {
     home: "Inicio",
     markets: "Mercados",
+    events: "Eventos",
     portfolio: "Portafolio",
     wallet: "Billetera",
     profile: "Perfil",
@@ -379,6 +383,20 @@ const es: Partial<Dictionary> = {
     errMarketEnded: "El mercado ya no acepta cambios.",
     errInvalidPriceSize: "Revisa el nuevo precio (0,01–0,99) y el tamaño.",
     errReplaceGeneric: "No se pudo actualizar la orden.",
+  },
+
+  group: {
+    heading: "Eventos",
+    eventCount: "{count} evento{s}",
+    candidates: "candidatos",
+    candidateCount: "{count} candidato{s}",
+    chance: "Probabilidad",
+    buy: "Comprar",
+    vol: "Vol",
+    showAll: "Ver todos ({count})",
+    showLess: "Ver menos",
+    empty: "Aún no hay candidatos en este evento.",
+    notFound: "Evento no encontrado",
   },
 
   wallet: {
