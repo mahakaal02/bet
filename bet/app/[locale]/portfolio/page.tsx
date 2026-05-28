@@ -1,24 +1,38 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { Navbar } from "@/components/Navbar";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import "./portfolio-v2.css";
+import { ThemeSwitch } from "../wallet/wallet-client";
 import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { priceYes } from "@/lib/amm";
+import { hubHomeUrl } from "@/lib/hub";
 import { fmtCoins, fmtPrice, timeAgo } from "@/lib/utils";
 import {
   DEFAULT_LOCALE,
   buildAuthRedirect,
   buildLocalizedMetadata,
+  formatCategory,
   isLocale,
   localizedPath,
+  marketTranslationInclude,
+  resolveMarketContent,
   t,
   type Locale,
+  type MarketCategory,
 } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const TF_DAYS: Record<string, number> = {
+  "1d": 1,
+  "7d": 7,
+  "1m": 30,
+  "3m": 90,
+  "1y": 365,
+  all: 3650,
+};
 
 export async function generateMetadata({
   params,
@@ -36,6 +50,19 @@ export async function generateMetadata({
   });
 }
 
+/**
+ * Portfolio — Portfolio v2 design (E:\kalki.bet-4\Portfolio.html), wired
+ * to the real backend. Presentation changed wholesale; the data is all
+ * real bet data: positions marked-to-market off live AMM prices, the
+ * equity curve from PricePoint history of the current basket, allocation
+ * by category, win-rate from resolved positions, the real daily streak,
+ * achievements, and recent trades. Cross-app figures (Aviator/Auctions
+ * live in the backend DB, not here) are intentionally not fabricated —
+ * the "by product" card is replaced with real recent trades.
+ *
+ * Server component; the only client island is the shared ThemeSwitch.
+ * Styles are isolated under a `.pf` root.
+ */
 export default async function PortfolioPage({
   params,
   searchParams,
@@ -50,185 +77,613 @@ export default async function PortfolioPage({
     t(k, locale, vars);
   const lp = (h: string) => localizedPath(h, locale);
 
+  const sp = await searchParams;
+  const pick = (v: string | string[] | undefined): string =>
+    Array.isArray(v) ? (v[0] ?? "") : (v ?? "");
+
   const u = await getAuthedUser();
   if (!u) {
-    const sp = await searchParams;
     redirect(buildAuthRedirect("/portfolio", sp, locale));
   }
 
-  const [positions, recentTrades, wallet] = await Promise.all([
-    db.position.findMany({
-      where: { userId: u.id, shares: { gt: 0 } },
-      include: { market: true },
-      orderBy: { updatedAt: "desc" },
-    }),
-    db.trade.findMany({
-      where: { userId: u.id },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-      include: { market: { select: { title: true, slug: true } } },
-    }),
-    db.wallet.findUnique({ where: { userId: u.id } }),
-  ]);
+  const tf = (pick(sp.tf) || "7d").toLowerCase();
+  const tfDays = TF_DAYS[tf] ?? 7;
+  const tab = (pick(sp.tab) || "open").toLowerCase() === "resolved" ? "resolved" : "open";
 
-  // Mark-to-market each position: shares × current price gives present value.
-  // For resolved markets we use the resolved-as price (1 or 0).
-  let totalCost = 0;
-  let totalValue = 0;
-  let realizedPnl = 0;
-  const enriched = positions.map((p) => {
-    const live =
-      p.market.status === "RESOLVED" || p.market.status === "CANCELLED"
-        ? p.market.resolvedAs === p.outcome
-          ? 1
-          : 0
-        : p.outcome === "YES"
-          ? priceYes({ yesShares: p.market.yesShares, noShares: p.market.noShares })
-          : 1 - priceYes({ yesShares: p.market.yesShares, noShares: p.market.noShares });
+  const now = Date.now();
+  const windowStart = now - tfDays * DAY_MS;
+  const thirtyAgo = new Date(now - 30 * DAY_MS);
+  const fourteenAgo = new Date(now - 14 * DAY_MS);
+
+  const [me, wallet, allPositions, recentTrades, streakTrades, touched, achievements, unlocked] =
+    await Promise.all([
+      db.user.findUnique({
+        where: { id: u.id },
+        select: { username: true, streak: true, level: true },
+      }),
+      db.wallet.findUnique({ where: { userId: u.id }, select: { balance: true } }),
+      db.position.findMany({
+        where: { userId: u.id },
+        include: { market: { include: marketTranslationInclude(locale) } },
+        orderBy: { updatedAt: "desc" },
+        take: 300,
+      }),
+      db.trade.findMany({
+        where: { userId: u.id },
+        orderBy: { createdAt: "desc" },
+        take: 6,
+        include: { market: { include: marketTranslationInclude(locale) } },
+      }),
+      db.trade.findMany({
+        where: { userId: u.id, createdAt: { gte: fourteenAgo } },
+        select: { createdAt: true },
+      }),
+      db.trade.findMany({
+        where: { userId: u.id, createdAt: { gte: thirtyAgo } },
+        select: { marketId: true },
+        distinct: ["marketId"],
+      }),
+      db.achievement.findMany({
+        orderBy: { sortOrder: "asc" },
+        select: { id: true, code: true, title: true, icon: true },
+      }),
+      db.userAchievement.findMany({
+        where: { userId: u.id },
+        select: { achievementId: true },
+      }),
+    ]);
+
+  const balance = wallet?.balance ?? 0;
+
+  // Mark each position to market off the live AMM price (resolved → 1/0).
+  const liveYes = (m: { yesShares: number; noShares: number }) =>
+    priceYes({ yesShares: m.yesShares, noShares: m.noShares });
+  const isResolved = (s: string) => s === "RESOLVED" || s === "CANCELLED";
+
+  const enrichedAll = allPositions.map((p) => {
+    const resolved = isResolved(p.market.status);
+    const live = resolved
+      ? p.market.resolvedAs === p.outcome
+        ? 1
+        : 0
+      : p.outcome === "YES"
+        ? liveYes(p.market)
+        : 1 - liveYes(p.market);
     const value = Math.round(p.shares * live);
     const pnl = value - p.costBasis;
-    totalCost += p.costBasis;
-    totalValue += value;
-    realizedPnl += p.realizedPnl;
-    return { ...p, livePrice: live, value, pnl };
+    return { ...p, resolved, livePrice: live, value, pnl };
   });
 
-  const unrealized = totalValue - totalCost;
+  const openPos = enrichedAll.filter((p) => !p.resolved && p.shares > 0);
+  const resolvedPos = enrichedAll.filter((p) => p.resolved);
+
+  let totalCostOpen = 0;
+  let totalValueOpen = 0;
+  const allocByCat = new Map<MarketCategory, number>();
+  for (const p of openPos) {
+    totalCostOpen += p.costBasis;
+    totalValueOpen += p.value;
+    allocByCat.set(p.market.category, (allocByCat.get(p.market.category) ?? 0) + p.value);
+  }
+  const unrealized = totalValueOpen - totalCostOpen;
+  const realizedAll = enrichedAll.reduce((s, p) => s + p.realizedPnl, 0);
+  const allTime = realizedAll + unrealized;
+  const totalValue = balance + totalValueOpen;
+
+  // Win rate + best/worst from resolved positions.
+  let wins = 0;
+  let losses = 0;
+  let bestWin = 0;
+  let worstLoss = 0;
+  for (const p of resolvedPos) {
+    if (p.realizedPnl > 0) wins++;
+    else if (p.realizedPnl < 0) losses++;
+    if (p.realizedPnl > bestWin) bestWin = p.realizedPnl;
+    if (p.realizedPnl < worstLoss) worstLoss = p.realizedPnl;
+  }
+  const winRate = wins + losses > 0 ? Math.round((wins / (wins + losses)) * 100) : null;
+  const categoriesUsed = allocByCat.size;
+  const avgTicket = openPos.length > 0 ? Math.round(totalCostOpen / openPos.length) : 0;
+
+  // ── Equity curve (current basket marked at historical prices) ──
+  const openMarketIds = openPos.map((p) => p.marketId);
+  const priceRows = openMarketIds.length
+    ? await db.pricePoint.findMany({
+        where: { marketId: { in: openMarketIds }, recordedAt: { gte: new Date(Math.min(windowStart, now - 2 * DAY_MS)) } },
+        select: { marketId: true, yesPrice: true, recordedAt: true },
+        orderBy: { recordedAt: "asc" },
+        take: 6000,
+      })
+    : [];
+  const seriesByMarket = new Map<string, { t: number; yes: number }[]>();
+  for (const r of priceRows) {
+    const arr = seriesByMarket.get(r.marketId);
+    const point = { t: new Date(r.recordedAt).getTime(), yes: r.yesPrice };
+    if (arr) arr.push(point);
+    else seriesByMarket.set(r.marketId, [point]);
+  }
+
+  const priceAt = (p: (typeof openPos)[number], at: number): number => {
+    const rows = seriesByMarket.get(p.marketId);
+    if (!rows || rows.length === 0) return p.livePrice;
+    let yes = rows[0].yes;
+    for (const row of rows) {
+      if (row.t <= at) yes = row.yes;
+      else break;
+    }
+    return p.outcome === "YES" ? yes : 1 - yes;
+  };
+
+  const STEPS = 48;
+  const equity: number[] = [];
+  for (let i = 0; i < STEPS; i++) {
+    const at = windowStart + ((now - windowStart) * i) / (STEPS - 1);
+    let v = balance;
+    for (const p of openPos) v += p.shares * priceAt(p, at);
+    equity.push(v);
+  }
+  // 24h P&L on the current basket (cash cancels out).
+  let mtm24 = 0;
+  for (const p of openPos) mtm24 += p.shares * priceAt(p, now - DAY_MS);
+  const pnl24 = Math.round(totalValueOpen - mtm24);
+  const chart = buildEquityChart(equity);
+
+  // ── Streak heatmap (last 14 days of trade activity) ──
+  const dayCounts = new Array(14).fill(0);
+  const startDay = new Date();
+  startDay.setHours(0, 0, 0, 0);
+  const startDayMs = startDay.getTime() - 13 * DAY_MS;
+  for (const tx of streakTrades) {
+    const idx = Math.floor((new Date(tx.createdAt).getTime() - startDayMs) / DAY_MS);
+    if (idx >= 0 && idx < 14) dayCounts[idx]++;
+  }
+
+  // ── Achievements ──
+  const unlockedIds = new Set(unlocked.map((a) => a.achievementId));
+  const badges = achievements
+    .slice()
+    .sort((a, b) => Number(unlockedIds.has(b.id)) - Number(unlockedIds.has(a.id)))
+    .slice(0, 9)
+    .map((a) => ({ ...a, unlocked: unlockedIds.has(a.id) }));
+
+  const username = me?.username ?? "user";
+  const initial = username.slice(0, 1).toUpperCase();
+  const tabList = tab === "resolved" ? resolvedPos : openPos;
+  const shown = tabList.slice(0, 12);
+
+  const tabHref = (which: "open" | "resolved") =>
+    lp(`/portfolio${qs({ tf, tab: which })}`);
+  const tfHref = (which: string) => lp(`/portfolio${qs({ tf: which, tab })}`);
 
   return (
-    <main className="min-h-screen pb-20">
-      <Navbar />
-      <div className="mx-auto max-w-6xl px-4 py-6">
-        <h1 className="mb-1 text-2xl font-black">{tr("portfolio.heading")}</h1>
-        <p className="text-sm text-slate-400">{tr("portfolio.subtext")}</p>
+    <div className="pf">
+      <div className="bg-stack" aria-hidden="true">
+        <div className="bg-mesh" />
+        <div className="bg-grid" />
+        <div className="bg-grain" />
+      </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-4">
-          <Stat label={tr("portfolio.wallet")} value={`${fmtCoins(wallet?.balance ?? 0)} 🪙`} />
-          <Stat label={tr("portfolio.atCost")} value={`${fmtCoins(totalCost)}`} />
-          <Stat label={tr("portfolio.valueNow")} value={`${fmtCoins(totalValue)}`} />
-          <Stat
-            label={tr("portfolio.pl")}
-            value={`${unrealized >= 0 ? "+" : ""}${fmtCoins(unrealized)}`}
-            tone={unrealized >= 0 ? "yes" : "no"}
-          />
+      {/* ── TOPBAR ── */}
+      <header className="topbar">
+        <div className="topbar-inner">
+          <a className="brand" href={hubHomeUrl()}>
+            <span className="brand-mark" aria-label="kalki">
+              <svg width="22" height="22" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+                <path d="M14 30 L14 26 C14 23 15.6 21 18 20.4 L18 16.6 C17 14 18 11 20.6 9.4 L25 6.6 C28.4 4.6 32 6.4 33.4 9.4 L33.4 16 C33.4 21.2 31 26 26.6 28.4 L26.6 30 Z" fill="#F5F7FF" />
+                <path d="M20.5 7.5 L14 4 L18 8.5 L13 7 L19.5 10.5 Z" fill="url(#kg)" />
+                <ellipse cx="26.5" cy="13" rx="1.2" ry="0.7" fill="#0b1020" transform="rotate(-18 26.5 13)" />
+                <defs><linearGradient id="kg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#22D3EE" /><stop offset="1" stopColor="#6366F1" /></linearGradient></defs>
+              </svg>
+            </span>
+            <span className="brand-wm">kalki<span className="dot">.</span></span>
+          </a>
+          <nav className="nav" aria-label="primary">
+            <Link href={lp("/markets")}>{tr("nav.markets")}</Link>
+            <Link className="active" href={lp("/portfolio")}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="7" width="20" height="14" rx="2" />
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+              </svg>
+              {tr("nav.portfolio")}
+            </Link>
+            <Link href={lp("/watchlist")}>{tr("nav.watchlist")}</Link>
+            <Link href={lp("/leaderboard")}>{tr("nav.leaderboard")}</Link>
+            <Link href={lp("/wallet")}>{tr("nav.wallet")}</Link>
+          </nav>
+          <div className="topbar-right">
+            <span className="balance-pill"><span className="lbl">BAL</span> {fmtCoins(balance)}</span>
+            <ThemeSwitch />
+            <Link className="deposit-btn" href={lp("/wallet")}>+ {tr("wallet.buyCoins")}</Link>
+            <div className="avatar">{initial}</div>
+          </div>
+        </div>
+      </header>
+
+      {/* ── STATUS STRIP (honest, real figures) ── */}
+      <div className="status-strip">
+        <div className="status-inner">
+          <span className="live">{tr("portfolio.streakDays", { count: me?.streak ?? 0 })}</span>
+          <span className="sep">·</span>
+          <span>{tr("portfolio.openCount", { count: openPos.length })}</span>
+          <span className="sep">·</span>
+          <span style={{ color: allTime >= 0 ? "var(--emerald-300)" : "var(--rose-300)" }}>
+            {allTime >= 0 ? "▲" : "▼"} {tr("portfolio.allTimeStrip", { amount: fmtSigned(allTime) })}
+          </span>
+        </div>
+      </div>
+
+      {/* ── PAGE ── */}
+      <main className="page">
+        <div className="page-head">
+          <div>
+            <div className="crumbs">
+              <span>{tr("wallet.crumbAccount")}</span>
+              <span className="sep">/</span>
+              <span className="here">{tr("portfolio.heading")}</span>
+            </div>
+            <h1 className="page-title">
+              {tr("portfolio.titleLead")} <em>{tr("portfolio.titleEm")}</em>
+            </h1>
+            <p className="page-sub">{tr("portfolio.subtitle")}</p>
+          </div>
+          <div className="page-stats">
+            <div className="pstat"><div className="v cy">{fmtCoins(totalValue)}</div><div className="l">{tr("portfolio.totalValue")}</div></div>
+            <div className="pstat"><div className={`v ${pnl24 >= 0 ? "pos" : "neg"}`}>{fmtSigned(pnl24)}</div><div className="l">{tr("portfolio.pnl24")}</div></div>
+            <div className="pstat"><div className={`v ${allTime >= 0 ? "pos" : "neg"}`}>{fmtSigned(allTime)}</div><div className="l">{tr("portfolio.allTime")}</div></div>
+            <div className="pstat"><div className="v">{winRate !== null ? `${winRate}%` : "—"}</div><div className="l">{tr("portfolio.winRate")}</div></div>
+          </div>
         </div>
 
-        <Card className="mt-4">
-          <CardHeader>
-            <CardTitle>{tr("portfolio.openPositions")}</CardTitle>
-            <span className="text-xs text-slate-500">{enriched.length}</span>
-          </CardHeader>
-          {enriched.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-500">
-              <Link href={lp("/markets")} className="text-cyan-300 hover:text-cyan-200">
-                {tr("portfolio.noPositions")}
-              </Link>
-            </p>
-          ) : (
-            <div className="divide-y divide-slate-800">
-              {enriched.map((p) => (
-                <Link
-                  key={p.id}
-                  href={lp(`/markets/${p.market.slug}`)}
-                  className="grid grid-cols-[1fr_auto] gap-2 py-3 hover:bg-slate-900/40"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Badge tone={p.outcome === "YES" ? "yes" : "no"}>
-                        {p.outcome}
-                      </Badge>
-                      <span className="line-clamp-1 text-sm font-semibold">
-                        {p.market.title}
-                      </span>
-                    </div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      {p.shares.toFixed(1)} sh @ {fmtPrice(p.costBasis / Math.max(1, p.shares))} avg ·
-                      now {fmtPrice(p.livePrice)}
-                    </div>
+        <div className="layout">
+          {/* ═══ MAIN ═══ */}
+          <div className="col-main">
+            {/* HERO */}
+            <section className="hero-card">
+              <div className="hero-top">
+                <div className="hero-left">
+                  <div className="hero-lbl">{tr("portfolio.valueLive")}</div>
+                  <div className="hero-num"><span>{fmtCoins(totalValue)}</span><span className="unit">{tr("wallet.coins")}</span></div>
+                  <div className="hero-delta">
+                    <span className={`row ${pnl24 >= 0 ? "pos" : "neg"}`}>
+                      <span className="pct">{pnl24 >= 0 ? "▲" : "▼"} {fmtSigned(pnl24)}</span>
+                      <span className="label">{tr("portfolio.deltaH24")}</span>
+                    </span>
+                    <span className={`row ${allTime >= 0 ? "pos" : "neg"}`}>
+                      <span className="pct">{allTime >= 0 ? "▲" : "▼"} {fmtSigned(allTime)}</span>
+                      <span className="label">{tr("portfolio.deltaAllTime")}</span>
+                    </span>
+                    <span className="row"><span className="pct" style={{ color: "var(--cyan-200)" }}>{fmtCoins(balance)}</span><span className="label">{tr("portfolio.cash")}</span></span>
+                    <span className="row"><span className="pct" style={{ color: "var(--cyan-200)" }}>{fmtCoins(totalValueOpen)}</span><span className="label">{tr("portfolio.inPositions")}</span></span>
                   </div>
-                  <div className="text-end text-sm">
-                    <div className="font-mono">{fmtCoins(p.value)}</div>
-                    <div
-                      className={`font-mono text-xs ${
-                        p.pnl >= 0 ? "ticker-up" : "ticker-down"
-                      }`}
-                    >
-                      {p.pnl >= 0 ? "+" : ""}
-                      {fmtCoins(p.pnl)}
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </Card>
 
-        <Card className="mt-4">
-          <CardHeader>
-            <CardTitle>{tr("portfolio.recentTrades")}</CardTitle>
-          </CardHeader>
-          {recentTrades.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-500">
-              {tr("portfolio.noTrades")}
-            </p>
-          ) : (
-            <ul className="divide-y divide-slate-800">
-              {recentTrades.map((tx) => (
-                <li
-                  key={tx.id}
-                  className="flex items-center justify-between py-2 text-sm"
-                >
-                  <div className="flex items-center gap-2">
-                    <Badge tone={tx.outcome === "YES" ? "yes" : "no"}>
-                      {tx.outcome}
-                    </Badge>
-                    <Link
-                      href={lp(`/markets/${tx.market.slug}`)}
-                      className="line-clamp-1 text-slate-300 hover:text-slate-100"
-                    >
-                      {tx.market.title}
-                    </Link>
+                  <div className="tf-row">
+                    {(["1d", "7d", "1m", "3m", "1y", "all"] as const).map((x) => (
+                      <Link key={x} className={tf === x ? "on" : ""} href={tfHref(x)}>{x.toUpperCase()}</Link>
+                    ))}
                   </div>
-                  <div className="text-end">
-                    <div className="font-mono">
-                      −{fmtCoins(tx.cost)}{" "}
-                      <span className="text-slate-500">@ {fmtPrice(tx.pricePerShare)}</span>
-                    </div>
-                    <div className="text-[10px] text-slate-500">
-                      {timeAgo(tx.createdAt)}
+
+                  <div className="equity-chart">
+                    <svg viewBox="0 0 700 180" preserveAspectRatio="none">
+                      <defs>
+                        <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="rgba(34,211,238,0.45)" />
+                          <stop offset="100%" stopColor="rgba(34,211,238,0)" />
+                        </linearGradient>
+                      </defs>
+                      <line x1="0" y1="45" x2="700" y2="45" stroke="rgba(255,255,255,0.05)" strokeDasharray="2 4" />
+                      <line x1="0" y1="90" x2="700" y2="90" stroke="rgba(255,255,255,0.05)" strokeDasharray="2 4" />
+                      <line x1="0" y1="135" x2="700" y2="135" stroke="rgba(255,255,255,0.05)" strokeDasharray="2 4" />
+                      <path d={chart.area} fill="url(#eqGrad)" />
+                      <path d={chart.line} fill="none" stroke="var(--cyan-400)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+                      <circle cx="700" cy={chart.lastY} r="4" fill="var(--cyan-400)" />
+                      <circle cx="700" cy={chart.lastY} r="8" fill="none" stroke="var(--cyan-400)" strokeWidth="1" opacity="0.4" />
+                    </svg>
+                    <div className="y-lbls">
+                      {chart.yLabels.map((y, i) => (<span key={i}>{fmtCoins(y)}</span>))}
                     </div>
                   </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </div>
-    </main>
+                  <div className="x-lbls">
+                    <span>{fmtDay(windowStart, locale)}</span>
+                    <span>{fmtDay(windowStart + (now - windowStart) / 2, locale)}</span>
+                    <span>{tr("portfolio.today")}</span>
+                  </div>
+                </div>
+
+                <div className="hero-right">
+                  <div className="hero-lbl">{tr("portfolio.snapshot")}</div>
+                  <div className="mini-stats">
+                    <div className="mini"><div className="l">{tr("portfolio.openPositions")}</div><div className="v">{openPos.length}</div><div className="delta">{tr("portfolio.acrossCats", { count: categoriesUsed })}</div></div>
+                    <div className="mini"><div className="l">{tr("portfolio.avgTicket")}</div><div className="v">{fmtCoins(avgTicket)}</div><div className="delta">{tr("wallet.coins")}</div></div>
+                    <div className="mini"><div className="l">{tr("portfolio.bestWin")}</div><div className="v pos">{bestWin > 0 ? fmtSigned(bestWin) : "—"}</div><div className="delta">{tr("portfolio.realized")}</div></div>
+                    <div className="mini"><div className="l">{tr("portfolio.worstLoss")}</div><div className="v neg">{worstLoss < 0 ? fmtSigned(worstLoss) : "—"}</div><div className="delta">{tr("portfolio.realized")}</div></div>
+                    <div className="mini"><div className="l">{tr("portfolio.realizedPnl")}</div><div className={`v ${realizedAll >= 0 ? "pos" : "neg"}`}>{fmtSigned(realizedAll)}</div><div className="delta">{tr("portfolio.allTimeLc")}</div></div>
+                    <div className="mini"><div className="l">{tr("portfolio.marketsTouched")}</div><div className="v">{touched.length}</div><div className="delta">{tr("portfolio.last30d")}</div></div>
+                  </div>
+                  <div className="hero-cta-row">
+                    <Link className="btn primary" href={lp("/markets")}>{tr("portfolio.goToMarkets")} →</Link>
+                    <Link className="btn ghost" href={lp("/wallet")}>{tr("nav.wallet")}</Link>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* ALLOCATION */}
+            <section className="card">
+              <div className="card-head">
+                <div>
+                  <div className="card-eyebrow">{tr("portfolio.eyebrowAllocation")}</div>
+                  <div className="card-title">{tr("portfolio.allocationTitle", { amount: fmtCoins(totalValueOpen) })}</div>
+                </div>
+                <Link className="small-link" href={lp("/markets")}>{tr("portfolio.findMarkets")} →</Link>
+              </div>
+              <div className="alloc">
+                {totalValueOpen > 0 ? (
+                  <>
+                    <div className="alloc-bar">
+                      {[...allocByCat.entries()]
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([cat, val]) => (
+                          <span key={cat} style={{ width: `${(val / totalValueOpen) * 100}%`, background: catColor(cat) }} />
+                        ))}
+                    </div>
+                    <div className="alloc-legend">
+                      {[...allocByCat.entries()]
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([cat, val]) => (
+                          <span className="leg" key={cat}>
+                            <span className="sw" style={{ background: catColor(cat) }} />
+                            {formatCategory(cat, locale)}
+                            <span className="val">{fmtCoins(val)}</span>
+                            <span className="pct">· {Math.round((val / totalValueOpen) * 100)}%</span>
+                          </span>
+                        ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="alloc-empty">{tr("portfolio.noExposure")}</div>
+                )}
+              </div>
+            </section>
+
+            {/* POSITIONS */}
+            <section className="card pos-card">
+              <div className="card-head">
+                <div>
+                  <div className="card-eyebrow">{tr("portfolio.eyebrowPositions")}</div>
+                  <div className="card-title">{tab === "resolved" ? tr("portfolio.resolvedPositions") : tr("portfolio.openPositions")}</div>
+                </div>
+              </div>
+              <div className="tabs-row">
+                <Link className={tab === "open" ? "on" : ""} href={tabHref("open")}>
+                  {tr("portfolio.tabOpen")} <span className="n">{openPos.length}</span>
+                </Link>
+                <Link className={tab === "resolved" ? "on" : ""} href={tabHref("resolved")}>
+                  {tr("portfolio.tabResolved")} <span className="n">{resolvedPos.length}</span>
+                </Link>
+              </div>
+
+              {shown.length === 0 ? (
+                <div className="pos-empty">
+                  {tab === "resolved" ? (
+                    tr("portfolio.noResolved")
+                  ) : (
+                    <Link href={lp("/markets")}>{tr("portfolio.noPositions")}</Link>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="pos-thead">
+                    <div />
+                    <div>{tr("portfolio.colMarket")}</div>
+                    <div className="right">{tr("portfolio.colStake")}</div>
+                    <div className="right">{tr("portfolio.colAvg")}</div>
+                    <div className="right">{tr("portfolio.colMark")}</div>
+                    <div className="right">{tr("portfolio.colValue")}</div>
+                    <div className="right">{tr("portfolio.colPnl")}</div>
+                    <div />
+                  </div>
+                  {shown.map((p) => {
+                    const content = resolveMarketContent(p.market, locale);
+                    const avg = p.shares > 0 ? p.costBasis / p.shares : 0;
+                    const pct = p.costBasis > 0 ? Math.round((p.pnl / p.costBasis) * 100) : 0;
+                    return (
+                      <div className="pos-row" key={p.id}>
+                        <div className={`side-icon ${p.outcome === "YES" ? "y" : "n"}`}>{p.outcome}</div>
+                        <div className="pos-q">
+                          <Link className="label" href={lp(`/markets/${p.market.slug}`)}>{content.title}</Link>
+                          <div className="sub">
+                            <span className={`cat ${catClass(p.market.category)}`}>{formatCategory(p.market.category, locale)}</span>
+                            <span>{p.resolved ? tr("market.resolved") : tr("market.endsDate", { date: fmtDay(new Date(p.market.endsAt).getTime(), locale) })}</span>
+                          </div>
+                        </div>
+                        <div className="pos-num right hide-sm"><strong>{fmtCoins(Math.round(p.shares))}</strong> {tr("market.shares")}</div>
+                        <div className="pos-num right hide-sm">{fmtPrice(avg)}</div>
+                        <div className="pos-num right hide-sm" style={{ color: "var(--cyan-200)" }}>{fmtPrice(p.livePrice)}</div>
+                        <div className="pos-num right hide-sm"><strong>{fmtCoins(p.value)}</strong></div>
+                        <div className={`pos-pl ${p.pnl >= 0 ? "pos" : "neg"}`}>
+                          {fmtSigned(p.pnl)}
+                          <span className="pct">{p.pnl >= 0 ? "+" : "−"}{Math.abs(pct)}%</span>
+                        </div>
+                        <div className="hide-sm">
+                          <Link className="pos-action" href={lp(`/markets/${p.market.slug}`)}>
+                            {p.resolved ? tr("portfolio.view") : tr("portfolio.close")}
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div className="pos-foot">
+                    <span>{tr("portfolio.showingPositions", { shown: shown.length, total: tabList.length })}</span>
+                    <Link className="small-link" href={lp("/markets")}>{tr("portfolio.findMarkets")} →</Link>
+                  </div>
+                </>
+              )}
+            </section>
+          </div>
+
+          {/* ═══ SIDE ═══ */}
+          <aside className="col-side">
+            {/* STREAK */}
+            <div className="card">
+              <div className="card-head">
+                <div>
+                  <div className="card-eyebrow">{tr("portfolio.eyebrowStreak")}</div>
+                  <div className="card-title">{tr("portfolio.dailyActivity")}</div>
+                </div>
+              </div>
+              <div className="streak">
+                <div className="streak-head">
+                  <span className="streak-num">{me?.streak ?? 0}</span>
+                  <span className="streak-lbl">{tr("portfolio.daysInARow")} 🔥</span>
+                </div>
+                <div className="streak-cells">
+                  {dayCounts.map((c, i) => (
+                    <span key={i} className={`c ${c >= 6 ? "l3" : c >= 3 ? "l2" : c >= 1 ? "l1" : ""}`} />
+                  ))}
+                </div>
+                <div className="streak-foot"><span>{tr("portfolio.daysAgo14")}</span><span>{tr("portfolio.today")}</span></div>
+              </div>
+            </div>
+
+            {/* RECENT TRADES (real bet data; replaces cross-app "by product") */}
+            <div className="card">
+              <div className="card-head">
+                <div>
+                  <div className="card-eyebrow">{tr("portfolio.eyebrowActivity")}</div>
+                  <div className="card-title">{tr("portfolio.recentTrades")}</div>
+                </div>
+                <Link className="small-link" href={lp("/wallet")}>{tr("wallet.fullLedger")} →</Link>
+              </div>
+              <div className="breakdown">
+                {recentTrades.length === 0 ? (
+                  <div className="bd-empty">{tr("portfolio.noTrades")}</div>
+                ) : (
+                  recentTrades.map((tx) => {
+                    const content = resolveMarketContent(tx.market, locale);
+                    return (
+                      <div className="bd-row" key={tx.id}>
+                        <div className={`icon ${tx.outcome === "YES" ? "y" : "n"}`}>{tx.outcome}</div>
+                        <div className="meta">
+                          <Link className="name" href={lp(`/markets/${tx.market.slug}`)}>{content.title}</Link>
+                          <div className="sub">{timeAgo(tx.createdAt)} · @ {fmtPrice(tx.pricePerShare)}</div>
+                        </div>
+                        <div className="val">
+                          {tx.cost >= 0 ? "−" : "+"}{fmtCoins(Math.abs(tx.cost))}
+                          <span className="delta">{fmtCoins(Math.round(tx.shares))} {tr("market.shares")}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* BADGES */}
+            <div className="card">
+              <div className="card-head">
+                <div>
+                  <div className="card-eyebrow">{tr("portfolio.eyebrowBadges")}</div>
+                  <div className="card-title">{tr("portfolio.badgesUnlocked", { n: unlockedIds.size, total: achievements.length })}</div>
+                </div>
+                <Link className="small-link" href={lp("/achievements")}>{tr("portfolio.viewAll")} →</Link>
+              </div>
+              <div className="badges-grid">
+                {badges.length === 0 ? (
+                  <div className="bd-empty" style={{ gridColumn: "1 / -1" }}>{tr("portfolio.noBadges")}</div>
+                ) : (
+                  badges.map((b) => (
+                    <div key={b.id} className={`badge ${b.unlocked ? "unlocked" : "locked"}`} title={b.title}>
+                      <span className="ic">{b.unlocked ? badgeIcon(b.icon) : "🔒"}</span>
+                      <span className="nm">{b.title}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </aside>
+        </div>
+      </main>
+
+      <footer className="footer">
+        <div className="footer-inner">
+          <span>{tr("portfolio.footerBrand")}</span>
+          <span>{tr("market.footerCompliance")}</span>
+          <span>{tr("wallet.needHelp")} <Link href={lp("/profile")}>{tr("profile.heading")}</Link></span>
+        </div>
+      </footer>
+    </div>
   );
 }
 
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: "yes" | "no";
-}) {
-  const cls =
-    tone === "yes"
-      ? "ticker-up"
-      : tone === "no"
-        ? "ticker-down"
-        : "text-slate-100";
-  return (
-    <div className="glass rounded-xl p-4">
-      <div className={`text-xl font-black ${cls}`}>{value}</div>
-      <div className="text-[10px] uppercase tracking-wider text-slate-500">
-        {label}
-      </div>
-    </div>
-  );
+/* ── helpers ───────────────────────────────────────────────── */
+
+function qs(o: { tf: string; tab: string }): string {
+  const parts: string[] = [];
+  if (o.tf && o.tf !== "7d") parts.push(`tf=${o.tf}`);
+  if (o.tab && o.tab !== "open") parts.push(`tab=${o.tab}`);
+  return parts.length ? `?${parts.join("&")}` : "";
+}
+
+function fmtSigned(n: number): string {
+  return `${n >= 0 ? "+" : "−"}${fmtCoins(Math.abs(n))}`;
+}
+
+function fmtDay(ms: number, locale: Locale): string {
+  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(new Date(ms));
+}
+
+function catClass(category: MarketCategory): string {
+  switch (category) {
+    case "SPORTS": return "sports";
+    case "POLITICS": return "politics";
+    case "CRYPTO": return "crypto";
+    case "TECH": return "tech";
+    case "ENTERTAINMENT": return "ent";
+    default: return "";
+  }
+}
+
+function catColor(category: MarketCategory): string {
+  switch (category) {
+    case "SPORTS": return "#FCD34D";
+    case "POLITICS": return "#C7D2FE";
+    case "CRYPTO": return "#22D3EE";
+    case "TECH": return "#F0ABFC";
+    case "ENTERTAINMENT": return "#FDA4AF";
+    default: return "rgba(255,255,255,0.18)";
+  }
+}
+
+/** Render an achievement icon: emoji as-is, lucide/ascii names → trophy. */
+function badgeIcon(icon: string): string {
+  if (!icon) return "🏆";
+  // Any non-ASCII codepoint → treat as an emoji and render directly.
+  return /[^ -]/.test(icon) ? icon : "🏆";
+}
+
+/** Build the equity-curve SVG paths (700×180 viewBox) + y-axis labels. */
+function buildEquityChart(values: number[]): {
+  line: string;
+  area: string;
+  lastY: number;
+  yLabels: number[];
+} {
+  const w = 700;
+  const top = 12;
+  const bottom = 168;
+  let vals = values.length >= 2 ? values : [values[0] ?? 0, values[0] ?? 0];
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const span = max - min || 1;
+  const n = vals.length;
+  const coords = vals.map((v, i) => {
+    const x = (i / (n - 1)) * w;
+    const y = top + (1 - (v - min) / span) * (bottom - top);
+    return [x, y] as const;
+  });
+  const line = "M" + coords.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(" L");
+  const area = `${line} L${w} 180 L0 180 Z`;
+  const lastY = coords[coords.length - 1][1];
+  const yLabels = [max, min + span * (2 / 3), min + span / 3, min].map((v) => Math.round(v));
+  return { line, area, lastY, yLabels };
 }
