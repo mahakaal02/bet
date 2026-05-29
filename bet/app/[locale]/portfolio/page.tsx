@@ -268,10 +268,11 @@ export default async function PortfolioPage({
         <div className="topbar-inner">
           <a className="brand" href={hubHomeUrl()} aria-label="Kalki Exchange">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="brand-mark" src="/kalki-logo.png" alt="Kalki Exchange" width={34} height={34} />
+            <img className="brand-mark" src="/kalki-logo.png?v=2" alt="Kalki Exchange" width={34} height={34} />
           </a>
           <nav className="nav" aria-label="primary">
             <Link href={lp("/markets")}>{tr("nav.markets")}</Link>
+            <Link href={lp("/events")}>{tr("nav.events")}</Link>
             <Link className="active" href={lp("/portfolio")}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2" y="7" width="20" height="14" rx="2" />

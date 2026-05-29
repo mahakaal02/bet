@@ -763,7 +763,7 @@ export function LoginLanding({
                 `/kalki-mark.png` by Next.js's static handler. */}
             <span className="brand-mark" aria-label="Kalki logo">
               <img
-                src="/kalki-mark.png"
+                src="/kalki-mark.png?v=2"
                 alt=""
                 width={106}
                 height={106}

@@ -383,11 +383,17 @@ const fr: Partial<Dictionary> = {
     candidateCount: "{count} candidat{s}",
     chance: "Probabilité",
     buy: "Acheter",
+    switchOutcome: "Changer de résultat",
     vol: "Vol",
     showAll: "Tout afficher ({count})",
     showLess: "Afficher moins",
     empty: "Aucun candidat dans cet événement pour l'instant.",
     notFound: "Événement introuvable",
+    titleLead: "Parcourez",
+    titleEm: "chaque événement",
+    subtitle: "Marchés à résultats multiples regroupés par événement — choisissez un camp sur n'importe quel candidat.",
+    statEvents: "Événements",
+    statCandidates: "Candidats",
   },
 
   wallet: {
@@ -656,6 +662,11 @@ const fr: Partial<Dictionary> = {
     couldntPost: "Impossible de publier le commentaire.",
     signInPrompt: "Connectez-vous pour rejoindre la discussion.",
     emptyState: "Pas encore de commentaires.",
+    likeButton: "J'aime",
+    replyButton: "Répondre",
+    replyPlaceholder: "Écrire une réponse…",
+    viewReplies: "Voir {count} réponses",
+    hideReplies: "Masquer les réponses",
   },
 
   share: {

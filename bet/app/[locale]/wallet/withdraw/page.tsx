@@ -1,15 +1,14 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
-import { Navbar } from "@/components/Navbar";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import "../wallet-v2.css";
+import { ThemeSwitch } from "../wallet-client";
 import { WithdrawForm } from "@/components/WithdrawForm";
 import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { MIN_WITHDRAW_COINS, WITHDRAW_EMAIL_VERIFY_THRESHOLD_COINS } from "@/lib/coins";
 import { fetchLocalizedPricing, coinValueLabel } from "@/lib/pricing";
+import { hubHomeUrl } from "@/lib/hub";
 import { fmtCoins, timeAgo } from "@/lib/utils";
 import {
   DEFAULT_LOCALE,
@@ -40,10 +39,11 @@ export async function generateMetadata({
 }
 
 /**
- * Withdrawal request page. Two halves: the form (UPI or bank), and the
- * history list (every withdrawal the user has ever filed). The form is a
- * client component so the user-input validation and the cancel buttons
- * stay reactive.
+ * Withdrawal request page — re-skinned onto the Wallet v2 design system
+ * (shared `.wlt` chrome + `.card` family) so it sits in harmony with the
+ * wallet hub it links back to. Two halves: the form (UPI / bank / crypto)
+ * and the history list of every withdrawal the user has filed. The form
+ * is a client island so input validation + cancel buttons stay reactive.
  */
 export default async function WithdrawPage({
   params,
@@ -82,120 +82,219 @@ export default async function WithdrawPage({
 
   if (me?.banned) redirect(lp("/wallet"));
 
+  const balance = wallet?.balance ?? 0;
   // Estimated local-currency value of the balance (1000-pack anchor).
-  const estValue = coinValueLabel(wallet?.balance ?? 0, localized);
+  const estValue = coinValueLabel(balance, localized);
+  const currencyCode = localized?.currency ?? null;
+  const username = me?.username ?? "user";
+  const initial = username.slice(0, 1).toUpperCase();
 
   return (
-    <main className="min-h-screen pb-20">
-      <Navbar />
-      <div className="mx-auto max-w-3xl px-4 py-6">
-        <Link
-          href={lp("/wallet")}
-          className="mb-3 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-200"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {tr("withdraw.backToWallet")}
-        </Link>
-        <h1 className="text-2xl font-black">{tr("withdraw.heading")}</h1>
-        <p className="text-sm text-slate-400">
-          {tr("withdraw.subtext", { amount: fmtCoins(MIN_WITHDRAW_COINS, locale) })}
-        </p>
-        {estValue && (
-          <p className="mt-1 text-sm text-slate-300">
-            {tr("withdraw.estValue", {
-              coins: fmtCoins(wallet?.balance ?? 0, locale),
-              value: estValue,
-            })}
-          </p>
-        )}
-
-        <Card className="mt-4">
-          <CardHeader>
-            <CardTitle>{tr("withdraw.submitRequest")}</CardTitle>
-            <span className="font-mono text-xs text-slate-400">
-              {tr("withdraw.available", {
-                amount: fmtCoins(wallet?.balance ?? 0, locale),
-              })}
-            </span>
-          </CardHeader>
-
-          {!me?.emailVerified && (
-            <p className="mb-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
-              {tr("withdraw.emailThresholdNote", {
-                amount: fmtCoins(WITHDRAW_EMAIL_VERIFY_THRESHOLD_COINS, locale),
-              })}{" "}
-              <Link
-                href={lp("/profile")}
-                className="underline hover:text-amber-100"
-              >
-                {tr("profile.heading")}
-              </Link>
-            </p>
-          )}
-          <WithdrawForm
-            available={wallet?.balance ?? 0}
-            min={MIN_WITHDRAW_COINS}
-          />
-
-          <div className="mt-3 flex items-start gap-2 rounded-md border border-slate-800 bg-slate-950/40 p-2 text-[11px] text-slate-400">
-            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-400" />
-            <span>{tr("withdraw.coinLocked")}</span>
-          </div>
-        </Card>
-
-        <Card className="mt-4">
-          <CardHeader>
-            <CardTitle>{tr("withdraw.yourWithdrawals")}</CardTitle>
-            <span className="text-xs text-slate-500">{history.length}</span>
-          </CardHeader>
-          {history.length === 0 ? (
-            <p className="py-4 text-center text-sm text-slate-500">
-              {tr("withdraw.noWithdrawals")}
-            </p>
-          ) : (
-            <ul className="divide-y divide-slate-800">
-              {history.map((w) => (
-                <li
-                  key={w.id}
-                  className="flex items-center justify-between py-2 text-sm"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono">
-                        {fmtCoins(w.amountCoins, locale)} {tr("wallet.coins")}
-                      </span>
-                      <Badge
-                        tone={
-                          w.status === "PAID"
-                            ? "yes"
-                            : w.status === "REJECTED"
-                              ? "no"
-                              : w.status === "PENDING"
-                                ? "warn"
-                                : w.status === "APPROVED"
-                                  ? "info"
-                                  : "default"
-                        }
-                      >
-                        {w.status}
-                      </Badge>
-                    </div>
-                    <div className="text-[10px] text-slate-500">
-                      {w.payoutMethod} · {timeAgo(w.createdAt, locale)}
-                      {w.decidedAt && ` · ${timeAgo(w.decidedAt, locale)}`}
-                    </div>
-                    {w.decisionNote && (
-                      <div className="text-[11px] italic text-slate-500">
-                        “{w.decisionNote}”
-                      </div>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+    <div className="wlt">
+      <div className="bg-stack" aria-hidden="true">
+        <div className="bg-mesh" />
+        <div className="bg-grid" />
+        <div className="bg-grain" />
       </div>
-    </main>
+
+      {/* ── TOPBAR ── */}
+      <header className="topbar">
+        <div className="topbar-inner">
+          <a className="brand" href={hubHomeUrl()} aria-label="Kalki Exchange">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="brand-mark" src="/kalki-logo.png?v=2" alt="Kalki Exchange" width={34} height={34} />
+          </a>
+
+          <nav className="nav" aria-label="primary">
+            <Link href={lp("/markets")}>{tr("nav.markets")}</Link>
+            <Link href={lp("/events")}>{tr("nav.events")}</Link>
+            <Link href={lp("/portfolio")}>{tr("nav.portfolio")}</Link>
+            <Link href={lp("/watchlist")}>{tr("nav.watchlist")}</Link>
+            <Link className="active" href={lp("/wallet")}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="6" width="20" height="14" rx="3" />
+                <path d="M2 10h20" />
+                <circle cx="17" cy="15" r="1.5" fill="currentColor" />
+              </svg>
+              {tr("nav.wallet")}
+            </Link>
+          </nav>
+
+          <div className="topbar-right">
+            <span className="balance-pill">
+              <span className="lbl">BAL</span> {fmtCoins(balance, locale)}
+            </span>
+            <ThemeSwitch />
+            <Link className="deposit-btn" href={lp("/wallet")}>
+              + {tr("wallet.buyCoins")}
+            </Link>
+            <div className="avatar">{initial}</div>
+          </div>
+        </div>
+      </header>
+
+      {/* ── STATUS STRIP ── */}
+      <div className="status-strip">
+        <div className="status-inner">
+          <span className="live">{tr("wallet.unified").toUpperCase()}</span>
+          {currencyCode && (
+            <>
+              <span className="sep">·</span>
+              <span>{localized?.country} · {currencyCode}</span>
+            </>
+          )}
+          <span className="sep">·</span>
+          <span>{tr("wallet.statusMethods")}</span>
+        </div>
+      </div>
+
+      {/* ── PAGE ── */}
+      <main className="page">
+        <div className="wd-wrap">
+          <div className="page-head" style={{ marginBottom: 18 }}>
+            <div>
+              <Link className="wd-back" href={lp("/wallet")} style={{ marginBottom: 8 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="19" y1="12" x2="5" y2="12" />
+                  <polyline points="12 19 5 12 12 5" />
+                </svg>
+                {tr("withdraw.backToWallet")}
+              </Link>
+              <div className="crumbs">
+                <span>{tr("wallet.crumbAccount")}</span>
+                <span className="sep">/</span>
+                <span className="here">{tr("withdraw.heading")}</span>
+              </div>
+              <h1 className="page-title">
+                <em>{tr("withdraw.heading")}</em>
+              </h1>
+              <p className="page-sub">
+                {tr("withdraw.subtext", { amount: fmtCoins(MIN_WITHDRAW_COINS, locale) })}
+              </p>
+              {estValue && (
+                <p className="wd-est">
+                  {tr("withdraw.estValue", {
+                    coins: fmtCoins(balance, locale),
+                    value: estValue,
+                  })}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="wd-stack">
+            {/* ── SUBMIT REQUEST ── */}
+            <section className="card">
+              <div className="card-head">
+                <div>
+                  <div className="card-eyebrow">{tr("wallet.stepCashout")}</div>
+                  <div className="card-title">{tr("withdraw.submitRequest")}</div>
+                </div>
+                <span className="row-time" style={{ fontSize: 11 }}>
+                  {tr("withdraw.available", { amount: fmtCoins(balance, locale) })}
+                </span>
+              </div>
+
+              {!me?.emailVerified && (
+                <p className="wd-warn">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                  <span>
+                    {tr("withdraw.emailThresholdNote", {
+                      amount: fmtCoins(WITHDRAW_EMAIL_VERIFY_THRESHOLD_COINS, locale),
+                    })}{" "}
+                    <Link href={lp("/profile")}>{tr("profile.heading")}</Link>
+                  </span>
+                </p>
+              )}
+
+              <div className="card-body" style={{ paddingTop: 0 }}>
+                <WithdrawForm available={balance} min={MIN_WITHDRAW_COINS} />
+              </div>
+
+              <div className="withdraw-note wd-secure">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <span>{tr("withdraw.coinLocked")}</span>
+              </div>
+            </section>
+
+            {/* ── HISTORY ── */}
+            <section className="card">
+              <div className="card-head">
+                <div>
+                  <div className="card-eyebrow">{tr("wallet.stepLedger")}</div>
+                  <div className="card-title">{tr("withdraw.yourWithdrawals")}</div>
+                </div>
+                <span className="row-time" style={{ fontSize: 11 }}>
+                  {history.length}
+                </span>
+              </div>
+
+              {history.length === 0 ? (
+                <div className="wd-empty">{tr("withdraw.noWithdrawals")}</div>
+              ) : (
+                <div className="wd-list">
+                  {history.map((w) => (
+                    <div className="wd-item" key={w.id}>
+                      <div style={{ minWidth: 0 }}>
+                        <span className="wd-amt">
+                          {fmtCoins(w.amountCoins, locale)} {tr("wallet.coins")}
+                        </span>
+                        <div className="wd-meta">
+                          {w.payoutMethod} · {timeAgo(w.createdAt, locale)}
+                          {w.decidedAt && ` · ${timeAgo(w.decidedAt, locale)}`}
+                        </div>
+                        {w.decisionNote && (
+                          <div className="wd-quote">“{w.decisionNote}”</div>
+                        )}
+                      </div>
+                      <span className={`wd-status ${statusClass(w.status)}`}>
+                        {w.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        </div>
+      </main>
+
+      <footer className="footer">
+        <div className="footer-inner">
+          <span>{tr("wallet.footerBrand")}</span>
+          <span>
+            {currencyCode
+              ? `${localized?.country} · ${currencyCode}`
+              : tr("wallet.unified")}
+          </span>
+          <span>
+            {tr("wallet.needHelp")}{" "}
+            <Link href={lp("/profile")}>{tr("profile.heading")}</Link>
+          </span>
+        </div>
+      </footer>
+    </div>
   );
+}
+
+function statusClass(status: string): string {
+  switch (status) {
+    case "PAID":
+      return "paid";
+    case "REJECTED":
+      return "rejected";
+    case "PENDING":
+      return "pending";
+    case "APPROVED":
+      return "approved";
+    default:
+      return "";
+  }
 }

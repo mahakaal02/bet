@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
  * This lets the brand render cleanly before a designer has produced the
  * final asset — no broken-image glyph ever appears.
  */
-const LOGO_PATH = "/logo.png";
+const LOGO_PATH = "/logo.png?v=2";
 
 export const BRAND_NAME = "Kalki Exchange";
 

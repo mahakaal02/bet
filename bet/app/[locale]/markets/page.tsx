@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import "./markets-v2.css";
@@ -128,7 +129,6 @@ export default async function MarketsPage({
 
   const [
     markets,
-    featuredRaw,
     wallet,
     me,
     openCount,
@@ -145,17 +145,6 @@ export default async function MarketsPage({
       orderBy,
       take: 60,
     }),
-    showFeatured
-      ? db.market.findFirst({
-          where: { status: "OPEN", groupId: null },
-          orderBy: [{ featured: "desc" }, { trendingScore: "desc" }],
-          include: {
-            pricePoints: { orderBy: { recordedAt: "desc" }, take: 60 },
-            _count: { select: { trades: true } },
-            ...marketTranslationInclude(locale),
-          },
-        })
-      : Promise.resolve(null),
     u
       ? db.wallet.findUnique({ where: { userId: u.id }, select: { balance: true } })
       : Promise.resolve(null),
@@ -194,18 +183,24 @@ export default async function MarketsPage({
     }),
   ]);
 
-  const featured = showFeatured ? featuredRaw : null;
-  const gridMarkets = featured
-    ? markets.filter((m) => m.id !== featured.id)
+  // The hero "floating tiles" surface the top 3 markets of the default
+  // browse view (no search, open, all categories). They're carved out of
+  // the same `markets` list, then excluded from the grid below so nothing
+  // shows twice. Filtered/searched views skip the hero entirely.
+  const heroMarkets = showFeatured ? markets.slice(0, 3) : [];
+  const heroIdSet = new Set(heroMarkets.map((m) => m.id));
+  const gridMarkets = showFeatured
+    ? markets.filter((m) => !heroIdSet.has(m.id))
     : markets;
   const gridIds = gridMarkets.map((m) => m.id);
 
-  // One bounded query for every visible card's recent price series —
-  // grouped + downsampled in JS so the sparklines are real, not faked.
+  // One bounded query for every visible card's recent price series (grid +
+  // hero) — grouped + downsampled in JS so the sparklines are real, not faked.
+  const sparkIds = [...gridIds, ...heroMarkets.map((m) => m.id)];
   const sparkWindow = new Date(Date.now() - 45 * DAY_MS);
-  const sparkRows = gridIds.length
+  const sparkRows = sparkIds.length
     ? await db.pricePoint.findMany({
-        where: { marketId: { in: gridIds }, recordedAt: { gte: sparkWindow } },
+        where: { marketId: { in: sparkIds }, recordedAt: { gte: sparkWindow } },
         select: { marketId: true, yesPrice: true },
         orderBy: { recordedAt: "desc" },
         take: 8000,
@@ -287,7 +282,7 @@ export default async function MarketsPage({
         <div className="topbar-inner">
           <a className="brand" href={hubHomeUrl()} aria-label="Kalki Exchange">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="brand-mark" src="/kalki-logo.png" alt="Kalki Exchange" width={34} height={34} />
+            <img className="brand-mark" src="/kalki-logo.png?v=2" alt="Kalki Exchange" width={34} height={34} />
           </a>
 
           <nav className="nav" aria-label="primary">
@@ -299,6 +294,7 @@ export default async function MarketsPage({
               {tr("nav.markets")}
               {openCount > 0 && <span className="badge">{openCount}</span>}
             </Link>
+            <Link href={lp("/events")}>{tr("nav.events")}</Link>
             <Link href={lp("/portfolio")}>{tr("nav.portfolio")}</Link>
             <Link href={lp("/watchlist")}>{tr("nav.watchlist")}</Link>
             <Link href={lp("/wallet")}>{tr("nav.wallet")}</Link>
@@ -341,153 +337,136 @@ export default async function MarketsPage({
 
       {/* ── PAGE ── */}
       <main className="page">
-        <div className="page-head">
-          <div>
-            <div className="crumbs">
-              <span>{tr("market.crumbTrade")}</span>
-              <span className="sep">/</span>
-              <span className="here">{tr("market.heading")}</span>
-            </div>
-            <h1 className="page-title">
-              {tr("market.titleLead")} <em>{tr("market.titleEm")}</em>
-            </h1>
-            <p className="page-sub">{tr("market.subtitle")}</p>
-          </div>
-          <div className="page-stats">
-            <div className="pstat">
-              <div className="v">{openCount}</div>
-              <div className="l">{tr("market.statOpen")}</div>
-            </div>
-            <div className="pstat">
-              <div className="v cy">{fmtCoins(totalVol, locale)}</div>
-              <div className="l">{tr("market.statVolume")}</div>
-            </div>
-            <div className="pstat">
-              <div className="v" style={{ color: "var(--emerald-300)" }}>
-                {newTodayCount > 0 ? `+${newTodayCount}` : "0"}
+        {/* Intro copy block — shared between the two-column hero (when the
+            floating tiles are shown) and the standalone head (filtered views). */}
+        {(() => {
+          const intro = (
+            <div className="fl-intro">
+              <div className="crumbs">
+                <span>{tr("market.crumbTrade")}</span>
+                <span className="sep">/</span>
+                <span className="here">{tr("market.heading")}</span>
               </div>
-              <div className="l">{tr("market.statNewToday")}</div>
-            </div>
-            <div className="pstat">
-              <div className="v">{resolvedCount}</div>
-              <div className="l">{tr("market.statResolved")}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── FEATURED MARKET ── */}
-        {featured &&
-          (() => {
-            const fp = priceYes({
-              yesShares: featured.yesShares,
-              noShares: featured.noShares,
-            });
-            const series = (featured.pricePoints ?? [])
-              .map((p) => p.yesPrice)
-              .reverse(); // stored newest→oldest, want oldest→newest
-            const chart = buildFeaturedChart(series, fp);
-            const fc = resolveMarketContent(featured, locale);
-            const pctYes = Math.round(fp * 100);
-            const liq = Math.round(featured.yesShares + featured.noShares);
-            const urgent = isUrgent(featured.endsAt);
-            return (
-              <section className="featured">
-                <div className="featured-left">
-                  <div className="featured-tags">
-                    <span className={`cat ${catClass(featured.category)}`}>
-                      {formatCategory(featured.category, locale)}
-                    </span>
-                    <span
-                      className="cat"
-                      style={{
-                        background: "rgba(var(--logo-a-rgb),0.10)",
-                        color: "var(--cyan-200)",
-                        borderColor: "rgba(var(--logo-a-rgb),0.32)",
-                      }}
-                    >
-                      ★ {tr("market.featured")}
-                    </span>
-                    <span className={`ends ${urgent ? "urgent" : ""}`}>
-                      <ClockIcon />
-                      {tr("market.endsDate", { date: endsLabel(featured.endsAt, locale) })}
-                    </span>
-                  </div>
-                  <h2 className="featured-q">{fc.title}</h2>
-                  <div className="featured-meta">
-                    <span>
-                      {tr("market.volume")} <strong>{fmtCoins(featured.volumeCoins, locale)}</strong>
-                    </span>
-                    <span>
-                      {tr("market.liquidity")} <strong>{fmtCoins(liq, locale)}</strong>
-                    </span>
-                    <span>
-                      {tr("market.trades")} <strong>{featured._count.trades}</strong>
-                    </span>
-                    {chart.changePct !== null && (
-                      <span style={{ color: chart.up ? "var(--emerald-300)" : "var(--rose-300)" }}>
-                        {chart.up ? "▲" : "▼"} {chart.up ? "+" : "−"}
-                        {Math.abs(chart.changePct)}%
-                      </span>
-                    )}
-                  </div>
-                  <div className="featured-chart">
-                    <svg viewBox="0 0 600 120" preserveAspectRatio="none">
-                      <defs>
-                        <linearGradient id="fcGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={chart.up ? "rgba(16,185,129,0.45)" : "rgba(244,63,94,0.45)"} />
-                          <stop offset="100%" stopColor={chart.up ? "rgba(16,185,129,0)" : "rgba(244,63,94,0)"} />
-                        </linearGradient>
-                      </defs>
-                      <line x1="0" y1="30" x2="600" y2="30" stroke="rgba(255,255,255,0.05)" strokeDasharray="2 4" />
-                      <line x1="0" y1="60" x2="600" y2="60" stroke="rgba(255,255,255,0.05)" strokeDasharray="2 4" />
-                      <line x1="0" y1="90" x2="600" y2="90" stroke="rgba(255,255,255,0.05)" strokeDasharray="2 4" />
-                      <path d={chart.area} fill="url(#fcGrad)" />
-                      <path d={chart.line} fill="none" stroke={chart.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-                      <circle cx={chart.lastX} cy={chart.lastY} r="3.5" fill={chart.color} />
-                      <circle cx={chart.lastX} cy={chart.lastY} r="7" fill="none" stroke={chart.color} strokeWidth="1" opacity="0.4" />
-                      <text x="6" y="14" fill="rgba(245,247,255,0.34)" fontSize="9" fontFamily="JetBrains Mono">95</text>
-                      <text x="6" y="64" fill="rgba(245,247,255,0.34)" fontSize="9" fontFamily="JetBrains Mono">50</text>
-                      <text x="6" y="114" fill="rgba(245,247,255,0.34)" fontSize="9" fontFamily="JetBrains Mono">0</text>
-                    </svg>
-                  </div>
+              <h1 className="page-title">
+                {tr("market.titleLead")} <em>{tr("market.titleEm")}</em>
+              </h1>
+              <p className="page-sub">{tr("market.subtitle")}</p>
+              <div className="page-stats">
+                <div className="pstat">
+                  <div className="v">{openCount}</div>
+                  <div className="l">{tr("market.statOpen")}</div>
                 </div>
-
-                <div className="featured-right">
-                  <div className="featured-yn">
-                    <Link className="yn-row yes" href={lp(`/markets/${featured.slug}`)}>
-                      <span className="yn-tag yes">{tr("market.yes")}</span>
-                      <div className="yn-meta">
-                        <div className="lbl">{tr("market.paysIfYes")}</div>
-                        <div className="pay">{tr("market.payoutLine", { mult: payoutMult(fp) })}</div>
-                      </div>
-                      <div className="yn-price">{fmtPrice(fp, 2, locale)}</div>
-                    </Link>
-                    <Link className="yn-row no" href={lp(`/markets/${featured.slug}`)}>
-                      <span className="yn-tag no">{tr("market.no")}</span>
-                      <div className="yn-meta">
-                        <div className="lbl">{tr("market.paysIfNo")}</div>
-                        <div className="pay">{tr("market.payoutLine", { mult: payoutMult(1 - fp) })}</div>
-                      </div>
-                      <div className="yn-price">{fmtPrice(1 - fp, 2, locale)}</div>
-                    </Link>
-                  </div>
-
-                  <div className="probrow">
-                    <span className="y">{tr("market.pctYes", { pct: pctYes })}</span>
-                    <span className="n">{tr("market.pctNo", { pct: 100 - pctYes })}</span>
-                  </div>
-                  <div className="probbar">
-                    <div className="y" style={{ width: `${pctYes}%` }} />
-                    <div className="n" style={{ width: `${100 - pctYes}%` }} />
-                  </div>
-
-                  <Link className="deposit-btn" href={lp(`/markets/${featured.slug}`)} style={{ marginTop: "6px", textAlign: "center" }}>
-                    {tr("market.openMarket")} →
-                  </Link>
+                <div className="pstat">
+                  <div className="v cy">{fmtCoins(totalVol, locale)}</div>
+                  <div className="l">{tr("market.statVolume")}</div>
                 </div>
-              </section>
-            );
-          })()}
+                <div className="pstat">
+                  <div className="v" style={{ color: "var(--emerald-300)" }}>
+                    {newTodayCount > 0 ? `+${newTodayCount}` : "0"}
+                  </div>
+                  <div className="l">{tr("market.statNewToday")}</div>
+                </div>
+                <div className="pstat">
+                  <div className="v">{resolvedCount}</div>
+                  <div className="l">{tr("market.statResolved")}</div>
+                </div>
+              </div>
+            </div>
+          );
+
+          // Filtered / searched views: no floating tiles — keep the plain head.
+          if (heroMarkets.length === 0) {
+            return <div className="page-head">{intro}</div>;
+          }
+
+          // Default browse view: two-column hero — intro LEFT, tiles RIGHT.
+          return (
+            <section className="fl-hero" aria-label={tr("market.heading")}>
+              {intro}
+              <div className="fl-field">
+                {heroMarkets.map((m, idx) => {
+                const p = priceYes({ yesShares: m.yesShares, noShares: m.noShares });
+                const localized = resolveMarketContent(m, locale);
+                const series = sparkByMarket.get(m.id) ?? [];
+                const spark = buildFloatSpark(series, p);
+                const pctYes = Math.round(p * 100);
+                const liq = Math.round(m.yesShares + m.noShares);
+                const pos = FLOAT_POS[idx] ?? FLOAT_POS[0];
+                const gradId = `flG${idx}`;
+                return (
+                  <div
+                    key={m.id}
+                    className={`fl-wrap f${idx + 1}`}
+                    style={
+                      {
+                        top: pos.top,
+                        left: pos.left,
+                        zIndex: pos.z,
+                        "--s": pos.scale,
+                      } as CSSProperties
+                    }
+                  >
+                    <Link className="fl-card" href={lp(`/markets/${m.slug}`)}>
+                      <div className="fl-head">
+                        <span className={`fl-cat cat ${catClass(m.category)}`}>
+                          {formatCategory(m.category, locale)}
+                        </span>
+                        <span className={`ends ${isUrgent(m.endsAt) ? "urgent" : ""}`}>
+                          <ClockIcon />
+                          {endsLabel(m.endsAt, locale)}
+                        </span>
+                      </div>
+                      <div className="fl-q">{localized.title}</div>
+                      <div className="fl-prob">
+                        <span className="v">
+                          {pctYes}
+                          <i>%</i>
+                        </span>
+                        <span className="lab">{tr("market.probability")}</span>
+                        {spark.changePct !== null && (
+                          <span className={`d ${spark.up ? "up" : "down"}`}>
+                            {spark.up ? "▲" : "▼"} {Math.abs(spark.changePct)}%
+                          </span>
+                        )}
+                      </div>
+                      <svg className="fl-spark" viewBox="0 0 300 56" preserveAspectRatio="none">
+                        <defs>
+                          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={spark.up ? "rgba(16,185,129,0.32)" : "rgba(244,63,94,0.32)"} />
+                            <stop offset="100%" stopColor={spark.up ? "rgba(16,185,129,0)" : "rgba(244,63,94,0)"} />
+                          </linearGradient>
+                        </defs>
+                        <path d={spark.area} fill={`url(#${gradId})`} />
+                        <path d={spark.line} fill="none" stroke={spark.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+                      </svg>
+                      <div className="fl-foot">
+                        <div className="kv">
+                          <span className="k">{tr("market.volume")}</span>
+                          <span className="val">{fmtCoins(m.volumeCoins, locale)}</span>
+                        </div>
+                        <div className="kv">
+                          <span className="k">{tr("market.liquidity")}</span>
+                          <span className="val">{fmtCoins(liq, locale)}</span>
+                        </div>
+                      </div>
+                      <div className="fl-bet">
+                        <span className="fl-yn yes">
+                          <span className="t">{tr("market.yes")}</span>
+                          <span className="px">{fmtPrice(p, 2, locale)}</span>
+                        </span>
+                        <span className="fl-yn no">
+                          <span className="t">{tr("market.no")}</span>
+                          <span className="px">{fmtPrice(1 - p, 2, locale)}</span>
+                        </span>
+                      </div>
+                    </Link>
+                  </div>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })()}
 
         {/* ── FILTERS ── */}
         <div className="filterbar">
@@ -658,7 +637,7 @@ export default async function MarketsPage({
             <div className="load-more">
               <span className="n">
                 {tr("market.showingCount", {
-                  shown: Math.min(filteredCount, gridMarkets.length + (featured ? 1 : 0)),
+                  shown: Math.min(filteredCount, gridMarkets.length + heroMarkets.length),
                   total: filteredCount,
                 })}
               </span>
@@ -724,10 +703,17 @@ function endsLabel(endsAt: Date, locale: Locale): string {
   }).format(new Date(endsAt));
 }
 
-function payoutMult(price: number): string {
-  if (price <= 0) return "—";
-  return (1 / price).toFixed(2);
-}
+/**
+ * Depth-layered positions for the floating hero tiles (KALKI landing
+ * style). top/left are % of the stage; `scale` is baked into the bob
+ * keyframe via the `--s` CSS var so the float animation doesn't clobber
+ * it; `z` controls stacking so the larger/front card reads as nearest.
+ */
+const FLOAT_POS: { top: string; left: string; scale: number; z: number }[] = [
+  { top: "2%", left: "30%", scale: 1, z: 3 },
+  { top: "30%", left: "2%", scale: 0.88, z: 2 },
+  { top: "52%", left: "56%", scale: 0.84, z: 1 },
+];
 
 function sortName(sort: string, tr: (k: string) => string): string {
   return (
@@ -775,24 +761,22 @@ function buildSpark(
   };
 }
 
-/** Featured hero chart (600×120 viewBox) from a YES-price series (0..1). */
-function buildFeaturedChart(
+/** Floating-tile sparkline (300×56 viewBox) from a YES-price series (0..1). */
+function buildFloatSpark(
   raw: number[],
   fallback: number,
 ): {
   line: string;
   area: string;
-  lastX: number;
-  lastY: number;
   color: string;
   up: boolean;
   changePct: number | null;
 } {
-  let values = raw.length ? downsample(raw, 32) : [fallback, fallback];
+  let values = raw.length ? downsample(raw, 28) : [fallback, fallback];
   if (values.length === 1) values = [values[0], values[0]];
-  const w = 600;
-  const top = 10;
-  const bottom = 110;
+  const w = 300;
+  const top = 6;
+  const bottom = 50;
   const n = values.length;
   const coords = values.map((v, i) => {
     const x = (i / (n - 1)) * w;
@@ -801,18 +785,13 @@ function buildFeaturedChart(
   });
   const line =
     "M" + coords.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(" L");
-  const [lastX, lastY] = coords[coords.length - 1];
-  const area = `${line} L${w} 120 L0 120 Z`;
+  const area = `${line} L${w} 56 L0 56 Z`;
   const up = values[n - 1] >= values[0];
   const changePct =
-    raw.length >= 2
-      ? Math.round((values[n - 1] - values[0]) * 100)
-      : null;
+    raw.length >= 2 ? Math.round((values[n - 1] - values[0]) * 100) : null;
   return {
     line,
     area,
-    lastX,
-    lastY,
     color: up ? "#10B981" : "#F43F5E",
     up,
     changePct,

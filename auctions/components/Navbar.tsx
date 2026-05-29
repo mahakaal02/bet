@@ -146,7 +146,7 @@ export async function Navbar() {
         <div className="flex items-center gap-3">
           <Link href={lp("/")} className="flex items-center gap-2">
             <Image
-              src="/kalki-logo.png"
+              src="/kalki-logo.png?v=2"
               alt="Kalki"
               width={32}
               height={32}

@@ -1,19 +1,21 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { Navbar } from "@/components/Navbar";
-import { Card } from "@/components/ui/Card";
+import "../markets/markets-v2.css";
+import {
+  ExchangeTopbar,
+  ExchangeFooter,
+  ExchangeBackdrop,
+} from "@/components/ExchangeChrome";
 import { MarkAllReadButton } from "@/components/MarkAllReadButton";
 import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { timeAgo } from "@/lib/utils";
-import { Bell } from "lucide-react";
 import {
   DEFAULT_LOCALE,
   buildAuthRedirect,
   buildLocalizedMetadata,
   isLocale,
-  localizedPath,
   t,
   type Locale,
 } from "@/lib/i18n";
@@ -36,6 +38,11 @@ export async function generateMetadata({
   });
 }
 
+/**
+ * Notifications inbox — re-skinned onto the Markets v2 system (shared
+ * chrome + panel list) so it matches the rest of the exchange. The
+ * MarkAllReadButton client island is preserved.
+ */
 export default async function NotificationsPage({
   params,
   searchParams,
@@ -65,56 +72,64 @@ export default async function NotificationsPage({
   ]);
 
   return (
-    <main className="min-h-screen pb-20">
-      <Navbar />
-      <div className="mx-auto max-w-3xl px-4 py-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h1 className="flex items-center gap-2 text-2xl font-black">
-            <Bell className="h-6 w-6 text-cyan-400" />
-            {tr("notifications.heading")}
-          </h1>
-          {unread > 0 && <MarkAllReadButton />}
-        </div>
-        <p className="mb-4 text-sm text-slate-400">
-          {unread > 0
-            ? tr("notifications.unreadCount", { count: unread })
-            : tr("notifications.allRead")}
-        </p>
+    <div className="mkt">
+      <ExchangeBackdrop />
+      <ExchangeTopbar locale={locale} />
 
-        <Card>
-          {items.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-500">
-              {tr("notifications.emptyState")}
+      <main className="page content">
+        <div className="page-head">
+          <div>
+            <div className="crumbs">
+              <span>{tr("market.crumbTrade")}</span>
+              <span className="sep">/</span>
+              <span className="here">{tr("notifications.heading")}</span>
+            </div>
+            <h1 className="page-title">
+              <em>{tr("notifications.heading")}</em>
+            </h1>
+            <p className="page-sub">
+              {unread > 0
+                ? tr("notifications.unreadCount", { count: unread })
+                : tr("notifications.allRead")}
             </p>
-          ) : (
-            <ul className="divide-y divide-slate-800">
-              {items.map((n) => (
-                <li key={n.id} className="py-3">
-                  <Link
-                    href={n.href ?? "#"}
-                    className="block hover:bg-slate-900/40"
-                  >
-                    <div className="flex items-start gap-3">
-                      {!n.readAt && (
-                        <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-cyan-400" />
-                      )}
-                      <div className="flex-1">
-                        <div className="font-semibold text-slate-100">
-                          {n.title}
-                        </div>
-                        <p className="mt-0.5 text-sm text-slate-400">{n.body}</p>
-                        <div className="mt-1 text-[10px] uppercase tracking-wider text-slate-500">
-                          {timeAgo(n.createdAt, locale)}
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+          </div>
+          {unread > 0 && (
+            <div className="page-stats">
+              <MarkAllReadButton />
+            </div>
           )}
-        </Card>
-      </div>
-    </main>
+        </div>
+
+        <div className="narrow">
+          <section className="panel">
+            {items.length === 0 ? (
+              <p
+                className="panel-sub"
+                style={{ textAlign: "center", padding: "32px 0" }}
+              >
+                {tr("notifications.emptyState")}
+              </p>
+            ) : (
+              <ul className="list">
+                {items.map((n) => (
+                  <li key={n.id}>
+                    <Link className="list-row" href={n.href ?? "#"}>
+                      {!n.readAt && <span className="dot-unread" />}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="list-title">{n.title}</div>
+                        <p className="list-body">{n.body}</p>
+                        <div className="list-time">{timeAgo(n.createdAt, locale)}</div>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      </main>
+
+      <ExchangeFooter locale={locale} />
+    </div>
   );
 }

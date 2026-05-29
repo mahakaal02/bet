@@ -260,6 +260,7 @@ const en: Dictionary = {
     no: "NO",
     volume: "Volume",
     liquidity: "Liquidity",
+    probability: "Probability",
     midPrice: "Mid price",
     ends: "Ends",
     endsDate: "Ends {date}",
@@ -415,11 +416,17 @@ const en: Dictionary = {
     candidateCount: "{count} candidate{s}",
     chance: "Chance",
     buy: "Buy",
+    switchOutcome: "Switch outcome",
     vol: "Vol",
     showAll: "Show all {count}",
     showLess: "Show less",
     empty: "No candidates in this event yet.",
     notFound: "Event not found",
+    titleLead: "Browse",
+    titleEm: "every event",
+    subtitle: "Multi-outcome markets grouped by event — pick a side on any candidate.",
+    statEvents: "Events",
+    statCandidates: "Candidates",
   },
 
   wallet: {
@@ -692,6 +699,11 @@ const en: Dictionary = {
     couldntPost: "Couldn't post comment.",
     signInPrompt: "Sign in to join the discussion.",
     emptyState: "No comments yet.",
+    likeButton: "Like",
+    replyButton: "Reply",
+    replyPlaceholder: "Write a reply…",
+    viewReplies: "View {count} replies",
+    hideReplies: "Hide replies",
   },
 
   share: {

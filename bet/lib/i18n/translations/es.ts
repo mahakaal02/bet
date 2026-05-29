@@ -385,11 +385,17 @@ const es: Partial<Dictionary> = {
     candidateCount: "{count} candidato{s}",
     chance: "Probabilidad",
     buy: "Comprar",
+    switchOutcome: "Cambiar resultado",
     vol: "Vol",
     showAll: "Ver todos ({count})",
     showLess: "Ver menos",
     empty: "Aún no hay candidatos en este evento.",
     notFound: "Evento no encontrado",
+    titleLead: "Explora",
+    titleEm: "cada evento",
+    subtitle: "Mercados de múltiples resultados agrupados por evento — elige un lado en cualquier candidato.",
+    statEvents: "Eventos",
+    statCandidates: "Candidatos",
   },
 
   wallet: {
@@ -658,6 +664,11 @@ const es: Partial<Dictionary> = {
     couldntPost: "No se pudo publicar el comentario.",
     signInPrompt: "Inicia sesión para unirte a la discusión.",
     emptyState: "Aún no hay comentarios.",
+    likeButton: "Me gusta",
+    replyButton: "Responder",
+    replyPlaceholder: "Escribe una respuesta…",
+    viewReplies: "Ver {count} respuestas",
+    hideReplies: "Ocultar respuestas",
   },
 
   share: {
