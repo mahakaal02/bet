@@ -5,6 +5,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { localeCookieString } from "@/lib/locale-constants";
 
 /**
+ * Feature flag — the "Community wins" ticker (the rolling feed of who
+ * cashed out how much). Disabled for now; flip to `true` to bring it
+ * back. The data builders and CSS are deliberately left in place so
+ * re-enabling is a one-line change.
+ */
+const SHOW_COMMUNITY_TICKER = false;
+
+/**
  * Locale dictionaries for the Kalki hub. Mirrors the shape used by
  * `app/login/locale-data.ts` so a future consolidation can union the
  * two — kept separate for now because the hub needs different sample
@@ -1076,30 +1084,32 @@ export function HubClient({
             </div>
           </div>
 
-          <div className="panel">
-            <div className="panel-head">
-              <div className="panel-title">
-                <span className="dot-pulse" />
-                <span>{tr("community_title")}</span>
+          {SHOW_COMMUNITY_TICKER && (
+            <div className="panel">
+              <div className="panel-head">
+                <div className="panel-title">
+                  <span className="dot-pulse" />
+                  <span>{tr("community_title")}</span>
+                </div>
+                <span className="panel-link">{tr("community_meta")}</span>
               </div>
-              <span className="panel-link">{tr("community_meta")}</span>
-            </div>
-            <div className="ticker" aria-label="Community wins">
-              {/* Duplicate the list so the vertical scroll animation can
-                  loop seamlessly — the keyframes translate by exactly -50%. */}
-              <div className="ticker-track-v">
-                {[...tickerItems, ...tickerItems].map((it, i) => (
-                  <div className="ticker-item" key={i}>
-                    <div className="av">{it.flag}</div>
-                    <div className="desc">
-                      <b>{it.name}</b> {tr("com_won")} <span className="game">· {it.game}</span>
+              <div className="ticker" aria-label="Community wins">
+                {/* Duplicate the list so the vertical scroll animation can
+                    loop seamlessly — the keyframes translate by exactly -50%. */}
+                <div className="ticker-track-v">
+                  {[...tickerItems, ...tickerItems].map((it, i) => (
+                    <div className="ticker-item" key={i}>
+                      <div className="av">{it.flag}</div>
+                      <div className="desc">
+                        <b>{it.name}</b> {tr("com_won")} <span className="game">· {it.game}</span>
+                      </div>
+                      <div className="amt">{it.amt}</div>
                     </div>
-                    <div className="amt">{it.amt}</div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </section>
 
         <p className="footer">{tr("footer_legal")}</p>
