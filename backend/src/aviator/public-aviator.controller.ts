@@ -1,6 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
-import { AviatorService } from './aviator.service';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 
 /**
  * Anonymous-readable aviator stats — endpoints that don't require a
@@ -11,51 +10,67 @@ import { AviatorService } from './aviator.service';
  * route" without splitting the class.
  *
  * Anything served here MUST be safe to expose to a logged-out
- * crawler / bot / casual visitor:
- *   - No personally identifying data.
- *   - No active-bet positions.
- *   - No seed material that hasn't been published yet (post-crash
- *     `serverSeed` reveal is fine; pre-crash reveal would break the
- *     fairness contract).
+ * crawler / bot / casual visitor: no PII, no active-bet positions,
+ * no unpublished seed material.
  *
- * Routes are throttled so a single client can't hammer the DB with
- * "last crash" polls and amplify load on the read replica.
+ * Routes are throttled so a single client can't hammer the endpoint.
  */
 @Controller('aviator/public')
 export class PublicAviatorController {
-  constructor(private readonly aviator: AviatorService) {}
+  /**
+   * Teaser multiplier range. The marketing landing page is
+   * deliberately DE-LINKED from the live aviator engine — it shows a
+   * self-contained stream of plausible-looking crash multipliers
+   * rather than real round outcomes.
+   *
+   * The generator lives here (server-side) on purpose: the
+   * distribution must not ship in the client bundle, so someone who
+   * downloads the web source can't reconstruct how the teaser numbers
+   * are produced. The client only ever receives a finished value.
+   */
+  private static readonly MIN_MULTIPLIER = 5;
+  private static readonly MAX_MULTIPLIER = 68.67;
 
   /**
-   * GET /aviator/public/last-crash
+   * Draw a random teaser multiplier in [MIN, MAX].
    *
-   * Returns the most recently CRASHED round's multiplier and crash
-   * timestamp. Drives the "Last crash" stat tile on the unauthed
-   * auctions landing page — gives visitors a real, live data point
-   * instead of a fake one, which is one of the strongest social-
-   * proof signals on the page.
+   * Log-uniform with a cubic low-bias: most rounds land modestly
+   * above the 5x floor (reads like a real crash game) while the tail
+   * still occasionally reaches the 68.67x ceiling. Returned with two
+   * decimal places to match the on-the-wire shape used elsewhere.
+   */
+  private randomTeaserMultiplier(): number {
+    const min = PublicAviatorController.MIN_MULTIPLIER;
+    const max = PublicAviatorController.MAX_MULTIPLIER;
+    const biased = Math.pow(Math.random(), 3);
+    const value = min * Math.pow(max / min, biased);
+    return Math.round(value * 100) / 100;
+  }
+
+  /**
+   * GET /aviator/public/teaser-multiplier
+   *
+   * Returns a freshly generated random multiplier for the landing
+   * page's aviator widget. Not tied to any real round — each request
+   * is an independent draw.
    *
    * Response shape:
-   *   { multiplier: "8.42", at: "2026-05-26T19:14:03.221Z" }
+   *   { multiplier: "1284.55" }
    *
-   * `multiplier` is a string (matches the rest of the aviator API —
-   * `crashMultiplier` is `Decimal` in Prisma and we serialise as a
-   * string to avoid float precision loss for 64-bit clients).
-   *
-   * Empty fallback `{ multiplier: null, at: null }` lets the client
-   * know there's no published round yet (e.g. fresh DB / pre-launch)
-   * so it can render the local placeholder without retrying forever.
+   * `multiplier` is a stringified decimal (matches the rest of the
+   * aviator API, which serialises Prisma `Decimal` as a string to
+   * avoid float precision loss on 64-bit clients).
    */
-  @Throttle({ default: { limit: 30, ttl: 60_000 } })
-  @Get('last-crash')
-  async lastCrash(): Promise<{
-    multiplier: string | null;
-    at: string | null;
-  }> {
-    const [latest] = await this.aviator.recentRounds(1);
-    if (!latest) return { multiplier: null, at: null };
-    return {
-      multiplier: latest.crashMultiplier,
-      at: latest.crashedAt?.toISOString() ?? null,
-    };
+  // Cheap, DB-free, public value. Keep a sane per-minute cap via the
+  // `default` throttler but exempt it from the aggressive `bid`
+  // limiter (5/10s) — the landing page prefetches one value per round
+  // and the Next.js proxy funnels every visitor through a single
+  // server IP, so the short-window limiter would otherwise throttle
+  // legitimate traffic and force the client onto its fallback.
+  @Throttle({ default: { limit: 300, ttl: 60_000 } })
+  @SkipThrottle({ bid: true })
+  @Get('teaser-multiplier')
+  teaserMultiplier(): { multiplier: string } {
+    return { multiplier: this.randomTeaserMultiplier().toFixed(2) };
   }
 }

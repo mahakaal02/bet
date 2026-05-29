@@ -82,6 +82,21 @@ const DEMO_USERS: Array<{ email: string; label: string; kind: "player" | "admin"
 
 const rand = (a: number, b: number) => Math.random() * (b - a) + a;
 
+/**
+ * Feature flag — the "Recent winners" ticker (the scrolling feed of
+ * who just won how much). Disabled for now; flip to `true` to bring
+ * it back. The `tickerItems` builder and CSS are left intact so
+ * re-enabling is a one-line change.
+ */
+const SHOW_WINNER_TICKER = false;
+
+/**
+ * Feature flag — the "just cashed out" toast popups (the cards that
+ * slide in bottom-right every ~8s). Disabled for now; flip to `true`
+ * to bring them back. The generator effect and CSS are left intact.
+ */
+const SHOW_WINNER_TOAST = false;
+
 function parseSample(s: string): number {
   // Strip everything but digits — keep magnitude regardless of the
   // sample's local digit grouping convention.
@@ -198,57 +213,24 @@ export function LoginLanding({
   }, []);
 
   /* ============================================================
-     LAST CRASH — wired to the aviator backend
+     AVIATOR TEASER MULTIPLIER — de-linked from the live engine
      ------------------------------------------------------------
-     The "Last crash" stat tile in the hero displays the most
-     recent CRASHED round's multiplier. Sourced from the public
-     endpoint at `/api/aviator/last-crash` (Next.js route handler
-     proxying to `${BACKEND}/aviator/public/last-crash`) so the
-     landing page — which is unauthenticated — can read it without
-     a session.
+     The hero aviator widget is NOT connected to real round data.
+     Each crash value is drawn server-side from
+     `/api/aviator/teaser-multiplier` (proxying the backend's
+     `/aviator/public/teaser-multiplier`). The generation logic —
+     range [5x, 68.67x] and its distribution — lives only on the
+     backend, so it never ships in the client bundle: someone who
+     downloads the web source sees a `fetch`, not an algorithm.
 
-     Polling cadence: 15s. Aviator rounds last ~5-12s between
-     crashes; 15s is the longest interval that still feels live
-     while keeping the request rate cheap (~4/min/visitor) and
-     well under the server-side throttle (30/min).
-
-     Initial state is `null` rather than a static fallback so the
-     UI can render an explicit em-dash when no published round
-     exists (fresh DB, pre-launch, or backend down) — accurate
-     placeholder beats a hard-coded number that pretends to be
-     live data.
+     `teaserMult` holds the value of the most recent on-screen
+     crash and feeds the "Last crash" stat tile. It starts `null`
+     so the tile shows an em-dash until the first round busts. The
+     per-round crash target is prefetched into `nextCrashRef` by the
+     animation loop below.
      ============================================================ */
-  const [lastCrashBackend, setLastCrashBackend] = useState<number | null>(
-    null,
-  );
-  useEffect(() => {
-    let cancelled = false;
-    async function fetchOnce() {
-      try {
-        const res = await fetch("/api/aviator/last-crash", {
-          cache: "no-store",
-        });
-        if (!res.ok) return;
-        const body = (await res.json()) as { multiplier: string | null };
-        if (cancelled) return;
-        if (body.multiplier === null) {
-          setLastCrashBackend(null);
-        } else {
-          const n = Number(body.multiplier);
-          if (Number.isFinite(n)) setLastCrashBackend(n);
-        }
-      } catch {
-        // Network down / backend hiccup — leave the last good value
-        // in place. The next poll cycle will retry.
-      }
-    }
-    fetchOnce();
-    const id = window.setInterval(fetchOnce, 15_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, []);
+  const [teaserMult, setTeaserMult] = useState<number | null>(null);
+  const nextCrashRef = useRef<number | null>(null);
 
   /* ============================================================
      CRASH CHART — full state machine (climb → bust → reset)
@@ -270,15 +252,6 @@ export function LoginLanding({
   const fillRedId = useId();
   const glowId = useId();
 
-  // Ref-wrapped lastCrashBackend so the animation loop can read the
-  // freshest value at each new round-start without re-mounting the
-  // raf loop (which would visibly stutter the chart). The effect
-  // below keeps the ref in sync with state.
-  const lastCrashBackendRef = useRef<number | null>(null);
-  useEffect(() => {
-    lastCrashBackendRef.current = lastCrashBackend;
-  }, [lastCrashBackend]);
-
   useEffect(() => {
     let raf = 0;
     let mult = 1.0;
@@ -287,19 +260,37 @@ export function LoginLanding({
     let startedAt = 0;
     let history: { t: number; m: number }[] = [];
 
+    // Prefetch the next round's crash value from the backend teaser
+    // endpoint. Fire-and-forget: the result lands in `nextCrashRef`
+    // and is consumed by the following `startRound`. No generation
+    // happens here — the client only ever receives a finished number.
+    async function primeNextCrash() {
+      try {
+        const res = await fetch("/api/aviator/teaser-multiplier", {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const body = (await res.json()) as { multiplier: string | null };
+        const n = Number(body.multiplier);
+        if (Number.isFinite(n) && n > 1) nextCrashRef.current = n;
+      } catch {
+        // Backend down — leave the last prefetched value (or the
+        // fallback floor) in place; the next round retries.
+      }
+    }
+
     function startRound() {
       mult = 1.0;
       busted = false;
-      // The animated sample now lands at the SAME value as the
-      // "Last crash" stat tile above the chart — so the two numbers
-      // a user sees can't disagree. When the backend hasn't published
-      // a round yet (fresh DB / cold backend), fall back to the
-      // original random distribution so the chart still animates.
-      const backend = lastCrashBackendRef.current;
+      // Crash target comes from the backend-prefetched teaser value.
+      // If none has arrived yet (first round / backend down) fall back
+      // to the 5x floor — a single benign constant, not a generator,
+      // so the source still reveals nothing about the distribution.
+      const next = nextCrashRef.current;
       crashAt =
-        backend !== null && Number.isFinite(backend) && backend >= 1.01
-          ? backend
-          : Math.max(1.2, Math.pow(rand(0, 1), 1.7) * 30 + 1.2);
+        next !== null && Number.isFinite(next) && next >= 5 ? next : 5;
+      // Kick off the fetch for the round AFTER this one.
+      void primeNextCrash();
       startedAt = performance.now();
       history = [{ t: 0, m: 1.0 }];
       setCrashBusted(false);
@@ -322,12 +313,10 @@ export function LoginLanding({
     function bust() {
       busted = true;
       setCrashBusted(true);
-      // NOTE: `lastCrash` (the stat tile in the hero stat row) is NOT
-      // updated here anymore — it now reflects REAL aviator data from
-      // the backend (see the polling effect below). The hero crash
-      // chart's local simulation is purely a visual animation; using
-      // its busts to pretend "this was the last real crash" would
-      // contradict the actual data on the same page.
+      // The "Last crash" stat tile reflects the value this round just
+      // busted at — which is the backend-supplied teaser value, so the
+      // two on-screen numbers stay consistent.
+      setTeaserMult(mult);
       setCrashDelta(`✕ ${mult.toFixed(2)}x`);
       if (crashLineRef.current) {
         crashLineRef.current.setAttribute("stroke", "#FF4D6D");
@@ -374,6 +363,8 @@ export function LoginLanding({
         return;
       }
       const t = (performance.now() - startedAt) / 1000;
+      // Exponential climb: the teaser ceiling (68.67x) is reached in
+      // ~16s and the 5x floor in ~6s, giving believable round lengths.
       mult = Math.pow(1.07, t * 4);
       if (mult >= crashAt) {
         mult = crashAt;
@@ -391,6 +382,9 @@ export function LoginLanding({
       raf = requestAnimationFrame(tick);
     }
 
+    // Prime the first round's value, then start the loop. The very
+    // first round may use the 5x fallback if this hasn't resolved yet.
+    void primeNextCrash();
     startRound();
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
@@ -445,6 +439,7 @@ export function LoginLanding({
   const toastCounterRef = useRef(0);
 
   useEffect(() => {
+    if (!SHOW_WINNER_TOAST) return;
     let alive = true;
     function showOne() {
       if (!alive) return;
@@ -876,16 +871,14 @@ export function LoginLanding({
               <div className="stat">
                 <div className="stat-label">{t("stat_last_crash")}</div>
                 <div className="stat-value gold">
-                  {/* Real value from /api/aviator/last-crash. While the
-                      first poll is in flight (or backend is empty /
-                      down) we render an em-dash rather than a fake
-                      static "18.24" — accurate placeholder beats
-                      believable-looking lies. */}
-                  {lastCrashBackend === null ? (
+                  {/* Value of the most recent on-screen crash (the
+                      backend-supplied teaser multiplier). Renders an
+                      em-dash until the first round busts. */}
+                  {teaserMult === null ? (
                     "—"
                   ) : (
                     <>
-                      {lastCrashBackend.toFixed(2)}
+                      {teaserMult.toFixed(2)}
                       <span style={{ fontSize: 14, opacity: 0.7 }}>x</span>
                     </>
                   )}
@@ -1222,21 +1215,23 @@ export function LoginLanding({
         {/* ─────────── BELOW HERO ─────────── */}
         <section className="below">
           {/* WINNER TICKER */}
-          <div className="ticker" aria-label="Recent winners">
-            <div className="ticker-track">
-              {[...tickerItems, ...tickerItems].map((it, i) => (
-                <div className="ticker-item" key={`tk-${i}`}>
-                  <span className="game">{it.game}</span>
-                  <span className="who">{it.who}</span>
-                  <span>{t("ticker_just_won")}</span>
-                  <span className="amt">{it.amt}</span>
-                  <span className="time">
-                    · {it.ago} {t("ticker_ago")}
-                  </span>
-                </div>
-              ))}
+          {SHOW_WINNER_TICKER && (
+            <div className="ticker" aria-label="Recent winners">
+              <div className="ticker-track">
+                {[...tickerItems, ...tickerItems].map((it, i) => (
+                  <div className="ticker-item" key={`tk-${i}`}>
+                    <span className="game">{it.game}</span>
+                    <span className="who">{it.who}</span>
+                    <span>{t("ticker_just_won")}</span>
+                    <span className="amt">{it.amt}</span>
+                    <span className="time">
+                      · {it.ago} {t("ticker_ago")}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* MARKETS HEAD */}
           <div className="markets-head">
@@ -1493,6 +1488,7 @@ export function LoginLanding({
       </div>
 
       {/* ─────────── TOASTS ─────────── */}
+      {SHOW_WINNER_TOAST && (
       <div className="toast-stack" aria-live="polite">
         {toasts.map((tt) => (
           <div key={tt.id} className={`toast ${tt.exiting ? "out" : ""}`}>
@@ -1509,6 +1505,7 @@ export function LoginLanding({
           </div>
         ))}
       </div>
+      )}
     </main>
   );
 }
