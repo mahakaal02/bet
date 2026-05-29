@@ -32,7 +32,7 @@ interface GameState {
 
   // user-scoped
   balance: number | null;        // alias of walletBalance, kept for Navbar
-  walletBalance: number | null;  // INR wallet
+  walletBalance: number | null;  // server-authoritative coin balance
   currentBet: ActiveBet | null;
   // "Let it ride": each round's default bet auto-updates from the previous
   // round's payout (₹100 on first round; payout on win; 0 on loss).

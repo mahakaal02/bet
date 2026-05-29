@@ -2,6 +2,7 @@
 
 import useSWR from "swr";
 import { cn, fmtCoins } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n/client";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -23,6 +24,7 @@ interface Response {
 }
 
 export function AchievementsGrid() {
+  const { locale } = useTranslation();
   // Refresh frequently — the user-event SSE in NotificationsBell will trigger
   // a global revalidate via SWR's mutate when an unlock arrives, but a 30s
   // safety poll catches anything we missed.
@@ -76,7 +78,7 @@ export function AchievementsGrid() {
             )}
             title={
               a.unlockedAt
-                ? `Unlocked ${new Date(a.unlockedAt).toLocaleString()}`
+                ? `Unlocked ${new Date(a.unlockedAt).toLocaleString(locale)}`
                 : "Locked"
             }
           >
@@ -93,7 +95,7 @@ export function AchievementsGrid() {
               {a.description}
             </p>
             <div className="mt-1.5 text-[10px] font-mono text-slate-500">
-              +{fmtCoins(a.rewardCoins)} 🪙 · +{a.rewardXp} XP
+              +{fmtCoins(a.rewardCoins, locale)} 🪙 · +{a.rewardXp} XP
             </div>
           </div>
         ))}

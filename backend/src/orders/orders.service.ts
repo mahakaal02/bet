@@ -9,6 +9,8 @@ import {
 import { Order, OrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../foundation/audit-log.service';
+import { isUniqueViolation } from '../common/prisma-errors';
+import { clampPageLimit, cursorPage } from '../common/pagination';
 
 /**
  * Order lifecycle (Roadmap §F-USER-3).
@@ -38,9 +40,10 @@ import { AuditLogService } from '../foundation/audit-log.service';
  *     fulfilment.
  *
  * Idempotency:
- *   - createForWin() is called from BidsService at settle time; it's
- *     guarded by the unique constraint on `Order.auctionId` so a
- *     replayed settle never double-creates.
+ *   - createForWin() is called from AuctionsService.close() at settle
+ *     time (inside that transaction); it's guarded by the unique
+ *     constraint on `Order.auctionId` so a replayed settle never
+ *     double-creates.
  *   - Status writes are guarded by the expected-from check, so a
  *     replayed ship() / markDelivered() either no-ops or throws.
  *
@@ -63,16 +66,33 @@ export class OrdersService {
   // ─── User-side ─────────────────────────────────────────────────
 
   /**
-   * Idempotent create. Called from BidsService.settleAuction (or the
-   * future scheduler that closes ended auctions). Returns the row
-   * whether freshly created or pre-existing.
+   * Idempotent create. Called from `AuctionsService.close()` the
+   * moment a winner is decided — pass the surrounding transaction
+   * client (`tx`) so the order row is committed atomically with the
+   * auction's ENDED flip (a physical-prize order must never be lost
+   * to a crash between "auction closed" and "order created"). Also
+   * usable on the bare client (no `tx`) for admin backfill / manual
+   * re-creation. Returns the row whether freshly created or
+   * pre-existing.
+   *
+   * Idempotency: guarded by the unique constraint on `Order.auctionId`.
+   * When called WITHOUT a tx, a replay hits P2002 → we re-read and
+   * return the existing row. When called WITH a tx, the caller must
+   * guarantee first-time creation (close() early-returns on already-
+   * ENDED auctions), because a failed statement aborts the whole
+   * Postgres transaction and the P2002 recovery below cannot run
+   * inside it.
    */
-  async createForWin(input: {
-    auctionId: string;
-    winnerId: string;
-  }): Promise<Order> {
+  async createForWin(
+    input: {
+      auctionId: string;
+      winnerId: string;
+    },
+    tx?: Prisma.TransactionClient,
+  ): Promise<Order> {
+    const db = tx ?? this.prisma;
     try {
-      return await this.prisma.order.create({
+      return await db.order.create({
         data: {
           auctionId: input.auctionId,
           winnerId: input.winnerId,
@@ -80,7 +100,7 @@ export class OrdersService {
         },
       });
     } catch (err) {
-      if (this.isUniqueViolation(err)) {
+      if (!tx && isUniqueViolation(err)) {
         const existing = await this.prisma.order.findUnique({
           where: { auctionId: input.auctionId },
         });
@@ -90,11 +110,21 @@ export class OrdersService {
     }
   }
 
-  /** List the calling user's orders, newest first. */
+  /**
+   * Most-recent orders to return from the user-facing "my orders" list.
+   * One user's won-auction count is naturally small, but the query is
+   * still capped so a pathological account can't pull an unbounded row
+   * set. The response stays a bare `OrderListItem[]` (no pagination
+   * envelope) — the frontend consumes it as an array.
+   */
+  private static readonly MINE_LIMIT = 100;
+
+  /** List the calling user's orders, newest first (capped, see MINE_LIMIT). */
   async listMine(userId: string): Promise<OrderListItem[]> {
     const rows = await this.prisma.order.findMany({
       where: { winnerId: userId },
       orderBy: { createdAt: 'desc' },
+      take: OrdersService.MINE_LIMIT,
       include: {
         auction: { select: { title: true, retailPrice: true } },
       },
@@ -242,7 +272,7 @@ export class OrdersService {
     cursor?: string;
     limit?: number;
   }): Promise<{ items: AdminOrderRow[]; nextCursor: string | null }> {
-    const take = Math.min(50, Math.max(1, input.limit ?? 25));
+    const take = clampPageLimit(input.limit);
     const rows = await this.prisma.order.findMany({
       where: input.status ? { status: input.status } : {},
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
@@ -252,7 +282,8 @@ export class OrdersService {
         auction: { select: { title: true, retailPrice: true } },
       },
     });
-    const items = rows.slice(0, take).map((r) => ({
+    const { page, nextCursor } = cursorPage(rows, take);
+    const items = page.map((r) => ({
       id: r.id,
       status: r.status,
       winnerId: r.winnerId,
@@ -267,7 +298,6 @@ export class OrdersService {
       disputedAt: r.disputedAt,
       updatedAt: r.updatedAt,
     }));
-    const nextCursor = rows.length > take ? rows[take].id : null;
     return { items, nextCursor };
   }
 
@@ -414,15 +444,6 @@ export class OrdersService {
       throw new ForbiddenException({ code: 'NOT_YOUR_ORDER' });
     }
     return row;
-  }
-
-  private isUniqueViolation(err: unknown): boolean {
-    return Boolean(
-      err &&
-        typeof err === 'object' &&
-        'code' in err &&
-        (err as { code?: string }).code === 'P2002',
-    );
   }
 }
 

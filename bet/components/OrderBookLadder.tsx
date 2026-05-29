@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 import useSWR from "swr";
 import { useMarketStream } from "@/lib/useMarketStream";
 import { cn, fmtCoins, fmtPrice } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n/client";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -39,6 +40,7 @@ export function OrderBookLadder({
   marketId: string;
   outcome: "YES" | "NO";
 }) {
+  const { locale } = useTranslation();
   const { data, mutate } = useSWR<Resp>(
     `/api/markets/${marketId}/orderbook`,
     fetcher,
@@ -72,7 +74,7 @@ export function OrderBookLadder({
           Orderbook · {outcome}
         </span>
         <span className="font-mono text-slate-500">
-          spread {spread !== null ? fmtPrice(spread) : "—"}
+          spread {spread !== null ? fmtPrice(spread, 2, locale) : "—"}
         </span>
       </div>
       <div className="grid grid-cols-2 divide-x divide-slate-800">
@@ -86,6 +88,7 @@ export function OrderBookLadder({
 }
 
 function Column({ rows, kind }: { rows: Row[]; kind: "bid" | "ask" }) {
+  const { locale } = useTranslation();
   const isBid = kind === "bid";
   const maxSize = Math.max(1, ...rows.map((r) => r.shares));
   return (
@@ -126,7 +129,7 @@ function Column({ rows, kind }: { rows: Row[]; kind: "bid" | "ask" }) {
                     : "text-rose-300",
               )}
             >
-              {empty ? "—" : fmtPrice(r.price)}
+              {empty ? "—" : fmtPrice(r.price, 2, locale)}
             </span>
             <span
               className={cn(
@@ -134,7 +137,7 @@ function Column({ rows, kind }: { rows: Row[]; kind: "bid" | "ask" }) {
                 empty ? "text-slate-700" : "text-slate-300",
               )}
             >
-              {empty ? "—" : fmtCoins(Math.round(r.shares))}
+              {empty ? "—" : fmtCoins(Math.round(r.shares), locale)}
             </span>
           </div>
         );

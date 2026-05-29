@@ -3,6 +3,7 @@ import { FraudSeverity, FraudSignalKind, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../foundation/audit-log.service';
 import { SettingsService } from '../foundation/settings.service';
+import { clampPageLimit, cursorPage } from '../common/pagination';
 
 /**
  * Fraud heuristics (Roadmap §F-ADMIN-7).
@@ -236,7 +237,7 @@ export class FraudService {
     cursor?: string;
     limit?: number;
   }) {
-    const take = Math.min(50, Math.max(1, input.limit ?? 25));
+    const take = clampPageLimit(input.limit);
     const rows = await this.prisma.fraudSignal.findMany({
       where: {
         ...(input.reviewed !== undefined ? { reviewed: input.reviewed } : {}),
@@ -254,10 +255,8 @@ export class FraudService {
       take: take + 1,
       ...(input.cursor ? { skip: 1, cursor: { id: input.cursor } } : {}),
     });
-    return {
-      items: rows.slice(0, take),
-      nextCursor: rows.length > take ? rows[take].id : null,
-    };
+    const { page, nextCursor } = cursorPage(rows, take);
+    return { items: page, nextCursor };
   }
 
   /**

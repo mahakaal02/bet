@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../foundation/settings.service';
+import { isUniqueViolation } from '../common/prisma-errors';
 import { FairnessStore } from './fairness-store';
 import { CrashDistributionService } from './crash/crash-distribution.service';
 import { computeCrashMultiplier, multiplierAt } from './fairness';
@@ -243,8 +244,9 @@ export class RoundLifecycleService {
         });
         break;
       } catch (e: unknown) {
-        const code = (e as { code?: string })?.code;
-        if (code !== 'P2002') throw e;
+        // Round-number collision (another pod allocated it first) →
+        // bump and retry; anything else is a real failure.
+        if (!isUniqueViolation(e)) throw e;
         roundNumber++;
       }
     }

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 import { Bell } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n/client";
 import { toast } from "@/components/ui/Toaster";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -31,6 +32,7 @@ interface ListResp {
  */
 export function NotificationsBell() {
   const [open, setOpen] = useState(false);
+  const { locale } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
   const { data, mutate } = useSWR<ListResp>("/api/notifications", fetcher, {
     refreshInterval: 60_000,
@@ -156,7 +158,7 @@ export function NotificationsBell() {
                             {n.body}
                           </div>
                           <div className="mt-0.5 text-[10px] text-slate-500">
-                            {timeAgo(n.createdAt)}
+                            {timeAgo(n.createdAt, locale)}
                           </div>
                         </div>
                       </div>

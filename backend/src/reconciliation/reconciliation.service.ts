@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, No
 import { ReconciliationStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../foundation/audit-log.service';
+import { clampPageLimit, cursorPage } from '../common/pagination';
 
 /**
  * Daily reconciliation (Roadmap §F-ADMIN-5).
@@ -29,17 +30,23 @@ import { AuditLogService } from '../foundation/audit-log.service';
  * fragile — a single missed event from a year ago would never show
  * up. Whole-history compare catches it immediately.
  *
- * Performance: with ~50k active users, the loop is ~50k Bet API
- * calls. We batch per-user balance reads in chunks of 25 with 200ms
- * delays — at ~100ms/call that's 200s total. Comfortable inside a
- * 5min cron window. At 500k+ we'll need batch endpoints on Bet's
- * side; that's deferred to the infra PR.
+ * Performance: with ~50k active users, every user's local delta is
+ * summed in ONE `groupBy` — not one `aggregate()` per user, which was
+ * an N+1 of ~50k DB round-trips. Remote balances are still one Bet
+ * call per user (Bet has no batch-balance endpoint yet), but we fan
+ * them out in concurrent chunks of 25 rather than strictly serially,
+ * which keeps the run comfortably inside the 5min cron window. At
+ * 500k+ we'll want a batch endpoint on Bet's side; that's deferred to
+ * the infra PR.
  */
 @Injectable()
 export class ReconciliationService {
   private readonly logger = new Logger(ReconciliationService.name);
 
   static readonly BALANCE_FETCHER = Symbol('RECON_BALANCE_FETCHER');
+
+  /** How many remote balance reads to run concurrently per chunk. */
+  private static readonly BALANCE_CHUNK = 25;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -116,74 +123,99 @@ export class ReconciliationService {
       distinct: ['userId'],
     });
 
+    // One groupBy for every active user's whole-history delta, instead
+    // of one aggregate() per user inside the loop (the old N+1).
+    const localSums = await this.localSumsFor(active.map((a) => a.userId));
+
     let usersChecked = 0;
     let usersOk = 0;
     let usersDiscrepant = 0;
     let totalAbsDrift = 0;
 
-    for (const { userId } of active) {
-      usersChecked += 1;
-      const localSum = await this.localSum(userId);
-      let remoteSum: number;
-      try {
-        remoteSum = await this.balanceFetcher.fetch(userId);
-      } catch (err) {
-        // A single user-balance failure shouldn't abort the whole run.
-        // Log + skip + count as discrepant so the admin notices.
-        this.logger.warn(`balance fetch failed for ${userId}: ${(err as Error).message}`);
-        await this.prisma.reconciliationDiscrepancy.create({
-          data: {
-            reportId,
-            userId,
-            localSum,
-            remoteSum: 0,
-            drift: 0,
-            notes: `balance_fetch_failed: ${(err as Error).message}`.slice(0, 500),
-          },
-        });
+    // Remote balances are unavoidably one Bet call per user. Fan them
+    // out in bounded chunks so we neither run 50k strictly-serial calls
+    // nor open 50k concurrent sockets. Counting/writes happen after each
+    // chunk resolves, so the running totals stay race-free.
+    for (const chunk of ReconciliationService.chunk(active, ReconciliationService.BALANCE_CHUNK)) {
+      const results = await Promise.all(
+        chunk.map(async ({ userId }) => {
+          const localSum = localSums.get(userId) ?? 0;
+          try {
+            const remoteSum = await this.balanceFetcher.fetch(userId);
+            return { userId, localSum, remoteSum, ok: true as const };
+          } catch (err) {
+            return { userId, localSum, error: (err as Error).message, ok: false as const };
+          }
+        }),
+      );
+
+      for (const r of results) {
+        usersChecked += 1;
+        if (!r.ok) {
+          // A single user-balance failure shouldn't abort the whole run.
+          // Log + count as discrepant so the admin notices.
+          this.logger.warn(`balance fetch failed for ${r.userId}: ${r.error}`);
+          await this.prisma.reconciliationDiscrepancy.create({
+            data: {
+              reportId,
+              userId: r.userId,
+              localSum: r.localSum,
+              remoteSum: 0,
+              drift: 0,
+              notes: `balance_fetch_failed: ${r.error}`.slice(0, 500),
+            },
+          });
+          usersDiscrepant += 1;
+          continue;
+        }
+        const drift = r.localSum - r.remoteSum;
+        if (drift === 0) {
+          usersOk += 1;
+          continue;
+        }
         usersDiscrepant += 1;
-        continue;
+        totalAbsDrift += Math.abs(drift);
+        await this.prisma.reconciliationDiscrepancy.create({
+          data: { reportId, userId: r.userId, localSum: r.localSum, remoteSum: r.remoteSum, drift },
+        });
       }
-      const drift = localSum - remoteSum;
-      if (drift === 0) {
-        usersOk += 1;
-        continue;
-      }
-      usersDiscrepant += 1;
-      totalAbsDrift += Math.abs(drift);
-      await this.prisma.reconciliationDiscrepancy.create({
-        data: { reportId, userId, localSum, remoteSum, drift },
-      });
     }
 
     return { usersChecked, usersOk, usersDiscrepant, totalAbsDrift };
   }
 
   /**
-   * Sum of all CoinTransaction.delta for one user. Wrapped so the
-   * test mock can intercept.
+   * Whole-history `SUM(delta)` for a set of users in a single groupBy.
+   * Users with no rows simply won't appear in the map (callers treat a
+   * miss as 0). Wrapped so the test mock can intercept.
    */
-  async localSum(userId: string): Promise<number> {
-    const agg = await this.prisma.coinTransaction.aggregate({
-      where: { userId },
+  async localSumsFor(userIds: string[]): Promise<Map<string, number>> {
+    if (userIds.length === 0) return new Map();
+    const grouped = await this.prisma.coinTransaction.groupBy({
+      by: ['userId'],
+      where: { userId: { in: userIds } },
       _sum: { delta: true },
     });
-    return agg._sum.delta ?? 0;
+    return new Map(grouped.map((g) => [g.userId, g._sum.delta ?? 0]));
+  }
+
+  private static chunk<T>(arr: T[], size: number): T[][] {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
   }
 
   // ─── Admin REST ──────────────────────────────────────────────────
 
   async listReports(input: { limit?: number; cursor?: string }) {
-    const take = Math.min(60, Math.max(1, input.limit ?? 30));
+    const take = clampPageLimit(input.limit, 30, 60);
     const rows = await this.prisma.reconciliationReport.findMany({
-      orderBy: [{ forDate: 'desc' }],
+      orderBy: [{ forDate: 'desc' }, { id: 'desc' }],
       take: take + 1,
       ...(input.cursor ? { skip: 1, cursor: { id: input.cursor } } : {}),
     });
-    return {
-      items: rows.slice(0, take),
-      nextCursor: rows.length > take ? rows[take].id : null,
-    };
+    const { page, nextCursor } = cursorPage(rows, take);
+    return { items: page, nextCursor };
   }
 
   async getReport(id: string) {

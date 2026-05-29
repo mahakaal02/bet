@@ -43,22 +43,11 @@ export {
 
 export {
   formatCategory,
-  formatStatus,
   formatOutcome,
   formatResolvedAs,
-  formatTradeAction,
-  formatTradeActionWithOutcome,
-  formatSort,
-  formatFilter,
   listCategories,
-  listSorts,
-  listFilters,
   type MarketCategory,
-  type MarketStatus,
   type Outcome,
-  type TradeAction,
-  type MarketSort,
-  type MarketFilter,
 } from "./market-format";
 
 export {

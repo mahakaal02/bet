@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../foundation/notification.service';
 import { NotificationChannel } from '@prisma/client';
 import { TrustedDeviceService } from './trusted-device.service';
+import { JwtUserCache } from './jwt-user-cache';
 
 /**
  * Password-reset flow per Roadmap §F-USER-10.
@@ -55,6 +56,7 @@ export class PasswordResetService {
     private readonly notifications: NotificationService,
     private readonly config: ConfigService,
     private readonly trustedDevice: TrustedDeviceService,
+    private readonly userCache: JwtUserCache,
   ) {}
 
   /**
@@ -162,6 +164,11 @@ export class PasswordResetService {
         data: { usedAt: now },
       }),
     ]);
+
+    // Drop the cached user row so `validateJwt` re-reads the freshly
+    // bumped `passwordChangedAt` immediately on this pod (rather than
+    // waiting out the cache TTL) — every existing JWT is now stale.
+    this.userCache.invalidate(row.userId);
 
     // Revoke every trusted-device cookie too — a stolen password that
     // led to the reset shouldn't let the attacker keep skipping 2FA

@@ -8,6 +8,8 @@ import {
 import { PromoCode, PromoCodeDiscountType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../foundation/audit-log.service';
+import { isUniqueViolation } from '../common/prisma-errors';
+import { clampPageLimit, cursorPage } from '../common/pagination';
 
 /**
  * Promo codes (Roadmap §F-USER-12).
@@ -18,13 +20,22 @@ import { AuditLogService } from '../foundation/audit-log.service';
  *     live campaign's discount math can't be retroactively changed).
  *   - user-facing `validate(code, userId, coinPackId, basePaise)`
  *     returns either { ok, discountInr } or { ok: false, code }.
- *   - `redeem()` records the usage against a payment order — the
- *     payment service calls this inside the same transaction as
- *     order creation.
+ *   - `redeem()` records the usage against a payment order so the
+ *     per-use / per-user caps in `validate()` actually bind.
  *
  * The validate / redeem split keeps the gate honest: validate is
  * pure (read-only, idempotent), redeem actually counts. A misbehaved
  * client calling validate 1000 times never affects the per-user cap.
+ *
+ * Integration status (post-Razorpay): coin-pack purchase + capture
+ * moved off this backend — it now happens on Bet via the NOWPayments
+ * crypto checkout (see PaymentsService). `validate()` is still served
+ * here (the checkout UI calls `POST /promo/validate` for the live
+ * discount), but `redeem()` is the recording seam the capture side
+ * must call once per captured order; until Bet wires that callback,
+ * the usage caps `validate()` reads won't bind. Kept (not deleted)
+ * because it's the contract that closes that loop and is exercised by
+ * the service spec.
  *
  * Concurrency note: the per-user cap is enforced by counting
  * redemption rows, not by a unique constraint, because the schema
@@ -98,7 +109,7 @@ export class PromoCodesService {
         },
       });
     } catch (err) {
-      if (this.isUniqueViolation(err)) {
+      if (isUniqueViolation(err)) {
         throw new ConflictException({ code: 'PROMO_CODE_DUPLICATE' });
       }
       throw err;
@@ -121,17 +132,15 @@ export class PromoCodesService {
   }
 
   async list(input: { enabled?: boolean; cursor?: string; limit?: number }) {
-    const take = Math.min(100, Math.max(1, input.limit ?? 25));
+    const take = clampPageLimit(input.limit, 25, 100);
     const rows = await this.prisma.promoCode.findMany({
       where: input.enabled !== undefined ? { enabled: input.enabled } : {},
       orderBy: [{ createdAt: 'desc' }],
       take: take + 1,
       ...(input.cursor ? { skip: 1, cursor: { id: input.cursor } } : {}),
     });
-    return {
-      items: rows.slice(0, take),
-      nextCursor: rows.length > take ? rows[take].id : null,
-    };
+    const { page, nextCursor } = cursorPage(rows, take);
+    return { items: page, nextCursor };
   }
 
   /**
@@ -206,10 +215,12 @@ export class PromoCodesService {
   }
 
   /**
-   * Record a redemption. Caller MUST have just validated and is
-   * about to commit a payment order. We don't re-validate here —
-   * trusting the (caller's transactional) sequence avoids double-
-   * locking the row.
+   * Record a redemption (one row per captured order) so `validate()`'s
+   * usage caps bind. Called by the payment-capture side — which now
+   * lives on Bet (NOWPayments), see the class-level integration note.
+   * Caller MUST have just validated; we don't re-validate here —
+   * trusting the caller's transactional sequence avoids double-locking
+   * the row.
    */
   async redeem(input: {
     promoCodeId: string;
@@ -233,12 +244,6 @@ export class PromoCodesService {
     const r = await this.prisma.promoCode.findUnique({ where: { id } });
     if (!r) throw new NotFoundException({ code: 'PROMO_NOT_FOUND' });
     return r;
-  }
-
-  private isUniqueViolation(err: unknown): boolean {
-    return Boolean(
-      err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === 'P2002',
-    );
   }
 }
 

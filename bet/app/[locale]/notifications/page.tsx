@@ -104,7 +104,7 @@ export default async function NotificationsPage({
                         </div>
                         <p className="mt-0.5 text-sm text-slate-400">{n.body}</p>
                         <div className="mt-1 text-[10px] uppercase tracking-wider text-slate-500">
-                          {timeAgo(n.createdAt)}
+                          {timeAgo(n.createdAt, locale)}
                         </div>
                       </div>
                     </div>

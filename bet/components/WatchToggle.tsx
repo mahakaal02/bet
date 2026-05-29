@@ -41,6 +41,7 @@ export function WatchToggle({
 
   return (
     <button
+      type="button"
       onClick={toggle}
       disabled={busy}
       // Toggle semantics: aria-pressed tells assistive tech that this

@@ -141,7 +141,7 @@ export default async function AchievementsPage({
                     {a.title}
                   </div>
                   <div className="text-[10px] text-slate-500">
-                    {timeAgo(a.unlockedAt)}
+                    {timeAgo(a.unlockedAt, locale)}
                   </div>
                 </div>
               ))}
@@ -154,7 +154,7 @@ export default async function AchievementsPage({
             <CardTitle>{tr("achievements.allAchievements")}</CardTitle>
             <span className="text-xs text-slate-500">
               {tr("achievements.unlocksAcrossUsers", {
-                count: fmtCoins(totalUnlocked),
+                count: fmtCoins(totalUnlocked, locale),
               })}
             </span>
           </CardHeader>
@@ -200,14 +200,14 @@ export default async function AchievementsPage({
                       <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
                         <span className="font-mono">
                           {tr("achievements.reward", {
-                            coins: fmtCoins(a.rewardCoins),
+                            coins: fmtCoins(a.rewardCoins, locale),
                             xp: a.rewardXp,
                           })}
                         </span>
                         <span>
                           {rarity > 0
                             ? tr("achievements.earned", {
-                                count: fmtCoins(rarity),
+                                count: fmtCoins(rarity, locale),
                               })
                             : tr("achievements.beFirst")}
                         </span>
@@ -215,7 +215,7 @@ export default async function AchievementsPage({
                       {unlocked && a.unlockedAt && (
                         <div className="mt-1 text-[10px] text-cyan-300">
                           {tr("achievements.unlockedTime", {
-                            time: timeAgo(a.unlockedAt),
+                            time: timeAgo(a.unlockedAt, locale),
                           })}
                         </div>
                       )}

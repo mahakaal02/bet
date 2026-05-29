@@ -43,7 +43,9 @@ function makeMocks(opts: {
       }),
       findMany: jest.fn(async ({ where, select }: any) => {
         void select;
-        return users.filter((u) => inDateRange(u.createdAt, where.createdAt)).map((u) => ({ id: u.id }));
+        return users
+          .filter((u) => inDateRange(u.createdAt, where.createdAt))
+          .map((u) => ({ id: u.id, createdAt: u.createdAt }));
       }),
     },
     kycVerification: {
@@ -65,7 +67,7 @@ function makeMocks(opts: {
         const inSet = new Set(where.userId?.in ?? []);
         return bids
           .filter((b) => inSet.has(b.userId) && inDateRange(b.createdAt, where.createdAt))
-          .map((b) => ({ userId: b.userId }));
+          .map((b) => ({ userId: b.userId, createdAt: b.createdAt }));
       }),
     },
     coinTransaction: {
@@ -77,7 +79,7 @@ function makeMocks(opts: {
             inDateRange(t.createdAt, where.createdAt) &&
             (!where.reason || t.reason === where.reason),
           )
-          .map((t) => ({ userId: t.userId }));
+          .map((t) => ({ userId: t.userId, createdAt: t.createdAt }));
       }),
     },
     aviatorBet: {
@@ -85,7 +87,7 @@ function makeMocks(opts: {
         const inSet = new Set(where.userId?.in ?? []);
         return aviator
           .filter((a) => inSet.has(a.userId) && inDateRange(a.createdAt, where.createdAt))
-          .map((a) => ({ userId: a.userId }));
+          .map((a) => ({ userId: a.userId, createdAt: a.createdAt }));
       }),
     },
   };

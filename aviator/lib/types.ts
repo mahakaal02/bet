@@ -37,13 +37,6 @@ export interface ActiveBet {
    * cleanly.
    */
   cappedByPayoutCap?: boolean;
-  /**
-   * The uncapped payout — what the bet WOULD have paid out without
-   * the cap. Surfaced so the cap chip can show "Could have won
-   * X coins" alongside the actual payout. Optional / only set when
-   * `cappedByPayoutCap === true`.
-   */
-  originalPayout?: number;
 }
 
 export interface RoundHistoryEntry {
@@ -73,6 +66,13 @@ export interface RecentWinner {
   capped?: boolean;
   originalPayout?: number;
   payoutCapCoins?: number;
+  /**
+   * Set when the server marked the cashout but the Bet wallet credit
+   * failed (network glitch / wallet offline). The payout is reported
+   * as 0 and the entry is kept out of the public winners feed; an
+   * admin reconciles the missing credit from WalletTransaction rows.
+   */
+  settlementPending?: boolean;
 }
 
 export interface RosterEntry {

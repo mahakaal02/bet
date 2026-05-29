@@ -4,6 +4,7 @@ import { NotificationStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthedUser, CurrentUser } from '../auth/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { cursorPage } from '../common/pagination';
 
 /**
  * User-facing notification list + read-state API. Paired with the
@@ -57,8 +58,8 @@ export class NotificationsListController {
       },
     });
 
-    const hasMore = rows.length > limit;
-    const items = (hasMore ? rows.slice(0, limit) : rows).map((r) => {
+    const { page, nextCursor } = cursorPage(rows, limit);
+    const items = page.map((r) => {
       const rendered = (r.rendered ?? {}) as { subject?: string | null; body?: string };
       return {
         id: r.id,
@@ -69,10 +70,7 @@ export class NotificationsListController {
         createdAt: r.createdAt.toISOString(),
       };
     });
-    return {
-      items,
-      nextCursor: hasMore ? items[items.length - 1].id : null,
-    };
+    return { items, nextCursor };
   }
 
   @Get('unread-count')

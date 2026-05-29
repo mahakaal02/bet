@@ -126,6 +126,7 @@ export default async function EventsPage({
                   chance: tr("group.chance"),
                   vol: tr("market.vol"),
                 }}
+                locale={locale}
               />
             ))}
           </div>

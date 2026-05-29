@@ -6,6 +6,7 @@ import { BetWalletModule } from '../bet-wallet/bet-wallet.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
+import { JwtUserCache } from './jwt-user-cache';
 import { PasswordResetController } from './password-reset.controller';
 import { PasswordResetService } from './password-reset.service';
 import { TwoFactorController } from './two-factor.controller';
@@ -43,6 +44,7 @@ import { ResponsibleGamblingModule } from '../responsible-gambling/responsible-g
   providers: [
     AuthService,
     JwtStrategy,
+    JwtUserCache,
     PasswordResetService,
     TwoFactorService,
     TrustedDeviceService,
