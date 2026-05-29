@@ -202,11 +202,15 @@ export default async function HubPage({
   const aviatorHref = isAdmin
     ? `${adminBase}/aviator/analytics${tokenQs}`
     : `${aviatorBase}/${tokenQs}`;
+  // PR-AUTH-WALL — mirror the Aviator tile exactly. Non-admins land
+  // on the bet root with their SSO token; bet's locale-root redirects
+  // straight to `/markets`, so the user reaches the markets list in
+  // one hop without ever passing through a marketing landing page.
+  // The featured-market deep-link is gone: from the hub you always
+  // enter the markets list and pick from there, just like Aviator.
   const exchangeHref = isAdmin
     ? `${exchangeBase}/admin${tokenQs}`
-    : featuredMarket
-      ? `${exchangeBase}/markets/${featuredMarket.slug}${tokenQs}`
-      : `${exchangeBase}/${tokenQs}`;
+    : `${exchangeBase}/${tokenQs}`;
   const walletHref = `${exchangeBase}/wallet${tokenQs}`;
 
   return (

@@ -400,9 +400,9 @@ export default async function MarketsPage({
                     <span
                       className="cat"
                       style={{
-                        background: "rgba(34,211,238,0.10)",
+                        background: "rgba(var(--logo-a-rgb),0.10)",
                         color: "var(--cyan-200)",
-                        borderColor: "rgba(34,211,238,0.32)",
+                        borderColor: "rgba(var(--logo-a-rgb),0.32)",
                       }}
                     >
                       ★ {tr("market.featured")}

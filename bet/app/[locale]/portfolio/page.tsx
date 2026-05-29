@@ -358,13 +358,13 @@ export default async function PortfolioPage({
                     <svg viewBox="0 0 700 180" preserveAspectRatio="none">
                       <defs>
                         <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="rgba(34,211,238,0.45)" />
-                          <stop offset="100%" stopColor="rgba(34,211,238,0)" />
+                          <stop offset="0%" stopColor="rgba(var(--logo-a-rgb),0.45)" />
+                          <stop offset="100%" stopColor="rgba(var(--logo-a-rgb),0)" />
                         </linearGradient>
                       </defs>
-                      <line x1="0" y1="45" x2="700" y2="45" stroke="rgba(255,255,255,0.05)" strokeDasharray="2 4" />
-                      <line x1="0" y1="90" x2="700" y2="90" stroke="rgba(255,255,255,0.05)" strokeDasharray="2 4" />
-                      <line x1="0" y1="135" x2="700" y2="135" stroke="rgba(255,255,255,0.05)" strokeDasharray="2 4" />
+                      <line x1="0" y1="45" x2="700" y2="45" stroke="var(--chart-grid)" strokeDasharray="2 4" />
+                      <line x1="0" y1="90" x2="700" y2="90" stroke="var(--chart-grid)" strokeDasharray="2 4" />
+                      <line x1="0" y1="135" x2="700" y2="135" stroke="var(--chart-grid)" strokeDasharray="2 4" />
                       <path d={chart.area} fill="url(#eqGrad)" />
                       <path d={chart.line} fill="none" stroke="var(--cyan-400)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
                       <circle cx="700" cy={chart.lastY} r="4" fill="var(--cyan-400)" />
@@ -639,7 +639,7 @@ function catColor(category: MarketCategory): string {
   switch (category) {
     case "SPORTS": return "#FCD34D";
     case "POLITICS": return "#C7D2FE";
-    case "CRYPTO": return "#22D3EE";
+    case "CRYPTO": return "var(--logo-a)";
     case "TECH": return "#F0ABFC";
     case "ENTERTAINMENT": return "#FDA4AF";
     default: return "rgba(255,255,255,0.18)";

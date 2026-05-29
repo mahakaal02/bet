@@ -56,9 +56,14 @@
   --brand-b-rgb: 99,102,241;
   --pos-rgb: 16,185,129;
   --neg-rgb: 244,63,94;
-  --bg-mesh-1: rgba(34,211,238,.22);
+  --logo-a: #22D3EE;
+  --logo-a-rgb: 34,211,238;
+  --logo-b: #6366F1;
+  --logo-b-rgb: 99,102,241;
+  --on-grad: #050913;
+  --bg-mesh-1: rgba(var(--brand-a-rgb),.22);
   --bg-mesh-2: rgba(0,229,255,.18);
-  --bg-mesh-3: rgba(99,102,241,.16);
+  --bg-mesh-3: rgba(var(--brand-b-rgb),.16);
   --bg-stop-1: #030305;
   --bg-stop-2: #06080C;
   --bg-stop-3: #050608;
@@ -88,6 +93,7 @@ html[data-theme="neon"] {
   --indigo-500: #FF2D95;
   --indigo-400: #FF66B2;
   --grad-brand: linear-gradient(135deg, #00F0FF 0%, #B14CFF 55%, #FF2D95 100%);
+  --on-grad:    #06002A; /* dark text harmonized with the neon gradient */
 
   --emerald-200: #E1FFA0;
   --emerald-300: #C4FF3D;
@@ -118,6 +124,68 @@ html[data-theme="neon"] {
     repeating-linear-gradient(to bottom, rgba(255,255,255,0.018) 0 1px, transparent 1px 3px);
 }
 
+/* ── MYTHIC THEME — warm gold/indigo, dark — data-theme="mythic" ── */
+html[data-theme="mythic"] {
+  --bg:#060512; --bg-2:#0A0820; --color-bg:#0C0A1C;
+  --color-surface:#15122E; --color-surface-2:#1F1A40;
+  --color-text-primary:#FBF3E4;
+  --color-text-2:rgba(251,243,228,0.74); --color-text-3:rgba(251,243,228,0.52); --color-text-4:rgba(251,243,228,0.34);
+  --color-divider:rgba(245,184,80,0.13); --color-divider-2:rgba(245,184,80,0.24);
+  --cyan-100:#FFF3DA; --cyan-200:#FBD98C; --cyan-300:#F7C45E; --cyan-400:#F2A93B; --cyan-500:#D98A2B;
+  --indigo-500:#E0682E; --indigo-400:#ED8347;
+  --grad-brand:linear-gradient(135deg,#F7C45E 0%,#F2A93B 45%,#E0682E 100%);
+  --amber-300:#F7C45E; --amber-400:#F2A93B;
+  --brand-a:#F2A93B; --brand-a-rgb:242,169,59; --brand-b:#E0682E; --brand-b-rgb:224,104,46;
+  --pos-rgb:16,185,129; --neg-rgb:244,63,94;
+  --bg-mesh-1:rgba(242,169,59,0.22); --bg-mesh-2:rgba(224,104,46,0.20); --bg-mesh-3:rgba(124,58,200,0.18);
+  --bg-stop-1:#060512; --bg-stop-2:#0A0820; --bg-stop-3:#060512;
+  --glow-text:0 0 14px rgba(242,169,59,0.45),0 0 36px rgba(224,104,46,0.28);
+  --glow-num:0 0 14px rgba(242,169,59,0.42),0 0 28px rgba(224,104,46,0.26);
+  --logo-a:#F2A93B; --logo-b:#E0682E; --logo-a-rgb:242,169,59; --logo-b-rgb:224,104,46;
+  --on-grad:#2A1606;
+}
+/* ── CALM THEME — light, teal/ink — data-theme="calm" ── */
+html[data-theme="calm"] {
+  --bg:#EFE9DD; --bg-2:#F4EFE6; --color-bg:#F5F1E8;
+  --color-surface:#FFFFFF; --color-surface-2:#FBF7EF;
+  --color-text-primary:#1B2430;
+  --color-text-2:rgba(27,36,48,0.74); --color-text-3:rgba(27,36,48,0.54); --color-text-4:rgba(27,36,48,0.36);
+  --color-divider:rgba(27,36,48,0.10); --color-divider-2:rgba(27,36,48,0.18);
+  --cyan-100:#D9F2EE; --cyan-200:#146B62; --cyan-300:#0F766E; --cyan-400:#0E7C72; --cyan-500:#0B5D55;
+  --indigo-500:#3730A3; --indigo-400:#4F46E5;
+  --grad-brand:linear-gradient(135deg,#14B8A6 0%,#0E7C72 50%,#0F5257 100%);
+  --emerald-300:#047857; --emerald-500:#059669; --rose-300:#BE123C; --rose-500:#E11D48;
+  --amber-300:#B45309; --amber-400:#D97706;
+  --brand-a:#0E7C72; --brand-a-rgb:14,124,114; --brand-b:#3730A3; --brand-b-rgb:55,48,163;
+  --pos-rgb:4,120,87; --neg-rgb:190,18,60;
+  --bg-mesh-1:rgba(20,184,166,0.10); --bg-mesh-2:rgba(245,158,11,0.07); --bg-mesh-3:rgba(99,102,241,0.06);
+  --bg-stop-1:#F2ECE0; --bg-stop-2:#F5F1E8; --bg-stop-3:#EFE9DD;
+  --glow-text:none; --glow-num:none;
+  --logo-a:#0E7C72; --logo-b:#3730A3; --logo-a-rgb:14,124,114; --logo-b-rgb:55,48,163;
+  --on-grad:#FFFFFF;
+}
+/* ── TERMINAL THEME — black + amber/green — data-theme="terminal" ── */
+html[data-theme="terminal"] {
+  --bg:#000000; --bg-2:#050505; --color-bg:#050505;
+  --color-surface:#0C0C0E; --color-surface-2:#141417;
+  --color-text-primary:#EAEAE0;
+  --color-text-2:rgba(234,234,224,0.72); --color-text-3:rgba(234,234,224,0.50); --color-text-4:rgba(234,234,224,0.32);
+  --color-divider:rgba(255,176,0,0.12); --color-divider-2:rgba(255,176,0,0.24);
+  --cyan-100:#FFE9B0; --cyan-200:#FFCF66; --cyan-300:#FFB000; --cyan-400:#FFB000; --cyan-500:#CC8A00;
+  --indigo-500:#E68A00; --indigo-400:#FFA733;
+  --grad-brand:linear-gradient(135deg,#FFC233 0%,#FFB000 55%,#E68A00 100%);
+  --emerald-300:#00E676; --emerald-500:#00C853; --rose-300:#FF5252; --rose-500:#FF1744;
+  --amber-300:#FFB000; --amber-400:#FFC233;
+  --brand-a:#FFB000; --brand-a-rgb:255,176,0; --brand-b:#00E676; --brand-b-rgb:0,230,118;
+  --pos-rgb:0,230,118; --neg-rgb:255,82,82;
+  --bg-mesh-1:rgba(255,176,0,0.10); --bg-mesh-2:rgba(0,230,118,0.07); --bg-mesh-3:rgba(255,176,0,0.05);
+  --bg-stop-1:#000000; --bg-stop-2:#050505; --bg-stop-3:#000000;
+  --glow-text:0 0 10px rgba(255,176,0,0.40); --glow-num:0 0 12px rgba(255,176,0,0.35);
+  --radius-sm:3px; --radius:4px; --radius-lg:5px; --radius-xl:6px;
+  --logo-a:#FFB000; --logo-b:#00E676; --logo-a-rgb:255,176,0; --logo-b-rgb:0,230,118;
+  --on-grad:#1A1200;
+}
+
 /* ─── Page root ─── */
 .mkt {
   position: relative;
@@ -145,7 +213,7 @@ html[data-theme="neon"] .mkt .featured-q,
 html[data-theme="neon"] .mkt .pstat .v.cy,
 html[data-theme="neon"] .mkt .yn-price { text-shadow: var(--glow-num); }
 html[data-theme="neon"] .mkt .deposit-btn {
-  color: #06002A;
+  color: var(--on-grad);
   box-shadow: 0 0 24px rgba(0,240,255,0.55), 0 0 48px rgba(255,45,149,0.40), inset 0 1px 0 rgba(255,255,255,0.55);
 }
 html[data-theme="neon"] .mkt .balance-pill {
@@ -177,7 +245,7 @@ html[data-theme="neon"] .mkt .yn-tag.no  { color: var(--rose-300); text-shadow: 
 .mkt .theme-switch { display: inline-flex; padding: 3px; border-radius: 999px; background: rgba(0,0,0,0.3); border: 1px solid var(--color-divider); }
 .mkt .theme-switch button { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; color: var(--color-text-3); transition: background .15s, color .15s; }
 .mkt .theme-switch button:hover { color: var(--color-text-primary); }
-.mkt .theme-switch button.on { background: var(--grad-brand); color: #06002A; box-shadow: 0 0 14px -2px rgba(var(--brand-a-rgb), 0.6); }
+.mkt .theme-switch button.on { background: var(--grad-brand); color: var(--on-grad); box-shadow: 0 0 14px -2px rgba(var(--brand-a-rgb), 0.6); }
 
 /* ─── BG STACK ─── */
 .mkt .bg-stack { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
@@ -214,18 +282,18 @@ html[data-theme="neon"] .mkt .yn-tag.no  { color: var(--rose-300); text-shadow: 
 .mkt .nav { display: flex; align-items: center; gap: 4px; }
 .mkt .nav a { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px; font-size: 13.5px; font-weight: 500; color: var(--color-text-2); transition: color .15s, background .15s; }
 .mkt .nav a:hover { color: var(--color-text-primary); background: rgba(255,255,255,0.04); }
-.mkt .nav a.active { color: var(--cyan-300); background: rgba(34,211,238,0.10); border: 1px solid rgba(34,211,238,0.22); padding: 7px 11px; }
+.mkt .nav a.active { color: var(--cyan-300); background: rgba(var(--brand-a-rgb),0.10); border: 1px solid rgba(var(--brand-a-rgb),0.22); padding: 7px 11px; }
 .mkt .nav .badge { font-family: var(--font-mono); font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 999px; background: rgba(244,63,94,0.18); color: var(--rose-300); border: 1px solid rgba(244,63,94,0.28); }
 .mkt .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-.mkt .balance-pill { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px 7px 10px; border-radius: 999px; background: rgba(34,211,238,0.10); border: 1px solid rgba(34,211,238,0.26); font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; color: var(--cyan-200); box-shadow: 0 0 24px -8px rgba(34,211,238,0.5), inset 0 0 0 1px rgba(255,255,255,0.02); }
+.mkt .balance-pill { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px 7px 10px; border-radius: 999px; background: rgba(var(--brand-a-rgb),0.10); border: 1px solid rgba(var(--brand-a-rgb),0.26); font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; color: var(--cyan-200); box-shadow: 0 0 24px -8px rgba(var(--brand-a-rgb),0.5), inset 0 0 0 1px rgba(255,255,255,0.02); }
 .mkt .balance-pill::before { content:''; width: 6px; height: 6px; border-radius: 50%; background: var(--cyan-400); box-shadow: 0 0 10px var(--cyan-400); }
 .mkt .balance-pill .lbl { color: var(--color-text-3); font-weight: 500; margin-right: -2px; }
-.mkt .deposit-btn { padding: 8px 14px; border-radius: 999px; background: var(--grad-brand); color: #050913; font-size: 13px; font-weight: 700; letter-spacing: -0.01em; box-shadow: 0 8px 24px -6px rgba(34,211,238,0.5), inset 0 1px 0 rgba(255,255,255,0.4); transition: transform .12s, box-shadow .12s; }
+.mkt .deposit-btn { padding: 8px 14px; border-radius: 999px; background: var(--grad-brand); color: var(--on-grad); font-size: 13px; font-weight: 700; letter-spacing: -0.01em; box-shadow: 0 8px 24px -6px rgba(var(--brand-a-rgb),0.5), inset 0 1px 0 rgba(255,255,255,0.4); transition: transform .12s, box-shadow .12s; }
 .mkt .deposit-btn:hover { transform: translateY(-1px); }
 .mkt .icon-btn { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.04); border: 1px solid var(--color-divider); display: grid; place-items: center; position: relative; transition: background .15s, border-color .15s; }
 .mkt .icon-btn:hover { background: rgba(255,255,255,0.08); border-color: var(--color-divider-2); }
 .mkt .icon-btn .dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--rose-500); box-shadow: 0 0 0 2px var(--color-bg), 0 0 10px var(--rose-500); }
-.mkt .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--grad-brand); display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: 13px; color: #050913; border: 1px solid rgba(255,255,255,0.18); }
+.mkt .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--grad-brand); display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: 13px; color: var(--on-grad); border: 1px solid rgba(255,255,255,0.18); }
 
 /* status strip */
 .mkt .status-strip { position: relative; z-index: 1; border-bottom: 1px solid var(--color-divider); background: rgba(5,6,8,0.4); }
@@ -254,10 +322,10 @@ html[data-theme="neon"] .mkt .yn-tag.no  { color: var(--rose-300); text-shadow: 
 .mkt .featured {
   position: relative;
   background:
-    radial-gradient(80% 60% at 0% 0%, rgba(34,211,238,0.16), transparent 60%),
-    radial-gradient(60% 60% at 100% 100%, rgba(99,102,241,0.16), transparent 65%),
+    radial-gradient(80% 60% at 0% 0%, rgba(var(--brand-a-rgb),0.16), transparent 60%),
+    radial-gradient(60% 60% at 100% 100%, rgba(var(--brand-b-rgb),0.16), transparent 65%),
     linear-gradient(180deg, var(--color-surface-2), var(--color-surface));
-  border: 1px solid rgba(34,211,238,0.26);
+  border: 1px solid rgba(var(--brand-a-rgb),0.26);
   border-radius: var(--radius-lg);
   overflow: hidden;
   margin-bottom: 24px;
@@ -298,7 +366,7 @@ html[data-theme="neon"] .mkt .yn-tag.no  { color: var(--rose-300); text-shadow: 
 /* ─── FILTER BAR ─── */
 .mkt .filterbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 16px; background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: var(--radius-lg); margin-bottom: 16px; position: sticky; top: calc(var(--topbar-h) + 8px); z-index: 10; backdrop-filter: blur(12px) saturate(140%); }
 .mkt .search { flex: 1; min-width: 240px; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 1px solid var(--color-divider); transition: border-color .15s; }
-.mkt .search:focus-within { border-color: rgba(34,211,238,0.4); }
+.mkt .search:focus-within { border-color: rgba(var(--brand-a-rgb),0.4); }
 .mkt .search svg { color: var(--color-text-3); flex: 0 0 auto; }
 .mkt .search input { width: 100%; font-size: 13.5px; }
 .mkt .search input::placeholder { color: var(--color-text-3); }
@@ -306,11 +374,11 @@ html[data-theme="neon"] .mkt .yn-tag.no  { color: var(--rose-300); text-shadow: 
 .mkt .tabs { display: inline-flex; padding: 3px; background: rgba(0,0,0,0.28); border: 1px solid var(--color-divider); border-radius: 10px; }
 .mkt .tabs a, .mkt .tabs button { font-family: var(--font-sans); font-size: 12.5px; font-weight: 500; padding: 7px 12px; border-radius: 8px; color: var(--color-text-2); transition: color .15s, background .15s; }
 .mkt .tabs a:hover, .mkt .tabs button:hover { color: var(--color-text-primary); }
-.mkt .tabs a.on, .mkt .tabs button.on { background: rgba(34,211,238,0.16); color: var(--cyan-200); }
+.mkt .tabs a.on, .mkt .tabs button.on { background: rgba(var(--brand-a-rgb),0.16); color: var(--cyan-200); }
 .mkt .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .mkt .chip { font-family: var(--font-sans); font-size: 12.5px; font-weight: 500; padding: 6px 11px; border-radius: 999px; background: rgba(255,255,255,0.04); border: 1px solid var(--color-divider); color: var(--color-text-2); display: inline-flex; align-items: center; gap: 6px; transition: background .15s, border-color .15s, color .15s; }
 .mkt .chip:hover { background: rgba(255,255,255,0.08); color: var(--color-text-primary); }
-.mkt .chip.on { background: rgba(34,211,238,0.14); border-color: rgba(34,211,238,0.36); color: var(--cyan-200); }
+.mkt .chip.on { background: rgba(var(--brand-a-rgb),0.14); border-color: rgba(var(--brand-a-rgb),0.36); color: var(--cyan-200); }
 .mkt .chip .n { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-3); }
 .mkt .chip.on .n { color: var(--cyan-300); }
 .mkt .filter-divider { width: 1px; height: 24px; background: var(--color-divider); }
@@ -320,13 +388,13 @@ html[data-theme="neon"] .mkt .yn-tag.no  { color: var(--rose-300); text-shadow: 
 @media (max-width: 1080px) { .mkt .grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 700px)  { .mkt .grid { grid-template-columns: 1fr; } }
 .mkt .market { background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: var(--radius-lg); padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 14px; transition: transform .12s, border-color .15s, background .15s; cursor: pointer; position: relative; overflow: hidden; min-height: 240px; }
-.mkt .market:hover { transform: translateY(-2px); border-color: rgba(34,211,238,0.32); background: linear-gradient(180deg, rgba(34,211,238,0.04), var(--color-surface)); }
+.mkt .market:hover { transform: translateY(-2px); border-color: rgba(var(--brand-a-rgb),0.32); background: linear-gradient(180deg, rgba(var(--brand-a-rgb),0.04), var(--color-surface)); }
 .mkt .market-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .mkt .cat { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--color-divider); background: rgba(255,255,255,0.03); color: var(--color-text-2); }
 .mkt .cat::before { content:''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0.8; }
 .mkt .cat.sports   { color: #FCD34D; border-color: rgba(252,211,77,0.32); background: rgba(252,211,77,0.08); }
-.mkt .cat.politics { color: #C7D2FE; border-color: rgba(199,210,254,0.32); background: rgba(99,102,241,0.10); }
-.mkt .cat.crypto   { color: var(--cyan-200); border-color: rgba(34,211,238,0.32); background: rgba(34,211,238,0.10); }
+.mkt .cat.politics { color: #C7D2FE; border-color: rgba(199,210,254,0.32); background: rgba(var(--brand-b-rgb),0.10); }
+.mkt .cat.crypto   { color: var(--cyan-200); border-color: rgba(var(--brand-a-rgb),0.32); background: rgba(var(--brand-a-rgb),0.10); }
 .mkt .cat.tech     { color: #F0ABFC; border-color: rgba(240,171,252,0.32); background: rgba(240,171,252,0.08); }
 .mkt .cat.ent      { color: #FDA4AF; border-color: rgba(253,164,175,0.32); background: rgba(253,164,175,0.08); }
 .mkt .ends { font-family: var(--font-mono); font-size: 10.5px; color: var(--color-text-3); letter-spacing: 0.04em; display: inline-flex; align-items: center; gap: 5px; }
@@ -359,7 +427,7 @@ html[data-theme="neon"] .mkt .yn-tag.no  { color: var(--rose-300); text-shadow: 
 /* ─── LOAD-MORE / COUNT CAPTION ─── */
 .mkt .load-more { margin-top: 24px; text-align: center; padding: 16px 0; }
 .mkt .load-more a, .mkt .load-more button { padding: 12px 24px; border-radius: 999px; background: rgba(255,255,255,0.04); border: 1px solid var(--color-divider); font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--color-text-primary); letter-spacing: 0.06em; display: inline-flex; align-items: center; gap: 10px; transition: background .15s, border-color .15s; }
-.mkt .load-more a:hover, .mkt .load-more button:hover { background: rgba(34,211,238,0.1); border-color: rgba(34,211,238,0.35); color: var(--cyan-200); }
+.mkt .load-more a:hover, .mkt .load-more button:hover { background: rgba(var(--brand-a-rgb),0.1); border-color: rgba(var(--brand-a-rgb),0.35); color: var(--cyan-200); }
 .mkt .load-more .n { font-family: var(--font-mono); font-size: 11px; color: var(--color-text-3); margin-top: 8px; display: block; }
 
 /* ─── FOOTER ─── */
@@ -377,3 +445,90 @@ html[data-theme="neon"] .mkt .yn-tag.no  { color: var(--rose-300); text-shadow: 
   .mkt .page-stats { gap: 16px; }
   .mkt .pstat .v { font-size: 18px; }
 }
+
+/* ============================================================
+   MYTHIC / CALM / TERMINAL — additive page overrides (markets).
+   Classic & Neon never match these selectors (`:is()` lists only
+   the 3 new themes), so they stay pixel-identical. Only literals
+   that variables can't reach are re-stated here.
+   ============================================================ */
+
+/* (A) Dark-on-gradient label text → per-theme ink */
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .mkt .theme-switch button.on,
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .mkt .deposit-btn,
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .mkt .avatar {
+  color: var(--on-grad);
+}
+
+/* (B) Hardcoded cyan / indigo literals → brand tokens */
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .mkt .nav a.active {
+  background: rgba(var(--brand-a-rgb),0.10); border-color: rgba(var(--brand-a-rgb),0.22);
+}
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .mkt .balance-pill {
+  background: rgba(var(--brand-a-rgb),0.10); border-color: rgba(var(--brand-a-rgb),0.26);
+  box-shadow: 0 0 24px -8px rgba(var(--brand-a-rgb),0.5), inset 0 0 0 1px rgba(255,255,255,0.02);
+}
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .mkt .deposit-btn {
+  box-shadow: 0 8px 24px -6px rgba(var(--brand-a-rgb),0.5), inset 0 1px 0 rgba(255,255,255,0.4);
+}
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .mkt .featured {
+  background:
+    radial-gradient(80% 60% at 0% 0%, rgba(var(--brand-a-rgb),0.16), transparent 60%),
+    radial-gradient(60% 60% at 100% 100%, rgba(var(--brand-b-rgb),0.16), transparent 65%),
+    linear-gradient(180deg, var(--color-surface-2), var(--color-surface));
+  border-color: rgba(var(--brand-a-rgb),0.26);
+}
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .mkt .search:focus-within {
+  border-color: rgba(var(--brand-a-rgb),0.4);
+}
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .mkt .tabs a.on,
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .mkt .tabs button.on {
+  background: rgba(var(--brand-a-rgb),0.16);
+}
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .mkt .chip.on {
+  background: rgba(var(--brand-a-rgb),0.14); border-color: rgba(var(--brand-a-rgb),0.36);
+}
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .mkt .market:hover {
+  border-color: rgba(var(--brand-a-rgb),0.32);
+  background: linear-gradient(180deg, rgba(var(--brand-a-rgb),0.04), var(--color-surface));
+}
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .mkt .cat.crypto {
+  border-color: rgba(var(--brand-a-rgb),0.32); background: rgba(var(--brand-a-rgb),0.10);
+}
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .mkt .cat.politics {
+  background: rgba(var(--brand-b-rgb),0.10);
+}
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .mkt .load-more a:hover,
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .mkt .load-more button:hover {
+  background: rgba(var(--brand-a-rgb),0.1); border-color: rgba(var(--brand-a-rgb),0.35);
+}
+
+/* (C) CALM is a LIGHT theme — flip white-on-dark fills to ink, lighten chrome */
+html[data-theme="calm"] .mkt .topbar { background: rgba(245,241,232,0.82); }
+html[data-theme="calm"] .mkt .status-strip { background: rgba(245,241,232,0.5); }
+html[data-theme="calm"] .mkt .theme-switch,
+html[data-theme="calm"] .mkt .search,
+html[data-theme="calm"] .mkt .tabs { background: rgba(27,36,48,0.05); }
+html[data-theme="calm"] .mkt .bg-grid {
+  background-image:
+    linear-gradient(rgba(27,36,48,.04) 1px, transparent 0),
+    linear-gradient(90deg, rgba(27,36,48,.04) 1px, transparent 0);
+}
+html[data-theme="calm"] .mkt .bg-grain { opacity: .16; }
+html[data-theme="calm"] .mkt .icon-btn,
+html[data-theme="calm"] .mkt .chip,
+html[data-theme="calm"] .mkt .yn-row,
+html[data-theme="calm"] .mkt .ynbtn,
+html[data-theme="calm"] .mkt .section-h .n,
+html[data-theme="calm"] .mkt .search .kbd,
+html[data-theme="calm"] .mkt .load-more a,
+html[data-theme="calm"] .mkt .load-more button { background: rgba(27,36,48,0.035); }
+html[data-theme="calm"] .mkt .nav a:hover,
+html[data-theme="calm"] .mkt .icon-btn:hover,
+html[data-theme="calm"] .mkt .chip:hover,
+html[data-theme="calm"] .mkt .yn-row:hover { background: rgba(27,36,48,0.06); }
+html[data-theme="calm"] .mkt .probbar { background: rgba(27,36,48,0.10); }
+html[data-theme="calm"] .mkt .cat.sports   { color: #B45309; }
+html[data-theme="calm"] .mkt .cat.politics { color: #3730A3; }
+html[data-theme="calm"] .mkt .cat.tech     { color: #A21CAF; }
+html[data-theme="calm"] .mkt .cat.ent      { color: #BE123C; }

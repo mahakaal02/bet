@@ -31,16 +31,17 @@ export function SecureChatActions({ downloadUrl }: { downloadUrl: string }) {
   );
 }
 
-/* Theme switch — classic / neon. */
+/* Theme switch — classic / neon / mythic / calm / terminal. */
+type Theme = "classic" | "neon" | "mythic" | "calm" | "terminal";
 export function ThemeSwitch() {
-  const [theme, setTheme] = useState<"classic" | "neon">("classic");
+  const [theme, setTheme] = useState<Theme>("classic");
   useEffect(() => {
     const saved =
-      (localStorage.getItem("kalki-theme") as "classic" | "neon" | null) ?? "classic";
+      (localStorage.getItem("kalki-theme") as Theme | null) ?? "classic";
     document.documentElement.setAttribute("data-theme", saved);
     setTheme(saved);
   }, []);
-  function pick(t: "classic" | "neon") {
+  function pick(t: Theme) {
     document.documentElement.setAttribute("data-theme", t);
     localStorage.setItem("kalki-theme", t);
     setTheme(t);
@@ -55,6 +56,24 @@ export function ThemeSwitch() {
       <button className={theme === "neon" ? "on" : ""} onClick={() => pick("neon")} title="Neon" aria-label="Neon theme">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+        </svg>
+      </button>
+      <button className={theme === "mythic" ? "on" : ""} onClick={() => pick("mythic")} title="Mythic" aria-label="Mythic theme">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+        </svg>
+      </button>
+      <button className={theme === "calm" ? "on" : ""} onClick={() => pick("calm")} title="Calm" aria-label="Calm theme">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z" />
+          <path d="M2 21c0-3 1.85-5.36 5.08-6" />
+        </svg>
+      </button>
+      <button className={theme === "terminal" ? "on" : ""} onClick={() => pick("terminal")} title="Terminal" aria-label="Terminal theme">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="4 17 10 11 4 5" />
+          <line x1="12" y1="19" x2="20" y2="19" />
         </svg>
       </button>
     </div>
