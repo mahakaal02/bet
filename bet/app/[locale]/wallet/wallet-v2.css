@@ -29,7 +29,7 @@
   --indigo-500: oklch(58.5% .233 277.117);
   --indigo-400: oklch(67.3% .182 276.935);
   --grad-brand: linear-gradient(135deg, var(--cyan-400), var(--indigo-500));
-  --on-brand:   #050913; /* text on bright gradient controls — themed */
+  --on-grad:    #050913; /* text on bright gradient controls — themed */
 
   --emerald-300: oklch(84.5% .143 164.978);
   --emerald-500: oklch(69.6% .17 162.48);
@@ -52,6 +52,10 @@
   --brand-a-rgb: 34,211,238;
   --brand-b: #6366F1;
   --brand-b-rgb: 99,102,241;
+  --logo-a: #22D3EE;
+  --logo-a-rgb: 34,211,238;
+  --logo-b: #6366F1;
+  --logo-b-rgb: 99,102,241;
   --pos-rgb: 16,185,129;
   --neg-rgb: 244,63,94;
   --bg-mesh-1: rgba(var(--brand-a-rgb),.22);
@@ -85,7 +89,7 @@ html[data-theme="neon"] {
   --indigo-500: #FF2D95;
   --indigo-400: #FF66B2;
   --grad-brand: linear-gradient(135deg, #00F0FF 0%, #B14CFF 55%, #FF2D95 100%);
-  --on-brand:   #06002A; /* dark text harmonized with the neon gradient */
+  --on-grad:    #06002A; /* dark text harmonized with the neon gradient */
 
   --emerald-200: #E1FFA0;
   --emerald-300: #C4FF3D;
@@ -132,7 +136,7 @@ html[data-theme="neon"] .admin .admin-actions .primary,
 html[data-theme="neon"] .pack.featured .pack-buy,
 html[data-theme="neon"] .custom-buy,
 html[data-theme="neon"] .chat-btn {
-  color: var(--on-brand);
+  color: var(--on-grad);
   box-shadow: 0 0 24px rgba(0,240,255,0.55), 0 0 48px rgba(255,45,149,0.40), inset 0 1px 0 rgba(255,255,255,0.55);
 }
 html[data-theme="neon"] .balance-pill {
@@ -159,6 +163,68 @@ html[data-theme="neon"] .pack.featured {
 html[data-theme="neon"] .row-amt.pos { color: var(--emerald-300); text-shadow: 0 0 10px rgba(182,255,26,0.5); }
 html[data-theme="neon"] .row-amt.neg { color: var(--rose-300); text-shadow: 0 0 10px rgba(255,61,92,0.5); }
 
+/* ── MYTHIC THEME — warm gold/indigo, dark — data-theme="mythic" ── */
+html[data-theme="mythic"] {
+  --bg:#060512; --bg-2:#0A0820; --color-bg:#0C0A1C;
+  --color-surface:#15122E; --color-surface-2:#1F1A40;
+  --color-text-primary:#FBF3E4;
+  --color-text-2:rgba(251,243,228,0.74); --color-text-3:rgba(251,243,228,0.52); --color-text-4:rgba(251,243,228,0.34);
+  --color-divider:rgba(245,184,80,0.13); --color-divider-2:rgba(245,184,80,0.24);
+  --cyan-100:#FFF3DA; --cyan-200:#FBD98C; --cyan-300:#F7C45E; --cyan-400:#F2A93B; --cyan-500:#D98A2B;
+  --indigo-500:#E0682E; --indigo-400:#ED8347;
+  --grad-brand:linear-gradient(135deg,#F7C45E 0%,#F2A93B 45%,#E0682E 100%);
+  --amber-300:#F7C45E; --amber-400:#F2A93B;
+  --brand-a:#F2A93B; --brand-a-rgb:242,169,59; --brand-b:#E0682E; --brand-b-rgb:224,104,46;
+  --pos-rgb:16,185,129; --neg-rgb:244,63,94;
+  --bg-mesh-1:rgba(242,169,59,0.22); --bg-mesh-2:rgba(224,104,46,0.20); --bg-mesh-3:rgba(124,58,200,0.18);
+  --bg-stop-1:#060512; --bg-stop-2:#0A0820; --bg-stop-3:#060512;
+  --glow-text:0 0 14px rgba(242,169,59,0.45),0 0 36px rgba(224,104,46,0.28);
+  --glow-num:0 0 14px rgba(242,169,59,0.42),0 0 28px rgba(224,104,46,0.26);
+  --logo-a:#F2A93B; --logo-b:#E0682E; --logo-a-rgb:242,169,59; --logo-b-rgb:224,104,46;
+  --on-grad:#2A1606;
+}
+/* ── CALM THEME — light, teal/ink — data-theme="calm" ── */
+html[data-theme="calm"] {
+  --bg:#EFE9DD; --bg-2:#F4EFE6; --color-bg:#F5F1E8;
+  --color-surface:#FFFFFF; --color-surface-2:#FBF7EF;
+  --color-text-primary:#1B2430;
+  --color-text-2:rgba(27,36,48,0.74); --color-text-3:rgba(27,36,48,0.54); --color-text-4:rgba(27,36,48,0.36);
+  --color-divider:rgba(27,36,48,0.10); --color-divider-2:rgba(27,36,48,0.18);
+  --cyan-100:#D9F2EE; --cyan-200:#146B62; --cyan-300:#0F766E; --cyan-400:#0E7C72; --cyan-500:#0B5D55;
+  --indigo-500:#3730A3; --indigo-400:#4F46E5;
+  --grad-brand:linear-gradient(135deg,#14B8A6 0%,#0E7C72 50%,#0F5257 100%);
+  --emerald-300:#047857; --emerald-500:#059669; --rose-300:#BE123C; --rose-500:#E11D48;
+  --amber-300:#B45309; --amber-400:#D97706;
+  --brand-a:#0E7C72; --brand-a-rgb:14,124,114; --brand-b:#3730A3; --brand-b-rgb:55,48,163;
+  --pos-rgb:4,120,87; --neg-rgb:190,18,60;
+  --bg-mesh-1:rgba(20,184,166,0.10); --bg-mesh-2:rgba(245,158,11,0.07); --bg-mesh-3:rgba(99,102,241,0.06);
+  --bg-stop-1:#F2ECE0; --bg-stop-2:#F5F1E8; --bg-stop-3:#EFE9DD;
+  --glow-text:none; --glow-num:none;
+  --logo-a:#0E7C72; --logo-b:#3730A3; --logo-a-rgb:14,124,114; --logo-b-rgb:55,48,163;
+  --on-grad:#FFFFFF;
+}
+/* ── TERMINAL THEME — black + amber/green — data-theme="terminal" ── */
+html[data-theme="terminal"] {
+  --bg:#000000; --bg-2:#050505; --color-bg:#050505;
+  --color-surface:#0C0C0E; --color-surface-2:#141417;
+  --color-text-primary:#EAEAE0;
+  --color-text-2:rgba(234,234,224,0.72); --color-text-3:rgba(234,234,224,0.50); --color-text-4:rgba(234,234,224,0.32);
+  --color-divider:rgba(255,176,0,0.12); --color-divider-2:rgba(255,176,0,0.24);
+  --cyan-100:#FFE9B0; --cyan-200:#FFCF66; --cyan-300:#FFB000; --cyan-400:#FFB000; --cyan-500:#CC8A00;
+  --indigo-500:#E68A00; --indigo-400:#FFA733;
+  --grad-brand:linear-gradient(135deg,#FFC233 0%,#FFB000 55%,#E68A00 100%);
+  --emerald-300:#00E676; --emerald-500:#00C853; --rose-300:#FF5252; --rose-500:#FF1744;
+  --amber-300:#FFB000; --amber-400:#FFC233;
+  --brand-a:#FFB000; --brand-a-rgb:255,176,0; --brand-b:#00E676; --brand-b-rgb:0,230,118;
+  --pos-rgb:0,230,118; --neg-rgb:255,82,82;
+  --bg-mesh-1:rgba(255,176,0,0.10); --bg-mesh-2:rgba(0,230,118,0.07); --bg-mesh-3:rgba(255,176,0,0.05);
+  --bg-stop-1:#000000; --bg-stop-2:#050505; --bg-stop-3:#000000;
+  --glow-text:0 0 10px rgba(255,176,0,0.40); --glow-num:0 0 12px rgba(255,176,0,0.35);
+  --radius-sm:3px; --radius:4px; --radius-lg:5px; --radius-xl:6px;
+  --logo-a:#FFB000; --logo-b:#00E676; --logo-a-rgb:255,176,0; --logo-b-rgb:0,230,118;
+  --on-grad:#1A1200;
+}
+
 /* ── page root (replaces the design's html/body base rules) ── */
 .wlt {
   background: var(--color-bg);
@@ -179,7 +245,7 @@ html[data-theme="neon"] .row-amt.neg { color: var(--rose-300); text-shadow: 0 0 
 .theme-switch { display: inline-flex; padding: 3px; border-radius: 999px; background: rgba(0,0,0,0.3); border: 1px solid var(--color-divider); }
 .theme-switch button { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; color: var(--color-text-3); transition: background .15s, color .15s; }
 .theme-switch button:hover { color: var(--color-text-primary); }
-.theme-switch button.on { background: var(--grad-brand); color: var(--on-brand); box-shadow: 0 0 14px -2px rgba(var(--brand-a-rgb), 0.6); }
+.theme-switch button.on { background: var(--grad-brand); color: var(--on-grad); box-shadow: 0 0 14px -2px rgba(var(--brand-a-rgb), 0.6); }
 
 /* background */
 .bg-stack { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
@@ -220,12 +286,12 @@ html[data-theme="neon"] .row-amt.neg { color: var(--rose-300); text-shadow: 0 0 
 .balance-pill { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px 7px 10px; border-radius: 999px; background: rgba(var(--brand-a-rgb),0.10); border: 1px solid rgba(var(--brand-a-rgb),0.26); font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; color: var(--cyan-200); box-shadow: 0 0 24px -8px rgba(var(--brand-a-rgb),0.5), inset 0 0 0 1px rgba(255,255,255,0.02); }
 .balance-pill::before { content:''; width: 6px; height: 6px; border-radius: 50%; background: var(--cyan-400); box-shadow: 0 0 10px var(--cyan-400); }
 .balance-pill .lbl { color: var(--color-text-3); font-weight: 500; margin-right: -2px; }
-.deposit-btn { padding: 8px 14px; border-radius: 999px; background: var(--grad-brand); color: var(--on-brand); font-size: 13px; font-weight: 700; letter-spacing: -0.01em; box-shadow: 0 8px 24px -6px rgba(var(--brand-a-rgb),0.5), inset 0 1px 0 rgba(255,255,255,0.4); transition: transform .12s, box-shadow .12s; }
+.deposit-btn { padding: 8px 14px; border-radius: 999px; background: var(--grad-brand); color: var(--on-grad); font-size: 13px; font-weight: 700; letter-spacing: -0.01em; box-shadow: 0 8px 24px -6px rgba(var(--brand-a-rgb),0.5), inset 0 1px 0 rgba(255,255,255,0.4); transition: transform .12s, box-shadow .12s; }
 .deposit-btn:hover { transform: translateY(-1px); box-shadow: 0 12px 28px -6px rgba(var(--brand-a-rgb),0.6), inset 0 1px 0 rgba(255,255,255,0.5); }
 .icon-btn { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.04); border: 1px solid var(--color-divider); display: grid; place-items: center; position: relative; transition: background .15s, border-color .15s; }
 .icon-btn:hover { background: rgba(255,255,255,0.08); border-color: var(--color-divider-2); }
 .icon-btn .dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--rose-500); box-shadow: 0 0 0 2px var(--color-bg), 0 0 10px var(--rose-500); }
-.avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--grad-brand); display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: 13px; color: var(--on-brand); border: 1px solid rgba(255,255,255,0.18); }
+.avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--grad-brand); display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: 13px; color: var(--on-grad); border: 1px solid rgba(255,255,255,0.18); }
 
 /* status strip */
 .status-strip { position: relative; z-index: 1; border-bottom: 1px solid var(--color-divider); background: rgba(5,6,8,0.4); }
@@ -280,7 +346,7 @@ html[data-theme="neon"] .row-amt.neg { color: var(--rose-300); text-shadow: 0 0 
 .balance-sub .chip::before { content:''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .balance-actions { margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--color-divider); display: flex; gap: 8px; flex-wrap: wrap; }
 .balance-actions .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 10px; font-size: 13.5px; font-weight: 600; transition: transform .12s, background .15s, border-color .15s; }
-.balance-actions .btn.primary { background: var(--grad-brand); color: var(--on-brand); box-shadow: 0 10px 24px -8px rgba(var(--brand-a-rgb),0.5), inset 0 1px 0 rgba(255,255,255,0.4); }
+.balance-actions .btn.primary { background: var(--grad-brand); color: var(--on-grad); box-shadow: 0 10px 24px -8px rgba(var(--brand-a-rgb),0.5), inset 0 1px 0 rgba(255,255,255,0.4); }
 .balance-actions .btn.primary:hover { transform: translateY(-1px); }
 .balance-actions .btn.ghost { background: rgba(255,255,255,0.04); border: 1px solid var(--color-divider); color: var(--color-text-primary); }
 .balance-actions .btn.ghost:hover { background: rgba(255,255,255,0.08); border-color: var(--color-divider-2); }
@@ -303,8 +369,8 @@ html[data-theme="neon"] .row-amt.neg { color: var(--rose-300); text-shadow: 0 0 
 .pack-rate { font-family: var(--font-mono); font-size: 11px; color: var(--color-text-3); }
 .pack-buy { margin-top: auto; padding: 9px 12px; border-radius: 8px; background: rgba(255,255,255,0.04); border: 1px solid var(--color-divider); font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; color: var(--color-text-primary); display: flex; align-items: center; justify-content: space-between; transition: background .15s, border-color .15s; }
 .pack:hover .pack-buy { background: rgba(var(--brand-a-rgb),0.12); border-color: rgba(var(--brand-a-rgb),0.35); color: var(--cyan-200); }
-.pack.featured .pack-buy { background: var(--grad-brand); color: var(--on-brand); border-color: transparent; box-shadow: 0 8px 18px -6px rgba(var(--brand-a-rgb),0.45); }
-.pack.featured:hover .pack-buy { color: var(--on-brand); }
+.pack.featured .pack-buy { background: var(--grad-brand); color: var(--on-grad); border-color: transparent; box-shadow: 0 8px 18px -6px rgba(var(--brand-a-rgb),0.45); }
+.pack.featured:hover .pack-buy { color: var(--on-grad); }
 /* custom-amount card — login-card surface, two coins↔fiat boxes + buy */
 .custom-wrap { padding: 20px; }
 .custom-card {
@@ -337,7 +403,7 @@ html[data-theme="neon"] .row-amt.neg { color: var(--rose-300); text-shadow: 0 0 
 .custom-arrow { text-align: center; color: var(--color-text-4); font-size: 14px; margin: -2px 0; }
 .custom-buy {
   margin-top: 6px; padding: 13px 16px; border-radius: 12px;
-  background: var(--grad-brand); color: var(--on-brand);
+  background: var(--grad-brand); color: var(--on-grad);
   font-size: 14px; font-weight: 700;
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   box-shadow: 0 12px 28px -10px rgba(var(--brand-a-rgb),0.5), inset 0 1px 0 rgba(255,255,255,0.4);
@@ -365,7 +431,7 @@ html[data-theme="neon"] .row-amt.neg { color: var(--rose-300); text-shadow: 0 0 
 .stepper { margin: 18px 0 16px; display: flex; gap: 6px; flex-wrap: wrap; }
 .stepper a, .stepper button { padding: 6px 10px; border-radius: 8px; font-family: var(--font-mono); font-size: 11px; font-weight: 600; background: rgba(255,255,255,0.04); border: 1px solid var(--color-divider); color: var(--color-text-2); letter-spacing: 0.04em; transition: background .15s, border-color .15s, color .15s; }
 .stepper a:hover, .stepper button:hover { background: rgba(var(--brand-a-rgb),0.1); border-color: rgba(var(--brand-a-rgb),0.3); color: var(--cyan-200); }
-.withdraw-cta { margin-top: auto; padding: 12px 16px; border-radius: 10px; background: var(--grad-brand); color: var(--on-brand); font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 10px 24px -8px rgba(var(--brand-a-rgb),0.45), inset 0 1px 0 rgba(255,255,255,0.4); transition: transform .12s; }
+.withdraw-cta { margin-top: auto; padding: 12px 16px; border-radius: 10px; background: var(--grad-brand); color: var(--on-grad); font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 10px 24px -8px rgba(var(--brand-a-rgb),0.45), inset 0 1px 0 rgba(255,255,255,0.4); transition: transform .12s; }
 .withdraw-cta:hover { transform: translateY(-1px); }
 .withdraw-cta.disabled { background: rgba(255,255,255,0.06); color: var(--color-text-3); box-shadow: none; cursor: not-allowed; pointer-events: none; }
 .withdraw-note { font-size: 12px; color: var(--color-text-3); line-height: 1.5; display: flex; gap: 8px; align-items: flex-start; }
@@ -422,12 +488,12 @@ html[data-theme="neon"] .row-amt.neg { color: var(--rose-300); text-shadow: 0 0 
 .stat .delta.pos { color: var(--emerald-300); }
 .stat .delta.neg { color: var(--rose-300); }
 .admin { background: radial-gradient(80% 60% at 0% 0%, rgba(var(--brand-a-rgb),0.10), transparent 60%), var(--color-surface); border: 1px solid rgba(var(--brand-a-rgb),0.22); border-radius: var(--radius-lg); padding: 20px; display: flex; flex-direction: column; gap: 14px; position: relative; overflow: hidden; }
-.admin .icon-wrap { width: 38px; height: 38px; border-radius: 10px; background: var(--grad-brand); display: grid; place-items: center; color: var(--on-brand); box-shadow: 0 8px 18px -6px rgba(var(--brand-a-rgb),0.5); }
+.admin .icon-wrap { width: 38px; height: 38px; border-radius: 10px; background: var(--grad-brand); display: grid; place-items: center; color: var(--on-grad); box-shadow: 0 8px 18px -6px rgba(var(--brand-a-rgb),0.5); }
 .admin h3 { font-family: var(--font-display); font-weight: 600; font-size: 16px; letter-spacing: -0.02em; }
 .admin p { font-size: 13px; color: var(--color-text-2); line-height: 1.55; }
 .admin .admin-actions { display: flex; gap: 8px; }
 .admin .admin-actions a { flex: 1; padding: 9px 12px; border-radius: 10px; font-family: var(--font-sans); font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: transform .12s, background .15s; }
-.admin .admin-actions .primary { background: var(--grad-brand); color: var(--on-brand); box-shadow: 0 8px 18px -6px rgba(var(--brand-a-rgb),0.45); }
+.admin .admin-actions .primary { background: var(--grad-brand); color: var(--on-grad); box-shadow: 0 8px 18px -6px rgba(var(--brand-a-rgb),0.45); }
 .admin .admin-actions .primary:hover { transform: translateY(-1px); }
 .admin .admin-actions .ghost { background: rgba(255,255,255,0.04); border: 1px solid var(--color-divider); color: var(--color-text-primary); }
 .admin .admin-actions .ghost:hover { background: rgba(255,255,255,0.08); }
@@ -436,7 +502,7 @@ html[data-theme="neon"] .row-amt.neg { color: var(--rose-300); text-shadow: 0 0 
   width: 100%;
   display: inline-flex; align-items: center; justify-content: center; gap: 10px;
   padding: 12px 16px; border-radius: 12px;
-  background: var(--grad-brand); color: var(--on-brand);
+  background: var(--grad-brand); color: var(--on-grad);
   font-family: var(--font-sans); font-size: 14px; font-weight: 700; letter-spacing: -0.01em;
   box-shadow: 0 12px 28px -10px rgba(var(--brand-a-rgb),0.5), inset 0 1px 0 rgba(255,255,255,0.4);
   transition: transform .12s, box-shadow .12s;
@@ -467,3 +533,64 @@ html[data-theme="neon"] .row-amt.neg { color: var(--rose-300); text-shadow: 0 0 
   .balance-card { padding: 22px; }
   .balance-num { font-size: 64px; }
 }
+
+/* ════════════════════════════════════════════════════════════
+   mythic / calm / terminal — cosmetic overrides for HARDCODED
+   literals (cyan / indigo / dark-on-gradient / white fills) that
+   CSS vars don't reach. The :is() guard matches ONLY the three new
+   themes, so Classic (:root) and Neon stay pixel-identical.
+   ════════════════════════════════════════════════════════════ */
+
+/* (A) dark-on-gradient label text → per-theme ink (calm = white) */
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) :is(
+  .theme-switch button.on, .deposit-btn, .avatar,
+  .balance-actions .btn.primary, .pack.featured .pack-buy, .pack.featured:hover .pack-buy,
+  .custom-buy, .withdraw-cta, .admin .icon-wrap, .admin .admin-actions .primary, .chat-btn
+) { color: var(--on-grad); }
+
+/* (B) hardcoded brand-cyan rgba(34,211,238,a) → brand-a per theme */
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) :is(.nav a.active, .method-icon, .row-desc .sub .pill.cyan) {
+  background: rgba(var(--brand-a-rgb),0.10); border-color: rgba(var(--brand-a-rgb),0.22);
+}
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) :is(.balance-sub .chip.cyan, .row-icon.cyan) {
+  background: rgba(var(--brand-a-rgb),0.10); border-color: rgba(var(--brand-a-rgb),0.28);
+}
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .balance-pill {
+  background: rgba(var(--brand-a-rgb),0.10); border-color: rgba(var(--brand-a-rgb),0.26);
+  box-shadow: 0 0 24px -8px rgba(var(--brand-a-rgb),0.5), inset 0 0 0 1px rgba(255,255,255,0.02);
+}
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .balance-toggle button.on { background: rgba(var(--brand-a-rgb),0.16); }
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .pack-tag { background: rgba(var(--brand-a-rgb),0.18); border-color: rgba(var(--brand-a-rgb),0.35); }
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .pack:hover { border-color: rgba(var(--brand-a-rgb),0.4); background: linear-gradient(180deg, rgba(var(--brand-a-rgb),0.06), transparent); }
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .pack:hover .pack-buy { background: rgba(var(--brand-a-rgb),0.12); border-color: rgba(var(--brand-a-rgb),0.35); }
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .pack.featured { border-color: rgba(var(--brand-a-rgb),0.45); background: linear-gradient(180deg, rgba(var(--brand-a-rgb),0.08), rgba(var(--brand-b-rgb),0.04)); box-shadow: 0 14px 36px -16px rgba(var(--brand-a-rgb),0.5); }
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .balance-card { background: radial-gradient(80% 60% at 0% 0%, rgba(var(--brand-a-rgb),0.14), transparent 60%), radial-gradient(60% 60% at 100% 100%, rgba(var(--brand-b-rgb),0.16), transparent 65%), linear-gradient(180deg, var(--color-surface-2), var(--color-surface)); border-color: rgba(var(--brand-a-rgb),0.24); }
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .custom-card { border-color: rgba(var(--brand-a-rgb),0.24); background: radial-gradient(80% 60% at 0% 0%, rgba(var(--brand-a-rgb),0.10), transparent 60%), linear-gradient(180deg, var(--color-surface-2), var(--color-surface)); box-shadow: 0 18px 48px -24px rgba(var(--brand-a-rgb),0.5); }
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .custom-input:focus-within { border-color: rgba(var(--brand-a-rgb),0.5); box-shadow: 0 0 0 3px rgba(var(--brand-a-rgb),0.12); }
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) :is(.stepper a:hover, .stepper button:hover) { background: rgba(var(--brand-a-rgb),0.1); border-color: rgba(var(--brand-a-rgb),0.3); }
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .admin { background: radial-gradient(80% 60% at 0% 0%, rgba(var(--brand-a-rgb),0.10), transparent 60%), var(--color-surface); border-color: rgba(var(--brand-a-rgb),0.22); }
+
+/* (B) brand-cyan glow shadows on gradient buttons → brand-a */
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) :is(.deposit-btn, .balance-actions .btn.primary, .custom-buy, .withdraw-cta, .chat-btn) {
+  box-shadow: 0 10px 26px -8px rgba(var(--brand-a-rgb),0.5), inset 0 1px 0 rgba(255,255,255,0.4);
+}
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .deposit-btn:hover { box-shadow: 0 12px 28px -6px rgba(var(--brand-a-rgb),0.6), inset 0 1px 0 rgba(255,255,255,0.5); }
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .chat-btn:hover { box-shadow: 0 16px 34px -10px rgba(var(--brand-a-rgb),0.6), inset 0 1px 0 rgba(255,255,255,0.5); }
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) :is(.admin .icon-wrap, .admin .admin-actions .primary, .pack.featured .pack-buy) { box-shadow: 0 8px 18px -6px rgba(var(--brand-a-rgb),0.48); }
+
+/* (B) indigo "bought" / .pill.indigo badges rgba(99,102,241,a) → brand-b */
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .pack-tag.bought { background: rgba(var(--brand-b-rgb),0.18); border-color: rgba(var(--brand-b-rgb),0.35); }
+:is(html[data-theme="mythic"],html[data-theme="calm"],html[data-theme="terminal"]) .row-desc .sub .pill.indigo { background: rgba(var(--brand-b-rgb),0.12); border-color: rgba(var(--brand-b-rgb),0.28); }
+
+/* (C) CALM = light theme — flip dark/white chrome fills to ink-on-light */
+html[data-theme="calm"] .topbar { background: rgba(245,241,232,0.82); }
+html[data-theme="calm"] .theme-switch { background: rgba(27,36,48,0.05); }
+html[data-theme="calm"] .balance-toggle { background: rgba(27,36,48,0.05); }
+html[data-theme="calm"] .custom-input { background: rgba(27,36,48,0.04); }
+html[data-theme="calm"] :is(.packs-foot, .ledger-foot) { background: rgba(27,36,48,0.03); }
+html[data-theme="calm"] .bg-grid { background-image: linear-gradient(rgba(27,36,48,.04) 1px, transparent 0), linear-gradient(90deg, rgba(27,36,48,.04) 1px, transparent 0); }
+html[data-theme="calm"] .bg-grain { opacity: .16; }
+html[data-theme="calm"] :is(.icon-btn, .balance-actions .btn.ghost, .pack-buy, .packs-foot .pay span, .method, .stat, .admin .admin-actions .ghost) { background: rgba(27,36,48,0.035); }
+html[data-theme="calm"] .pack { background: linear-gradient(180deg, rgba(27,36,48,0.025), transparent); }
+html[data-theme="calm"] :is(.nav a:hover, .icon-btn:hover, .method:hover, .balance-actions .btn.ghost:hover, .admin .admin-actions .ghost:hover, .row:hover) { background: rgba(27,36,48,0.06); }
+html[data-theme="calm"] :is(.pack-tag.bought, .row-desc .sub .pill.indigo) { color: var(--indigo-500); }
