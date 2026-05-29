@@ -207,7 +207,7 @@ backend:
       limits: {cpu: 500m, memory: 512Mi}
 bet:
   image: kalki-bet
-  imageTag: 20260529T094658Z-65d1100 # {"$imagepolicy": "flux-system:kalki-bet:tag"}
+  imageTag: 20260529T105103Z-8df041d # {"$imagepolicy": "flux-system:kalki-bet:tag"}
   port: 3100
   replicas: 1
   prismaMigrate: true
@@ -241,7 +241,7 @@ bet:
     limits: {cpu: 1000m, memory: 1Gi}
 auctions:
   image: kalki-auctions
-  imageTag: 20260528T211716Z-4aa6e94 # {"$imagepolicy": "flux-system:kalki-auctions:tag"}
+  imageTag: 20260529T105104Z-8df041d # {"$imagepolicy": "flux-system:kalki-auctions:tag"}
   port: 3200
   replicas: 1
   resources:
