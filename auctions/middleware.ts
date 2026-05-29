@@ -19,13 +19,19 @@ import {
 } from "@/lib/i18n";
 
 /**
- * Auctions middleware (edge runtime) — two responsibilities:
+ * Auctions (hub) middleware (edge runtime) — three responsibilities:
  *
  *   1. SSO bridge (existing): `?token=…` → set the auctions session
  *      cookie + strip the param from the URL. Mirrors how the Android
  *      shell and Kalki Hub hand off the user's JWT to this webview.
  *
- *   2. i18n routing (PR-AUCTIONS-I18N): inject the appropriate locale
+ *   2. Auth gate (PR-AUTH-WALL): only the login + auth-recovery +
+ *      public-share surfaces are reachable without a session cookie.
+ *      Everything else (the hub tile picker, auction detail pages,
+ *      the profile/wallet/notifications screens, etc.) requires the
+ *      user to be signed in. No session ⇒ bounce to /{locale}/login.
+ *
+ *   3. i18n routing (PR-AUCTIONS-I18N): inject the appropriate locale
  *      segment into every user-facing URL so the SEO tree is
  *      `/{en|pt|es|fr}/...`.
  *
@@ -95,6 +101,30 @@ export function middleware(req: NextRequest) {
 
   /* ----- i18n routing (PR-AUCTIONS-I18N) ----- */
   const { locale: pathLocale, rest } = splitLocaleFromPath(req.nextUrl.pathname);
+
+  /* ----- auth gate (PR-AUTH-WALL) ----- */
+  // The login + auth-recovery + public-share surfaces are the only
+  // anonymous-accessible routes. Everything else requires the
+  // `kalki_token` session cookie — set either by /api/auth/login or
+  // by the SSO bridge above. Without it, redirect to the locale's
+  // login page (or default-locale login if the URL was un-prefixed).
+  //
+  // The matcher already excludes /_next, /api, and static assets,
+  // so we only need to evaluate page-level routes here. /api/auth/*
+  // (NextAuth-style callbacks served by route handlers) and
+  // /api/auth/login (credentials proxy) bypass this gate naturally.
+  const PUBLIC_REST_PREFIXES = ["/login", "/auth", "/share"];
+  const restIsPublic = PUBLIC_REST_PREFIXES.some(
+    (p) => rest === p || rest.startsWith(`${p}/`),
+  );
+  if (!restIsPublic) {
+    const hasSession = !!req.cookies.get(SESSION_COOKIE)?.value;
+    if (!hasSession) {
+      const loginLocale = pathLocale ?? DEFAULT_LOCALE;
+      const loginUrl = new URL(`/${loginLocale}/login`, req.url);
+      return NextResponse.redirect(loginUrl);
+    }
+  }
 
   if (pathLocale) {
     // URL already has a locale prefix. Trust it as the user's intent
