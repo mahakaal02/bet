@@ -149,7 +149,7 @@ export default async function ProfilePage({
             <div className="panel-head">
               <div className="panel-title">{tr("profile.wallet")}</div>
             </div>
-            <div className="big-num">{fmtCoins(wallet?.balance ?? 0)}</div>
+            <div className="big-num">{fmtCoins(wallet?.balance ?? 0, locale)}</div>
             <p className="panel-sub" style={{ marginTop: 6 }}>
               {tr("profile.walletCoins")}
             </p>

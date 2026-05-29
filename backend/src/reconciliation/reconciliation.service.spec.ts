@@ -118,9 +118,13 @@ function makeMocks(opts: {
         void distinct;
         return recentUsers.map((userId) => ({ userId }));
       }),
-      aggregate: jest.fn(async ({ where }: any) => ({
-        _sum: { delta: txByUser[where.userId] ?? 0 },
-      })),
+      // Batched local-sum path: one groupBy for all requested users.
+      groupBy: jest.fn(async ({ where }: any) => {
+        const ids: string[] = where?.userId?.in ?? Object.keys(txByUser);
+        return ids
+          .filter((userId) => userId in txByUser)
+          .map((userId) => ({ userId, _sum: { delta: txByUser[userId] ?? 0 } }));
+      }),
     },
   };
 

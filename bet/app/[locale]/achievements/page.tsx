@@ -138,7 +138,7 @@ export default async function AchievementsPage({
                 <div key={a.id} className="rail-tile">
                   <div className="ic">{a.icon}</div>
                   <div className="nm">{a.title}</div>
-                  <div className="tm">{timeAgo(a.unlockedAt)}</div>
+                  <div className="tm">{timeAgo(a.unlockedAt, locale)}</div>
                 </div>
               ))}
             </div>
@@ -152,7 +152,7 @@ export default async function AchievementsPage({
             </div>
             <span className="panel-meta">
               {tr("achievements.unlocksAcrossUsers", {
-                count: fmtCoins(totalUnlocked),
+                count: fmtCoins(totalUnlocked, locale),
               })}
             </span>
           </div>
@@ -185,14 +185,14 @@ export default async function AchievementsPage({
                     <div className="ach-foot">
                       <span>
                         {tr("achievements.reward", {
-                          coins: fmtCoins(a.rewardCoins),
+                          coins: fmtCoins(a.rewardCoins, locale),
                           xp: a.rewardXp,
                         })}
                       </span>
                       <span>
                         {a.earnedCount > 0
                           ? tr("achievements.earned", {
-                              count: fmtCoins(a.earnedCount),
+                              count: fmtCoins(a.earnedCount, locale),
                             })
                           : tr("achievements.beFirst")}
                       </span>
@@ -203,7 +203,7 @@ export default async function AchievementsPage({
                         style={{ color: "var(--cyan-300)" }}
                       >
                         {tr("achievements.unlockedTime", {
-                          time: timeAgo(a.unlockedAt),
+                          time: timeAgo(a.unlockedAt, locale),
                         })}
                       </div>
                     )}

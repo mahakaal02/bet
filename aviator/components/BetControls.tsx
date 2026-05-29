@@ -446,9 +446,7 @@ export default function BetControls() {
             cashedOut={cashedOut}
             t={t}
             // PR-AVIATOR-PAYOUT-CAP — values for the 'capped' chip.
-            // cashedOutAt holds the multiplier at the time the cap
-            // fired; originalPayout (optional) lets us render the
-            // "could have won" line.
+            // cashedOutAt holds the multiplier at the time the cap fired.
             cappedPayout={
               currentBet?.cappedByPayoutCap
                 ? Math.floor(
@@ -457,7 +455,6 @@ export default function BetControls() {
                   )
                 : null
             }
-            cappedOriginalPayout={currentBet?.originalPayout ?? null}
             cappedMultiplier={
               currentBet?.cappedByPayoutCap
                 ? currentBet.cashedOutAt ?? null
@@ -658,7 +655,6 @@ function HeroButton({
   currentBetAmount,
   cashedOut,
   cappedPayout,
-  cappedOriginalPayout,
   cappedMultiplier,
   t,
 }: {
@@ -672,11 +668,10 @@ function HeroButton({
   currentBetAmount: number;
   cashedOut: boolean;
   // PR-AVIATOR-PAYOUT-CAP — pre-computed values for the 'capped' chip.
-  // All three may be null when the cap didn't fire (e.g. when this
-  // button is rendered in any other state, or for old servers that
-  // don't send the cap flag).
+  // Both may be null when the cap didn't fire (e.g. when this button
+  // is rendered in any other state, or for old servers that don't send
+  // the cap flag).
   cappedPayout: number | null;
-  cappedOriginalPayout: number | null;
   cappedMultiplier: number | null;
   t: TranslateFunction;
 }) {
@@ -827,11 +822,6 @@ function HeroButton({
       actionable = false;
       break;
   }
-
-  // Suppress unused-var warning if `cappedOriginalPayout` not
-  // referenced above — kept in the prop list for future "could
-  // have won X" expansion without re-plumbing the parent.
-  void cappedOriginalPayout;
 
   return (
     <button

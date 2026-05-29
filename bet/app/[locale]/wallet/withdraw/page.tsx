@@ -122,7 +122,7 @@ export default async function WithdrawPage({
 
           <div className="topbar-right">
             <span className="balance-pill">
-              <span className="lbl">BAL</span> {fmtCoins(balance)}
+              <span className="lbl">BAL</span> {fmtCoins(balance, locale)}
             </span>
             <ThemeSwitch />
             <Link className="deposit-btn" href={lp("/wallet")}>
@@ -169,12 +169,12 @@ export default async function WithdrawPage({
                 <em>{tr("withdraw.heading")}</em>
               </h1>
               <p className="page-sub">
-                {tr("withdraw.subtext", { amount: fmtCoins(MIN_WITHDRAW_COINS) })}
+                {tr("withdraw.subtext", { amount: fmtCoins(MIN_WITHDRAW_COINS, locale) })}
               </p>
               {estValue && (
                 <p className="wd-est">
                   {tr("withdraw.estValue", {
-                    coins: fmtCoins(balance),
+                    coins: fmtCoins(balance, locale),
                     value: estValue,
                   })}
                 </p>
@@ -191,7 +191,7 @@ export default async function WithdrawPage({
                   <div className="card-title">{tr("withdraw.submitRequest")}</div>
                 </div>
                 <span className="row-time" style={{ fontSize: 11 }}>
-                  {tr("withdraw.available", { amount: fmtCoins(balance) })}
+                  {tr("withdraw.available", { amount: fmtCoins(balance, locale) })}
                 </span>
               </div>
 
@@ -204,7 +204,7 @@ export default async function WithdrawPage({
                   </svg>
                   <span>
                     {tr("withdraw.emailThresholdNote", {
-                      amount: fmtCoins(WITHDRAW_EMAIL_VERIFY_THRESHOLD_COINS),
+                      amount: fmtCoins(WITHDRAW_EMAIL_VERIFY_THRESHOLD_COINS, locale),
                     })}{" "}
                     <Link href={lp("/profile")}>{tr("profile.heading")}</Link>
                   </span>
@@ -244,11 +244,11 @@ export default async function WithdrawPage({
                     <div className="wd-item" key={w.id}>
                       <div style={{ minWidth: 0 }}>
                         <span className="wd-amt">
-                          {fmtCoins(w.amountCoins)} {tr("wallet.coins")}
+                          {fmtCoins(w.amountCoins, locale)} {tr("wallet.coins")}
                         </span>
                         <div className="wd-meta">
-                          {w.payoutMethod} · {timeAgo(w.createdAt)}
-                          {w.decidedAt && ` · ${timeAgo(w.decidedAt)}`}
+                          {w.payoutMethod} · {timeAgo(w.createdAt, locale)}
+                          {w.decidedAt && ` · ${timeAgo(w.decidedAt, locale)}`}
                         </div>
                         {w.decisionNote && (
                           <div className="wd-quote">“{w.decisionNote}”</div>

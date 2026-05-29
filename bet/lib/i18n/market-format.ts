@@ -18,18 +18,22 @@
  * imported by both server and client components and bundling
  * `@prisma/client` into the browser bundle would explode the wire
  * size. Use the Prisma enum *types* via `import type` only.
+ *
+ * Scope note: only the enum fields with live call sites are formatted
+ * here (category + outcome). Status / trade-action / sort / filter
+ * formatters were removed as dead exports — re-add the matching
+ * `<FIELD>_KEYS` map + a one-line `t()` wrapper when a UI actually
+ * needs to render that field.
  */
 
 import type {
   MarketCategory as PrismaMarketCategory,
-  MarketStatus as PrismaMarketStatus,
   Outcome as PrismaOutcome,
 } from "@prisma/client";
 import { t, type Locale } from "./index";
 
 /** Re-export Prisma enum types so call sites import from one place. */
 export type MarketCategory = PrismaMarketCategory;
-export type MarketStatus = PrismaMarketStatus;
 export type Outcome = PrismaOutcome;
 
 /* ============================================================
@@ -64,24 +68,6 @@ export function listCategories(
 }
 
 /* ============================================================
-   Status — OPEN / CLOSED / RESOLVED / CANCELLED
-   ============================================================ */
-
-const STATUS_KEYS: Record<MarketStatus, string> = {
-  OPEN: "market.statusOpen",
-  CLOSED: "market.statusClosed",
-  RESOLVED: "market.statusResolved",
-  CANCELLED: "market.statusCancelled",
-};
-
-export function formatStatus(
-  status: MarketStatus,
-  locale: Locale,
-): string {
-  return t(STATUS_KEYS[status], locale);
-}
-
-/* ============================================================
    Outcome — YES / NO
    ============================================================ */
 
@@ -107,81 +93,4 @@ export function formatResolvedAs(
   return t("market.resolvedOutcome", locale, {
     outcome: formatOutcome(resolvedAs, locale),
   });
-}
-
-/* ============================================================
-   Action text — buttons + CTA labels
-   ============================================================ */
-
-export type TradeAction = "BUY" | "SELL";
-
-const TRADE_ACTION_KEYS: Record<TradeAction, string> = {
-  BUY: "market.buy",
-  SELL: "market.sell",
-};
-
-export function formatTradeAction(
-  action: TradeAction,
-  locale: Locale,
-): string {
-  return t(TRADE_ACTION_KEYS[action], locale);
-}
-
-/** Combined "Buy YES" / "Sell NO" CTA label. */
-export function formatTradeActionWithOutcome(
-  action: TradeAction,
-  outcome: Outcome,
-  locale: Locale,
-): string {
-  const outcomeLabel = formatOutcome(outcome, locale);
-  return action === "BUY"
-    ? t("market.buyOutcome", locale, { outcome: outcomeLabel })
-    : t("market.sellOutcome", locale, { outcome: outcomeLabel });
-}
-
-/* ============================================================
-   Sort / filter options — pre-computed lists for picker UIs
-   ============================================================ */
-
-export type MarketSort = "trending" | "volume" | "ending" | "newest";
-
-const SORT_KEYS: Record<MarketSort, string> = {
-  trending: "market.sortTrending",
-  volume: "market.sortVolume",
-  ending: "market.sortEnding",
-  newest: "market.sortNewest",
-};
-
-export function formatSort(sort: MarketSort, locale: Locale): string {
-  return t(SORT_KEYS[sort], locale);
-}
-
-export function listSorts(
-  locale: Locale,
-): { value: MarketSort; label: string }[] {
-  return (Object.keys(SORT_KEYS) as MarketSort[]).map((value) => ({
-    value,
-    label: formatSort(value, locale),
-  }));
-}
-
-export type MarketFilter = "open" | "resolved" | "all";
-
-const FILTER_KEYS: Record<MarketFilter, string> = {
-  open: "market.filterOpen",
-  resolved: "market.filterResolved",
-  all: "market.filterAll",
-};
-
-export function formatFilter(filter: MarketFilter, locale: Locale): string {
-  return t(FILTER_KEYS[filter], locale);
-}
-
-export function listFilters(
-  locale: Locale,
-): { value: MarketFilter; label: string }[] {
-  return (Object.keys(FILTER_KEYS) as MarketFilter[]).map((value) => ({
-    value,
-    label: formatFilter(value, locale),
-  }));
 }

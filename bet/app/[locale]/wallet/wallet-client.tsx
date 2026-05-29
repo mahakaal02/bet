@@ -94,7 +94,7 @@ export function BalanceHero({
   last24h: number;
   syncedLabel: string;
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [mode, setMode] = useState<"coins" | "value" | "hidden">("coins");
 
   const display =
@@ -102,7 +102,7 @@ export function BalanceHero({
       ? "••••••"
       : mode === "value" && valueLabel
         ? valueLabel
-        : fmtCoins(balanceCoins);
+        : fmtCoins(balanceCoins, locale);
   const showUnit = mode === "coins";
 
   return (
@@ -142,7 +142,7 @@ export function BalanceHero({
           <span className="chip">
             {last24h > 0 ? "+" : "−"}
             <strong style={{ color: "var(--emerald-300)" }}>
-              {fmtCoins(Math.abs(last24h))}
+              {fmtCoins(Math.abs(last24h), locale)}
             </strong>{" "}
             {t("wallet.last24h")}
           </span>

@@ -304,7 +304,7 @@ export default async function MarketsPage({
             {u ? (
               <>
                 <span className="balance-pill">
-                  <span className="lbl">BAL</span> {fmtCoins(balance)}
+                  <span className="lbl">BAL</span> {fmtCoins(balance, locale)}
                 </span>
                 <ThemeSwitch />
                 <Link className="deposit-btn" href={lp("/wallet")}>
@@ -329,7 +329,7 @@ export default async function MarketsPage({
         <div className="status-inner">
           <span className="live">{tr("market.liveMarkets", { count: openCount })}</span>
           <span className="sep">·</span>
-          <span>{tr("market.openInterest", { coins: fmtCoins(totalVol) })}</span>
+          <span>{tr("market.openInterest", { coins: fmtCoins(totalVol, locale) })}</span>
           <span className="sep">·</span>
           <span>{tr("market.settleFast")}</span>
         </div>
@@ -357,7 +357,7 @@ export default async function MarketsPage({
                   <div className="l">{tr("market.statOpen")}</div>
                 </div>
                 <div className="pstat">
-                  <div className="v cy">{fmtCoins(totalVol)}</div>
+                  <div className="v cy">{fmtCoins(totalVol, locale)}</div>
                   <div className="l">{tr("market.statVolume")}</div>
                 </div>
                 <div className="pstat">
@@ -442,21 +442,21 @@ export default async function MarketsPage({
                       <div className="fl-foot">
                         <div className="kv">
                           <span className="k">{tr("market.volume")}</span>
-                          <span className="val">{fmtCoins(m.volumeCoins)}</span>
+                          <span className="val">{fmtCoins(m.volumeCoins, locale)}</span>
                         </div>
                         <div className="kv">
                           <span className="k">{tr("market.liquidity")}</span>
-                          <span className="val">{fmtCoins(liq)}</span>
+                          <span className="val">{fmtCoins(liq, locale)}</span>
                         </div>
                       </div>
                       <div className="fl-bet">
                         <span className="fl-yn yes">
                           <span className="t">{tr("market.yes")}</span>
-                          <span className="px">{fmtPrice(p)}</span>
+                          <span className="px">{fmtPrice(p, 2, locale)}</span>
                         </span>
                         <span className="fl-yn no">
                           <span className="t">{tr("market.no")}</span>
-                          <span className="px">{fmtPrice(1 - p)}</span>
+                          <span className="px">{fmtPrice(1 - p, 2, locale)}</span>
                         </span>
                       </div>
                     </Link>
@@ -580,7 +580,7 @@ export default async function MarketsPage({
                     <div className="market-foot">
                       <div className="lhs">
                         <span>
-                          {tr("market.vol")} <strong>{fmtCoins(g.volumeCoins)}</strong>
+                          {tr("market.vol")} <strong>{fmtCoins(g.volumeCoins, locale)}</strong>
                         </span>
                       </div>
                     </div>
@@ -610,17 +610,17 @@ export default async function MarketsPage({
                       <div className="yn">
                         <span className="ynbtn y">
                           <span className="l">{tr("market.yes")}</span>
-                          <span className="p">{fmtPrice(p)}</span>
+                          <span className="p">{fmtPrice(p, 2, locale)}</span>
                         </span>
                         <span className="ynbtn n">
                           <span className="l">{tr("market.no")}</span>
-                          <span className="p">{fmtPrice(1 - p)}</span>
+                          <span className="p">{fmtPrice(1 - p, 2, locale)}</span>
                         </span>
                       </div>
                       <div className="market-foot">
                         <div className="lhs">
-                          <span>{tr("market.vol")} <strong>{fmtCoins(m.volumeCoins)}</strong></span>
-                          <span>{tr("market.liq")} <strong>{fmtCoins(Math.round(m.yesShares + m.noShares))}</strong></span>
+                          <span>{tr("market.vol")} <strong>{fmtCoins(m.volumeCoins, locale)}</strong></span>
+                          <span>{tr("market.liq")} <strong>{fmtCoins(Math.round(m.yesShares + m.noShares), locale)}</strong></span>
                         </div>
                         <svg className="spark" viewBox="0 0 60 18" preserveAspectRatio="none">
                           <path d={spark.path} stroke={spark.color} strokeWidth="1.5" fill="none" />

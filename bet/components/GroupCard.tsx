@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { fmtCoins, fmtPct } from "@/lib/utils";
+import { type Locale } from "@/lib/i18n/config";
 
 /** Pre-resolved (localized, formatted) data for one group card. The caller
  *  (markets list, a server component) does all i18n/formatting so this stays a
@@ -31,10 +32,12 @@ export function GroupCard({
   href,
   data,
   labels,
+  locale,
 }: {
   href: string;
   data: GroupCardData;
   labels: { candidates: string; chance: string; vol: string };
+  locale: Locale;
 }) {
   return (
     <Link href={href}>
@@ -62,7 +65,7 @@ export function GroupCard({
           </div>
         )}
         <div className="mt-3 text-[10px] text-slate-500">
-          {labels.vol} {fmtCoins(data.volumeCoins)}
+          {labels.vol} {fmtCoins(data.volumeCoins, locale)}
         </div>
       </Card>
     </Link>

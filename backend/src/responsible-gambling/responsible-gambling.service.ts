@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../foundation/notification.service';
+import { clampPageLimit, cursorPage } from '../common/pagination';
 
 /**
  * Responsible-gambling controls — Roadmap §F-USER-14.
@@ -618,16 +619,16 @@ export class ResponsibleGamblingService {
    * over the index `(userId, createdAt desc)`.
    */
   async listEvents(userId: string, limit = 50, cursor?: string) {
-    const safeLimit = Math.max(1, Math.min(200, limit));
+    const safeLimit = clampPageLimit(limit, 50, 200);
     const rows = await this.prisma.responsibleGamblingEvent.findMany({
       where: { userId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: safeLimit + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
-    const hasMore = rows.length > safeLimit;
+    const { page, nextCursor } = cursorPage(rows, safeLimit);
     return {
-      items: (hasMore ? rows.slice(0, safeLimit) : rows).map((r) => ({
+      items: page.map((r) => ({
         id: r.id,
         kind: r.kind,
         limitKind: r.limitKind,
@@ -636,7 +637,7 @@ export class ResponsibleGamblingService {
         sessionDurationMs: r.sessionDurationMs,
         createdAt: r.createdAt.toISOString(),
       })),
-      nextCursor: hasMore ? rows[safeLimit - 1].id : null,
+      nextCursor,
     };
   }
 

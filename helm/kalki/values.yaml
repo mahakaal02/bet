@@ -135,7 +135,7 @@ redis:
 # ─── per-service ───────────────────────────────────────────────────────────
 backend:
   image: kalki-backend
-  imageTag: 20260528T174130Z-d15af13 # {"$imagepolicy": "flux-system:kalki-backend:tag"}
+  imageTag: 20260529T115650Z-661f48b # {"$imagepolicy": "flux-system:kalki-backend:tag"}
   port: 4000
   replicas: 1
   prismaMigrate: true # init-container runs `prisma migrate deploy`
@@ -207,7 +207,7 @@ backend:
       limits: {cpu: 500m, memory: 512Mi}
 bet:
   image: kalki-bet
-  imageTag: 20260529T030114Z-d1dc9d2 # {"$imagepolicy": "flux-system:kalki-bet:tag"}
+  imageTag: 20260529T115636Z-661f48b # {"$imagepolicy": "flux-system:kalki-bet:tag"}
   port: 3100
   replicas: 1
   prismaMigrate: true
@@ -241,7 +241,7 @@ bet:
     limits: {cpu: 1000m, memory: 1Gi}
 auctions:
   image: kalki-auctions
-  imageTag: 20260528T211716Z-4aa6e94 # {"$imagepolicy": "flux-system:kalki-auctions:tag"}
+  imageTag: 20260529T115651Z-661f48b # {"$imagepolicy": "flux-system:kalki-auctions:tag"}
   port: 3200
   replicas: 1
   resources:
@@ -249,7 +249,7 @@ auctions:
     limits: {cpu: 500m, memory: 512Mi}
 aviator:
   image: kalki-aviator
-  imageTag: 20260528T162256Z-7d22b32 # {"$imagepolicy": "flux-system:kalki-aviator:tag"}
+  imageTag: 20260529T115642Z-661f48b # {"$imagepolicy": "flux-system:kalki-aviator:tag"}
   port: 3000
   replicas: 1
   resources:
@@ -257,7 +257,7 @@ aviator:
     limits: {cpu: 500m, memory: 512Mi}
 admin:
   image: kalki-admin
-  imageTag: 20260528T184029Z-dd6302b # {"$imagepolicy": "flux-system:kalki-admin:tag"}
+  imageTag: 20260529T115642Z-661f48b # {"$imagepolicy": "flux-system:kalki-admin:tag"}
   port: 80
   replicas: 1
   resources:

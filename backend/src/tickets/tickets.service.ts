@@ -16,6 +16,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../foundation/audit-log.service';
 import { SettingsService } from '../foundation/settings.service';
+import { clampPageLimit, cursorPage } from '../common/pagination';
 
 /**
  * Support ticket service (Roadmap §F-USER-15).
@@ -147,16 +148,17 @@ export class TicketsService {
    * List tickets visible to a user — only their own. Cursor pagination.
    */
   async listMine(input: { userId: string; cursor?: string; limit?: number }) {
-    const take = Math.min(50, Math.max(1, input.limit ?? 25));
+    const take = clampPageLimit(input.limit);
     const rows = await this.prisma.supportTicket.findMany({
       where: { userId: input.userId },
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
       take: take + 1,
       ...(input.cursor ? { skip: 1, cursor: { id: input.cursor } } : {}),
     });
+    const { page, nextCursor } = cursorPage(rows, take);
     return {
-      items: rows.slice(0, take).map(this.toUserListShape),
-      nextCursor: rows.length > take ? rows[take].id : null,
+      items: page.map(this.toUserListShape),
+      nextCursor,
     };
   }
 
@@ -234,7 +236,7 @@ export class TicketsService {
     cursor?: string;
     limit?: number;
   }) {
-    const take = Math.min(50, Math.max(1, input.limit ?? 25));
+    const take = clampPageLimit(input.limit);
     const rows = await this.prisma.supportTicket.findMany({
       where: {
         ...(input.status ? { status: input.status } : {}),
@@ -248,7 +250,8 @@ export class TicketsService {
         user: { select: { id: true, username: true, email: true } },
       },
     });
-    const items = rows.slice(0, take).map((r) => ({
+    const { page, nextCursor } = cursorPage(rows, take);
+    const items = page.map((r) => ({
       id: r.id,
       userId: r.user.id,
       username: r.user.username,
@@ -264,7 +267,7 @@ export class TicketsService {
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     }));
-    return { items, nextCursor: rows.length > take ? rows[take].id : null };
+    return { items, nextCursor };
   }
 
   /** Full per-ticket view including internal notes. */

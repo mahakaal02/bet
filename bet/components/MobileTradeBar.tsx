@@ -11,6 +11,7 @@ import { OpenOrdersPanel } from "@/components/OpenOrdersPanel";
 import { useMarketStream } from "@/lib/useMarketStream";
 import { priceYes } from "@/lib/amm";
 import { cn, fmtPrice } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n/client";
 
 interface Position {
   outcome: "YES" | "NO";
@@ -51,6 +52,7 @@ export function MobileTradeBar({
   positions,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const { locale } = useTranslation();
   const initialYes = priceYes({ yesShares, noShares });
   const tick = useMarketStream(slug, initialYes);
   const yes = tick?.yesPrice ?? initialYes;
@@ -73,7 +75,7 @@ export function MobileTradeBar({
                 YES
               </div>
               <div className="text-base font-bold text-emerald-300">
-                {fmtPrice(yes)}
+                {fmtPrice(yes, 2, locale)}
               </div>
             </div>
             <div className="text-center">
@@ -81,7 +83,7 @@ export function MobileTradeBar({
                 NO
               </div>
               <div className="text-base font-bold text-rose-300">
-                {fmtPrice(1 - yes)}
+                {fmtPrice(1 - yes, 2, locale)}
               </div>
             </div>
           </div>

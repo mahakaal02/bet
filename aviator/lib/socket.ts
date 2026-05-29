@@ -7,11 +7,16 @@ import { getToken } from './auth';
 let current: Socket | null = null;
 
 export function getSocket(): Socket {
-  if (current && current.connected) return current;
-  if (current) {
-    current.disconnect();
-    current = null;
-  }
+  // Return the existing instance whenever we have one — even while it's
+  // mid-reconnect (`current.connected === false`). socket.io's built-in
+  // reconnection (reconnection: true) transparently re-establishes the
+  // SAME socket, so tearing it down here would (a) fight that machinery
+  // and (b) orphan every listener `useAviator` bound to the original
+  // instance — silently killing the live feed (chat, roster, multiplier)
+  // until a full remount. A caller that hits this during a transient drop
+  // (e.g. ChatPanel's send → getSocket) must get back the live socket,
+  // not a fresh listener-less one. Explicit teardown is `disconnectSocket`.
+  if (current) return current;
   const token = getToken();
   current = io(api.baseUrl, {
     path: '/aviator/socket.io',

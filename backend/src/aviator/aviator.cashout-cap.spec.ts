@@ -233,6 +233,19 @@ describe('BetSettlementService.cashoutInternal — payout-cap behaviour', () => 
       },
     });
     expect(result?.capped).toBe(true);
+
+    // Phantom-payout guard (audit fix): a failed credit must NOT enter
+    // the persistent winners feed, and the broadcast must mark the
+    // cashout pending with a zeroed payout — never the would-be 20k.
+    expect(h.state.recentWinners).toHaveLength(0);
+    const cashoutEvent = h.socketEmits.find(
+      (e) => e.event === 'PLAYER_CASHOUT',
+    );
+    expect(cashoutEvent).toBeDefined();
+    expect(cashoutEvent!.payload).toMatchObject({
+      payout: 0,
+      settlementPending: true,
+    });
   });
 });
 

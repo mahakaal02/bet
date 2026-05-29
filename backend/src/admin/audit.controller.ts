@@ -1,6 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { cursorPage } from '../common/pagination';
 import { Perm } from './perms.guard';
 
 /**
@@ -86,14 +87,13 @@ export class AuditController {
       },
     });
 
-    const hasMore = rows.length > limit;
-    const items = hasMore ? rows.slice(0, limit) : rows;
+    const { page, nextCursor } = cursorPage(rows, limit);
     return {
-      items: items.map((r) => ({
+      items: page.map((r) => ({
         ...r,
         createdAt: r.createdAt.toISOString(),
       })),
-      nextCursor: hasMore ? items[items.length - 1].id : null,
+      nextCursor,
     };
   }
 

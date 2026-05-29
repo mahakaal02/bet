@@ -229,17 +229,30 @@ export class BetSettlementService {
       );
     }
 
+    // If the Bet credit failed, the coins never landed — `payout: 0`
+    // was just persisted to AviatorBet. Do NOT advertise the win
+    // amount: keep it out of the persistent recent-winners feed and
+    // broadcast it as a pending settlement (payout 0 +
+    // `settlementPending`) so the player still sees their cashout
+    // recorded (roster mark / local bet state) while an admin
+    // reconciles the missing credit. The previous code broadcast the
+    // REAL payout here, showing a phantom win to every client even
+    // though nothing was credited.
+    const effectivePayout = betWalletOk ? payout : 0;
     const winner = {
       username: bet.username,
       multiplier: Number(multiplier.toFixed(2)),
-      payout,
+      payout: effectivePayout,
       roundNumber: this.state.current?.roundNumber ?? 0,
       at: Date.now(),
     };
-    this.state.pushRecentWinner(winner);
+    if (betWalletOk) {
+      this.state.pushRecentWinner(winner);
+    }
 
     this.gateway.emit('PLAYER_CASHOUT', {
       ...winner,
+      ...(betWalletOk ? {} : { settlementPending: true }),
       ...(capped
         ? {
             capped: true,

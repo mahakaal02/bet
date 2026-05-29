@@ -15,7 +15,15 @@ import {
   useTranslation,
 } from "@/lib/i18n/client";
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+// Throw on non-2xx so SWR treats it as an error (leaving `data`
+// undefined) instead of parsing an error/HTML body as a MeResponse —
+// otherwise a 401 body could be read as `{}` and `data.user.isAdmin`
+// would throw at render.
+const fetcher = async (url: string) => {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Request failed: ${r.status}`);
+  return r.json();
+};
 
 interface MeResponse {
   user: { id: string; username: string; isAdmin: boolean; image: string | null };
@@ -66,7 +74,7 @@ export function Navbar() {
               label={t("nav.watchlist")}
             />
           )}
-          {data?.user.isAdmin && (
+          {data?.user?.isAdmin && (
             <NavLink
               href="/admin"
               icon={<ShieldCheck className="h-4 w-4" />}
@@ -83,7 +91,7 @@ export function Navbar() {
               title={t("wallet.tapToTopup")}
             >
               <Coins className="h-4 w-4" />
-              {fmtCoins(data.wallet.balance)}
+              {fmtCoins(data.wallet.balance, locale)}
             </Link>
           ) : session?.user ? (
             <span className="skeleton h-8 w-24" />
@@ -100,7 +108,7 @@ export function Navbar() {
                 aria-label={t("nav.profile")}
                 title={data?.user?.username ? `@${data.user.username}` : t("nav.profile")}
               >
-                {data?.user.image ? (
+                {data?.user?.image ? (
                   <Avatar
                     src={data.user.image}
                     name={data.user.username}
@@ -143,7 +151,7 @@ export function Navbar() {
           icon={<BarChart3 className="h-4 w-4" />}
           label={t("nav.portfolio")}
         />
-        {data?.user.isAdmin && (
+        {data?.user?.isAdmin && (
           <NavLink
             href="/admin"
             icon={<ShieldCheck className="h-4 w-4" />}

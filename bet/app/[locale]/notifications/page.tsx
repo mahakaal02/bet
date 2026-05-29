@@ -118,7 +118,7 @@ export default async function NotificationsPage({
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="list-title">{n.title}</div>
                         <p className="list-body">{n.body}</p>
-                        <div className="list-time">{timeAgo(n.createdAt)}</div>
+                        <div className="list-time">{timeAgo(n.createdAt, locale)}</div>
                       </div>
                     </Link>
                   </li>

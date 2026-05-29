@@ -8,10 +8,12 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { isUniqueViolation } from '../common/prisma-errors';
 import { ResponsibleGamblingService } from '../responsible-gambling/responsible-gambling.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
 import { TwoFactorService } from './two-factor.service';
 import { TrustedDeviceService } from './trusted-device.service';
+import { JwtUserCache } from './jwt-user-cache';
 
 export interface JwtPayload {
   sub: string;
@@ -61,6 +63,7 @@ export class AuthService {
     private readonly rg: ResponsibleGamblingService,
     private readonly twoFactor: TwoFactorService,
     private readonly trustedDevice: TrustedDeviceService,
+    private readonly userCache: JwtUserCache,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -90,7 +93,7 @@ export class AuthService {
       });
       return this.issue(user, this.sanitize(user));
     } catch (e: any) {
-      if (e?.code === 'P2002') {
+      if (isUniqueViolation(e)) {
         throw new ConflictException('email or username already in use');
       }
       throw e;
@@ -298,7 +301,14 @@ export class AuthService {
     // request user shape so audit writers can attribute correctly.
     // No special branch here; let the rest of validateJwt run.
 
-    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    // Per-request user load, served from a short-TTL cache to collapse
+    // request bursts (see JwtUserCache). The RG self-exclusion gate
+    // below is NOT cached — it runs live every request.
+    let user = this.userCache.get(payload.sub) ?? null;
+    if (!user) {
+      user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+      if (user) this.userCache.set(user);
+    }
     if (!user) throw new UnauthorizedException();
     // Session-invalidation anchor: if the user has rotated their
     // password (via password-reset) since this token was issued, the

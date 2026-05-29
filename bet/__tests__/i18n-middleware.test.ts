@@ -110,9 +110,26 @@ describe("middleware: priority 1 — explicit URL", () => {
   });
 
   it("passes through every supported locale prefix", () => {
+    // Use a content path, NOT the bare locale root: PR-HUB-TO-MARKETS
+    // special-cases `/{locale}/` to redirect to the markets list (see
+    // the dedicated test below), so the root is no longer a pass-through.
+    // A deep path exercises the locale-agnostic pass-through this test
+    // is actually guarding.
+    for (const loc of ["en", "pt", "es", "fr"] as const) {
+      const res = middleware(makeRequest(`https://kalki.local/${loc}/markets`));
+      expect(res.headers.get("location")).toBeNull();
+    }
+  });
+
+  it("redirects the bare locale root to the markets list (PR-HUB-TO-MARKETS)", () => {
+    // The locale root no longer hosts a marketing landing page; the hub
+    // sends `/{locale}` straight to tradable content in one hop.
     for (const loc of ["en", "pt", "es", "fr"] as const) {
       const res = middleware(makeRequest(`https://kalki.local/${loc}/`));
-      expect(res.headers.get("location")).toBeNull();
+      // NextURL serializes the cloned redirect with a trailing slash
+      // (`/en/markets/`); accept it with or without, since the intent is
+      // simply "locale root → markets list for this locale".
+      expect(locationOf(res)).toMatch(new RegExp(`^/${loc}/markets/?$`));
     }
   });
 });

@@ -39,9 +39,6 @@ const fr: Partial<Dictionary> = {
     notificationsTitle: "Notifications",
     notificationsDescription:
       "Exécutions de trades, résolutions de marché, mentions et récompenses — votre boîte pour tout ce qui s'est passé en votre absence.",
-    leaderboardTitle: "Classement — meilleurs traders",
-    leaderboardDescription:
-      "Meilleurs traders classés par XP. Gagnez de l'XP en tradant — 1 XP par 20 coins dépensés.",
     achievementsTitle: "Succès — badges de trader",
     achievementsDescription:
       "Débloquez des badges en tradant, en invitant des amis et en atteignant des jalons. Gagnez de l'XP et des coins bonus.",
@@ -75,8 +72,6 @@ const fr: Partial<Dictionary> = {
     portfolio: "Portefeuille",
     wallet: "Portefeuille",
     profile: "Profil",
-    leaderboard: "Classement",
-    leaderboardMobile: "Top",
     watchlist: "Favoris",
     achievements: "Succès",
     notifications: "Notifications",
@@ -97,7 +92,6 @@ const fr: Partial<Dictionary> = {
     statsUsers: "Joueurs",
     statsTrades: "Échanges effectués",
     trendingHeader: "Marchés tendance",
-    leaderboardHeader: "Meilleurs traders",
   },
 
   forms: {
@@ -119,7 +113,6 @@ const fr: Partial<Dictionary> = {
     wallet: "Chargement du portefeuille…",
     portfolio: "Chargement du portefeuille…",
     profile: "Chargement du profil…",
-    leaderboard: "Chargement du classement…",
   },
 
   validation: {
@@ -758,13 +751,6 @@ const fr: Partial<Dictionary> = {
     allRead: "Tout lu.",
     emptyState:
       "Vous êtes à jour. Faites un échange pour recevoir des notifications.",
-  },
-
-  leaderboard: {
-    heading: "Classement",
-    subtext:
-      "Meilleurs traders par XP total. Gagnez de l'XP en tradant — 1 XP par 20 coins dépensés.",
-    emptyState: "Aucun trader pour le moment.",
   },
 
   achievements: {

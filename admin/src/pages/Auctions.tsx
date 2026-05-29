@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
+import { useVisiblePolling } from '../lib/useVisiblePolling';
 
 interface Auction {
   id: string;
@@ -35,11 +36,8 @@ export default function Auctions() {
     }
   }
 
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 15_000);
-    return () => clearInterval(id);
-  }, []);
+  // Poll every 15s, but only while the tab is visible (see hook).
+  useVisiblePolling(refresh, 15_000);
 
   async function closeNow(id: string) {
     if (!confirm('Close this auction now and pick a winner?')) return;

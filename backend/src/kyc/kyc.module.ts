@@ -2,6 +2,7 @@ import { Module, Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaModule } from '../prisma/prisma.module';
 import { FoundationModule } from '../foundation/foundation.module';
+import { ReferralsModule } from '../referrals/referrals.module';
 import { KycService } from './kyc.service';
 import { KycController } from './kyc.controller';
 import { KycAdminController } from './kyc-admin.controller';
@@ -59,7 +60,9 @@ const cipherProvider: Provider = {
 };
 
 @Module({
-  imports: [PrismaModule, FoundationModule],
+  // ReferralsModule supplies ReferralsService so a KYC promotion to
+  // TIER_1+ can fire `maybeQualify` (the documented referral trigger).
+  imports: [PrismaModule, FoundationModule, ReferralsModule],
   controllers: [KycController, KycAdminController],
   providers: [KycService, storageProvider, scannerProvider, cipherProvider],
   exports: [KycService],

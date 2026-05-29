@@ -70,14 +70,48 @@ export function useAviator() {
     sock.on('MULTIPLIER_UPDATE', (e: { multiplier: number }) =>
       useGame.getState().onMultiplier(e.multiplier),
     );
-    sock.on('GAME_CRASH', (e) => useGame.getState().onCrash(e));
+    // GAME_CRASH ends the round. Everything that must happen on a crash
+    // lives in this single handler, in order:
+    //   1. Snapshot whether the user lost (had an open bet that never
+    //      cashed out) BEFORE the reducer runs — keeps loss-detection
+    //      independent of whatever `onCrash` happens to mutate.
+    //   2. Run the crash reducer (phase → CRASHED, push history).
+    //   3. On a loss, apply the "let it ride" reset, then re-pull the
+    //      authoritative wallet so the displayed balance can never drift
+    //      from the server.
+    // (Previously split across two separate GAME_CRASH listeners; merged
+    // so the firing order is explicit and there's one source of truth.)
+    sock.on('GAME_CRASH', (e) => {
+      const state = useGame.getState();
+      const lostRound =
+        state.currentBet !== null && state.currentBet.cashedOutAt === null;
+      state.onCrash(e);
+      // `setNextStake` floors at the platform minimum (100 coins) — we
+      // send 0 and it clamps up — so the next round starts with a
+      // ready-to-bet default instead of an empty input the user has to
+      // retype before they can place.
+      if (lostRound) {
+        useGame.getState().setNextStake(0);
+      }
+      void api
+        .get<{ balance: number }>('/wallet/balance')
+        .then((b) => useGame.getState().setWalletBalance(b.balance))
+        .catch(() => {});
+    });
 
     sock.on('PLAYER_BET', (e: { username: string; amount: number; autoCashoutAt: number | null }) =>
       useGame.getState().appendRoster({ ...e, cashedOutAt: null }),
     );
     sock.on('PLAYER_CASHOUT', (e: RecentWinner) => {
       const state = useGame.getState();
-      state.appendWinner(e);
+      // A pending settlement (server-side Bet credit failed) is NOT a
+      // confirmed win: keep it out of the winners feed and don't seed
+      // "let it ride" with coins that never landed. We still mark the
+      // roster + local bet as cashed out — the cashout DID happen; only
+      // the payout is awaiting admin reconciliation.
+      if (!e.settlementPending) {
+        state.appendWinner(e);
+      }
       state.markRosterCashout(e.username, e.multiplier);
       const me = getUser()?.username;
       if (me && me === e.username) {
@@ -91,13 +125,16 @@ export function useAviator() {
             // (pre-cap) won't send `e.capped`; we omit the field on
             // the local bet rather than defaulting to false so
             // round-trip-equality checks elsewhere stay clean.
-            ...(e.capped
-              ? { cappedByPayoutCap: true, originalPayout: e.originalPayout }
-              : {}),
+            ...(e.capped ? { cappedByPayoutCap: true } : {}),
           });
         }
-        // "Let it ride" — next round's default bet = this round's payout.
-        state.setNextStake(e.payout);
+        // "Let it ride" — next round's default bet = this round's
+        // payout. Skip when the settlement is pending (payout is 0 and
+        // unconfirmed); the next-stake reducer would just clamp to the
+        // minimum anyway, but we avoid implying the coins arrived.
+        if (!e.settlementPending) {
+          state.setNextStake(e.payout);
+        }
         // Use the API as source of truth (manual-cashout REST flow also
         // refreshes the wallet; optimistic increment here would double-count).
         void api
@@ -105,25 +142,6 @@ export function useAviator() {
           .then((b) => useGame.getState().setWalletBalance(b.balance))
           .catch(() => {});
       }
-    });
-
-    // Defensive: re-pull the authoritative wallet at the end of every round
-    // so the displayed value can never drift from the server. Also enforce
-    // the "let it ride" reset rule when the user lost the round.
-    sock.on('GAME_CRASH', () => {
-      const state = useGame.getState();
-      // If the user had a bet that never cashed out they lost. The
-      // `setNextStake` reducer floors at the platform minimum (100
-      // coins) — we send 0 and it clamps up — so the next round
-      // starts with a ready-to-bet default instead of an empty input
-      // the user has to retype before they can place.
-      if (state.currentBet && state.currentBet.cashedOutAt === null) {
-        state.setNextStake(0);
-      }
-      void api
-        .get<{ balance: number }>('/wallet/balance')
-        .then((b) => useGame.getState().setWalletBalance(b.balance))
-        .catch(() => {});
     });
 
     return () => {

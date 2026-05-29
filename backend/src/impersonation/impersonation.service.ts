@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../foundation/audit-log.service';
 import { JwtPayload } from '../auth/auth.service';
+import { cursorPage } from '../common/pagination';
 
 /**
  * Admin impersonation (Roadmap §F-ADMIN-2 / Q2 follow-up).
@@ -234,8 +235,8 @@ export class ImpersonationService {
         user: { select: { username: true } },
       },
     });
-    const hasMore = rows.length > limit;
-    const items = (hasMore ? rows.slice(0, limit) : rows).map((r) => ({
+    const { page, nextCursor } = cursorPage(rows, limit);
+    const items = page.map((r) => ({
       id: r.id,
       adminId: r.adminId,
       adminUsername: r.admin.username,
@@ -248,10 +249,7 @@ export class ImpersonationService {
       durationMs:
         (r.endedAt?.getTime() ?? Date.now()) - r.startedAt.getTime(),
     }));
-    return {
-      items,
-      nextCursor: hasMore ? items[items.length - 1].id : null,
-    };
+    return { items, nextCursor };
   }
 }
 

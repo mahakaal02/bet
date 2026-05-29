@@ -69,13 +69,18 @@ function AuthGate() {
       // hub tile / bookmark / stale page render still carried the
       // token in the URL.
       if (wasJustLoggedOut()) {
-        window.history.replaceState({}, '', '/');
+        // Strip the token from the URL but keep the locale path (see below).
+        window.history.replaceState({}, '', window.location.pathname);
         window.location.replace(auctionsLoginUrl());
         return;
       }
       setToken(t);
       hydrateUserFromToken(t);
-      window.history.replaceState({}, '', '/');
+      // Strip the `?token=…` query param from the URL bar (don't leave
+      // the bearer token in history) WITHOUT dropping the `[locale]`
+      // path segment — replacing with bare '/' lost e.g. `/pt`, knocking
+      // the user back to the default locale on any client navigation.
+      window.history.replaceState({}, '', window.location.pathname);
       setReady(true);
       return;
     }

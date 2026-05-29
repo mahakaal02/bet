@@ -651,7 +651,7 @@ function catColor(category: MarketCategory): string {
 function badgeIcon(icon: string): string {
   if (!icon) return "🏆";
   // Any non-ASCII codepoint → treat as an emoji and render directly.
-  return /[^ -]/.test(icon) ? icon : "🏆";
+  return /[^\x00-\x7f]/.test(icon) ? icon : "🏆";
 }
 
 /** Build the equity-curve SVG paths (700×180 viewBox) + y-axis labels. */

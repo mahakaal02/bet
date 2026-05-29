@@ -29,7 +29,7 @@ interface Order {
 
 export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
   const router = useRouter();
-  const { t: tr } = useTranslation();
+  const { t: tr, locale } = useTranslation();
   const [, startTransition] = useTransition();
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -126,7 +126,7 @@ export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
                       <Badge tone={o.outcome === "YES" ? "yes" : "no"}>
                         {o.side} {o.outcome}
                       </Badge>
-                      <span className="font-mono">{fmtPrice(o.limitPrice)}</span>
+                      <span className="font-mono">{fmtPrice(o.limitPrice, 2, locale)}</span>
                       <span className="font-mono text-slate-400">
                         {o.shares.toFixed(2)} {tr("market.sharesAbbrev")}
                       </span>
@@ -137,7 +137,7 @@ export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
                         filled: o.filledShares.toFixed(2),
                         remaining: o.remaining.toFixed(2),
                       })}{" "}
-                      · {timeAgo(o.createdAt)}
+                      · {timeAgo(o.createdAt, locale)}
                     </div>
                   </div>
                   <div className="flex items-center justify-end gap-2">
@@ -161,7 +161,7 @@ export function OpenOrdersPanel({ marketId }: { marketId?: string }) {
                     ) : (
                       <span className="font-mono text-xs text-slate-500">
                         {Math.abs(o.filledCost)
-                          ? `${fmtCoins(Math.abs(o.filledCost))} ${tr("toast.coins")}`
+                          ? `${fmtCoins(Math.abs(o.filledCost), locale)} ${tr("toast.coins")}`
                           : "—"}
                       </span>
                     )}
@@ -190,7 +190,7 @@ function EditRow({
   onCancel: () => void;
   onApply: (limitPrice: number, shares: number) => Promise<boolean>;
 }) {
-  const { t: tr } = useTranslation();
+  const { t: tr, locale } = useTranslation();
   const [price, setPrice] = useState(order.limitPrice.toFixed(2));
   const [shares, setShares] = useState(order.remaining.toFixed(2));
   const [busy, setBusy] = useState(false);
@@ -220,7 +220,7 @@ function EditRow({
         </Badge>
         <span className="text-slate-500">
           {tr("market.editAtPrice")}{" "}
-          <span className="font-mono">{fmtPrice(order.limitPrice)}</span>
+          <span className="font-mono">{fmtPrice(order.limitPrice, 2, locale)}</span>
           {" → "}
         </span>
       </div>

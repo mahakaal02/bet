@@ -34,7 +34,7 @@ export function Comments({
   initialData?: { comments: CommentRow[] };
 }) {
   const { data: session } = useSession();
-  const { t: tr } = useTranslation();
+  const { t: tr, locale } = useTranslation();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const myUsername = (session?.user as any)?.username as string | undefined;
   const { data, mutate, isLoading } = useSWR<{ comments: CommentRow[] }>(
@@ -109,7 +109,7 @@ export function Comments({
               {c.user.username}
             </span>
             <span>·</span>
-            <span>{timeAgo(c.createdAt)}</span>
+            <span>{timeAgo(c.createdAt, locale)}</span>
           </div>
           {myUsername && (
             <ReportButton

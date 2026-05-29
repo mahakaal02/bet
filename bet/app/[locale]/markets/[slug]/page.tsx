@@ -235,7 +235,7 @@ export default async function MarketPage({
                 <div
                   style={{ display: "flex", alignItems: "baseline", gap: 10 }}
                 >
-                  <span className="price-xl">{fmtPrice(yesPrice)}</span>
+                  <span className="price-xl">{fmtPrice(yesPrice, 2, locale)}</span>
                   <span className="panel-meta">{tr("market.yes")}</span>
                 </div>
               </div>
@@ -286,13 +286,13 @@ export default async function MarketPage({
                         </div>
                         <div style={{ textAlign: "right" }}>
                           <div style={{ fontFamily: "var(--font-mono)", fontSize: 12.5 }}>
-                            {fmtCoins(trade.cost)}{" "}
+                            {fmtCoins(trade.cost, locale)}{" "}
                             <span style={{ color: "var(--color-text-3)" }}>
                               {tr("toast.coins")}
                             </span>
                           </div>
                           <div className="list-time">
-                            {timeAgo(trade.createdAt)}
+                            {timeAgo(trade.createdAt, locale)}
                           </div>
                         </div>
                       </div>
@@ -348,19 +348,19 @@ export default async function MarketPage({
               </div>
               <Stat
                 label={tr("market.volume")}
-                value={`${fmtCoins(market.volumeCoins)} ${tr("toast.coins")}`}
+                value={`${fmtCoins(market.volumeCoins, locale)} ${tr("toast.coins")}`}
               />
               <Stat
                 label={tr("market.liquidity")}
-                value={`${fmtCoins(Math.round(market.yesShares + market.noShares))} ${tr("market.shares")}`}
+                value={`${fmtCoins(Math.round(market.yesShares + market.noShares), locale)} ${tr("market.shares")}`}
               />
               <Stat
                 label={tr("market.midPrice")}
-                value={`${fmtPrice(yesPrice)} ${tr("market.yes")} · ${fmtPrice(1 - yesPrice)} ${tr("market.no")}`}
+                value={`${fmtPrice(yesPrice, 2, locale)} ${tr("market.yes")} · ${fmtPrice(1 - yesPrice, 2, locale)} ${tr("market.no")}`}
               />
               <Stat
                 label={tr("market.created")}
-                value={timeAgo(market.createdAt)}
+                value={timeAgo(market.createdAt, locale)}
               />
             </section>
           </aside>

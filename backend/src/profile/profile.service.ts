@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { detectSuspiciousDisplayName, validateDisplayName } from './profile-validation';
 import { ProfileReviewAction } from '@prisma/client';
+import { clampPageLimit, cursorPage } from '../common/pagination';
 
 /** Joined row shape for the admin moderation queue. */
 export interface ProfileQueueRow {
@@ -221,7 +222,7 @@ export class ProfileService {
     cursor?: string;
     limit?: number;
   }): Promise<{ items: ProfileQueueRow[]; nextCursor: string | null }> {
-    const take = Math.min(50, Math.max(1, input.limit ?? 25));
+    const take = clampPageLimit(input.limit);
     const action = (input.action ?? 'PENDING') as ProfileReviewAction;
     const rows = await this.prisma.userProfileHistory.findMany({
       where: { reviewAction: action },
@@ -232,7 +233,8 @@ export class ProfileService {
         user: { select: { id: true, username: true, email: true, displayName: true } },
       },
     });
-    const items: ProfileQueueRow[] = rows.slice(0, take).map((r) => ({
+    const { page, nextCursor } = cursorPage(rows, take);
+    const items: ProfileQueueRow[] = page.map((r) => ({
       historyId: r.id,
       userId: r.user.id,
       username: r.user.username,
@@ -248,7 +250,6 @@ export class ProfileService {
       reviewNotes: r.reviewNotes,
       changedAt: r.changedAt,
     }));
-    const nextCursor = rows.length > take ? rows[take].id : null;
     return { items, nextCursor };
   }
 

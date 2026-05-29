@@ -7,8 +7,8 @@ import { OrdersAdminController } from './orders-admin.controller';
 
 /**
  * Orders module. Exports OrdersService so the auction settle path
- * (BidsService.settleAuction, or the future scheduler) can call
- * `createForWin()` once a winner is decided.
+ * (`AuctionsService.close()`) can call `createForWin()` — inside its
+ * transaction — once a winner is decided.
  */
 @Module({
   imports: [PrismaModule, FoundationModule],
