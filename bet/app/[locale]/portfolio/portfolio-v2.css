@@ -33,7 +33,7 @@
   --pos-rgb: 16,185,129; --neg-rgb: 244,63,94;
   --logo-a: #22D3EE; --logo-a-rgb: 34,211,238; --logo-b: #6366F1; --logo-b-rgb: 99,102,241;
   --on-grad: #050913; --chart-grid: rgba(255,255,255,0.05);
-  --bg-mesh-1: rgba(34,211,238,.22); --bg-mesh-2: rgba(0,229,255,.18); --bg-mesh-3: rgba(99,102,241,.16);
+  --bg-mesh-1: rgba(var(--brand-a-rgb),.22); --bg-mesh-2: rgba(0,229,255,.18); --bg-mesh-3: rgba(var(--brand-b-rgb),.16);
   --bg-stop-1: #030305; --bg-stop-2: #06080C; --bg-stop-3: #050608;
   --glow-text: none; --glow-num: none; --scanline: transparent;
 }
@@ -46,6 +46,7 @@ html[data-theme="neon"] {
   --cyan-200: #99FBFF; --cyan-300: #4FF5FF; --cyan-400: #00F0FF; --cyan-500: #00C2DB;
   --indigo-500: #FF2D95; --indigo-400: #FF66B2;
   --grad-brand: linear-gradient(135deg, #00F0FF 0%, #B14CFF 55%, #FF2D95 100%);
+  --on-grad: #06002A; /* dark text harmonized with the neon gradient */
   --emerald-200: #E1FFA0; --emerald-300: #C4FF3D; --emerald-500: #B6FF1A;
   --rose-200: #FFB0BD; --rose-300: #FF6B8A; --rose-500: #FF3D5C;
   --amber-300: #FFE94A; --amber-400: #FFD500;
@@ -155,17 +156,17 @@ html[data-theme="neon"] .pf .nav a.active { border-color: rgba(0,240,255,0.4); b
 .pf .balance-pill .lbl { color: var(--color-text-3); font-weight: 500; margin-right: -2px; }
 html[data-theme="neon"] .pf .balance-pill { background: rgba(0,240,255,0.08); border-color: rgba(0,240,255,0.45); box-shadow: 0 0 24px -4px rgba(0,240,255,0.6), 0 0 48px -12px rgba(255,45,149,0.4), inset 0 0 0 1px rgba(255,255,255,0.04); }
 html[data-theme="neon"] .pf .balance-pill::before { box-shadow: 0 0 14px var(--cyan-400), 0 0 28px rgba(255,45,149,0.4); }
-.pf .deposit-btn { padding: 8px 14px; border-radius: 999px; background: var(--grad-brand); color: #050913; font-size: 13px; font-weight: 700; letter-spacing: -0.01em; box-shadow: 0 8px 24px -6px rgba(var(--brand-a-rgb),0.5), inset 0 1px 0 rgba(255,255,255,0.4); transition: transform .12s, box-shadow .12s; }
+.pf .deposit-btn { padding: 8px 14px; border-radius: 999px; background: var(--grad-brand); color: var(--on-grad); font-size: 13px; font-weight: 700; letter-spacing: -0.01em; box-shadow: 0 8px 24px -6px rgba(var(--brand-a-rgb),0.5), inset 0 1px 0 rgba(255,255,255,0.4); transition: transform .12s, box-shadow .12s; }
 .pf .deposit-btn:hover { transform: translateY(-1px); }
-html[data-theme="neon"] .pf .deposit-btn { color: #06002A; box-shadow: 0 0 24px rgba(0,240,255,0.55), 0 0 48px rgba(255,45,149,0.40), inset 0 1px 0 rgba(255,255,255,0.55); }
+html[data-theme="neon"] .pf .deposit-btn { color: var(--on-grad); box-shadow: 0 0 24px rgba(0,240,255,0.55), 0 0 48px rgba(255,45,149,0.40), inset 0 1px 0 rgba(255,255,255,0.55); }
 .pf .icon-btn { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.04); border: 1px solid var(--color-divider); display: grid; place-items: center; position: relative; transition: background .15s, border-color .15s; }
 .pf .icon-btn:hover { background: rgba(255,255,255,0.08); border-color: var(--color-divider-2); }
 .pf .icon-btn .dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--rose-500); box-shadow: 0 0 0 2px var(--color-bg), 0 0 10px var(--rose-500); }
-.pf .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--grad-brand); display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: 13px; color: #050913; border: 1px solid rgba(255,255,255,0.18); }
+.pf .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--grad-brand); display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: 13px; color: var(--on-grad); border: 1px solid rgba(255,255,255,0.18); }
 .pf .theme-switch { display: inline-flex; padding: 3px; border-radius: 999px; background: rgba(0,0,0,0.3); border: 1px solid var(--color-divider); }
 .pf .theme-switch button { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; color: var(--color-text-3); transition: background .15s, color .15s; }
 .pf .theme-switch button:hover { color: var(--color-text-primary); }
-.pf .theme-switch button.on { background: var(--grad-brand); color: #06002A; box-shadow: 0 0 14px -2px rgba(var(--brand-a-rgb),0.6); }
+.pf .theme-switch button.on { background: var(--grad-brand); color: var(--on-grad); box-shadow: 0 0 14px -2px rgba(var(--brand-a-rgb),0.6); }
 
 /* ─── STATUS STRIP ─── */
 .pf .status-strip { position: relative; z-index: 1; border-bottom: 1px solid var(--color-divider); background: rgba(5,6,8,0.4); }
@@ -205,7 +206,7 @@ html[data-theme="neon"] .pf .page-title em { text-shadow: var(--glow-text); }
 .pf .cat { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--color-divider); background: rgba(255,255,255,0.03); color: var(--color-text-2); }
 .pf .cat::before { content:''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0.8; }
 .pf .cat.sports   { color: #FCD34D; border-color: rgba(252,211,77,0.32); background: rgba(252,211,77,0.08); }
-.pf .cat.politics { color: #C7D2FE; border-color: rgba(199,210,254,0.32); background: rgba(99,102,241,0.10); }
+.pf .cat.politics { color: #C7D2FE; border-color: rgba(199,210,254,0.32); background: rgba(var(--brand-b-rgb),0.10); }
 .pf .cat.crypto   { color: var(--cyan-200); border-color: rgba(var(--brand-a-rgb),0.32); background: rgba(var(--brand-a-rgb),0.10); }
 .pf .cat.tech     { color: #F0ABFC; border-color: rgba(240,171,252,0.32); background: rgba(240,171,252,0.08); }
 .pf .cat.ent      { color: #FDA4AF; border-color: rgba(253,164,175,0.32); background: rgba(253,164,175,0.08); }
@@ -262,11 +263,11 @@ html[data-theme="neon"] .pf .hero-num { text-shadow: var(--glow-num); }
 .pf .mini .delta.neg { color: var(--rose-300); }
 .pf .hero-cta-row { margin-top: auto; padding-top: 14px; display: flex; gap: 8px; }
 .pf .btn { padding: 10px 16px; border-radius: 10px; font-size: 13.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; transition: transform .12s, background .15s, border-color .15s; }
-.pf .btn.primary { background: var(--grad-brand); color: #050913; box-shadow: 0 10px 24px -8px rgba(var(--brand-a-rgb),0.5), inset 0 1px 0 rgba(255,255,255,0.4); }
+.pf .btn.primary { background: var(--grad-brand); color: var(--on-grad); box-shadow: 0 10px 24px -8px rgba(var(--brand-a-rgb),0.5), inset 0 1px 0 rgba(255,255,255,0.4); }
 .pf .btn.primary:hover { transform: translateY(-1px); }
 .pf .btn.ghost { background: rgba(255,255,255,0.04); border: 1px solid var(--color-divider); color: var(--color-text-primary); }
 .pf .btn.ghost:hover { background: rgba(255,255,255,0.08); border-color: var(--color-divider-2); }
-html[data-theme="neon"] .pf .btn.primary { color: #06002A; box-shadow: 0 0 24px rgba(0,240,255,0.55), 0 0 48px rgba(255,45,149,0.40), inset 0 1px 0 rgba(255,255,255,0.55); }
+html[data-theme="neon"] .pf .btn.primary { color: var(--on-grad); box-shadow: 0 0 24px rgba(0,240,255,0.55), 0 0 48px rgba(255,45,149,0.40), inset 0 1px 0 rgba(255,255,255,0.55); }
 
 /* ─── ALLOCATION ─── */
 .pf .alloc { padding: 20px; display: flex; flex-direction: column; gap: 14px; }

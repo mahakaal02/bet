@@ -19,6 +19,11 @@ interface LocalizedPack {
 interface Props {
   packs: CoinPack[];
   localizedPacks?: LocalizedPack[];
+  /** Region currency resolved server-side (hub pick → locale → geo). Used
+   *  as the custom-amount currency so the symbol follows the user's
+   *  location even when a specific pack anchor isn't published. */
+  currencyCode?: string | null;
+  currencySymbol?: string | null;
   locale: Locale;
 }
 
@@ -43,11 +48,22 @@ const MIN_TOPUP_COINS = 100;
  *   PPP-localized; the custom amount is priced SERVER-SIDE from the
  *   coins (the client only sends coins, never a trusted fiat figure).
  */
-export function BuyCoinsGrid({ packs, localizedPacks = [], locale: _locale }: Props) {
+export function BuyCoinsGrid({
+  packs,
+  localizedPacks = [],
+  currencyCode = null,
+  currencySymbol = null,
+  locale: _locale,
+}: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
   const [coins, setCoins] = useState(1000);
+  // Raw text the user is typing in the fiat field. `null` means "not
+  // editing" → the field mirrors the coins-derived amount. While editing
+  // we keep the literal keystrokes so the placeholder ("0.00") can vanish
+  // and the value isn't reformatted out from under the caret.
+  const [fiatEdit, setFiatEdit] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const { t } = useTranslation();
 
@@ -63,13 +79,19 @@ export function BuyCoinsGrid({ packs, localizedPacks = [], locale: _locale }: Pr
   // no localized pricing is available.
   const anchor = localizedByCoins.get(1000);
   const perCoin = anchor ? Number(anchor.price) / 1000 : 1;
-  const curSymbol = anchor?.symbol ?? "₹";
-  const curCode = anchor?.currency ?? "INR";
+  // Currency follows the user's location: the published pack anchor first,
+  // then the region resolved server-side. Never a hardcoded ₹/INR.
+  const curCode = anchor?.currency ?? currencyCode ?? "";
+  const curSymbol = anchor?.symbol ?? currencySymbol ?? curCode;
   const zeroDec = ZERO_DECIMAL.has(curCode);
   function fmtFiat(n: number): string {
-    return zeroDec ? Math.round(n).toLocaleString("en-IN") : n.toFixed(2);
+    return zeroDec ? Math.round(n).toLocaleString() : n.toFixed(2);
   }
   const fiatForCoins = perCoin * Math.max(0, coins);
+  // What the fiat field shows: the user's in-progress text while editing,
+  // else the coins-derived amount (blank at 0 so the placeholder shows).
+  const fiatValue =
+    fiatEdit !== null ? fiatEdit : coins > 0 ? fmtFiat(fiatForCoins) : "";
 
   function prettyError(code: string | undefined): string {
     switch (code) {
@@ -177,7 +199,10 @@ export function BuyCoinsGrid({ packs, localizedPacks = [], locale: _locale }: Pr
                   min={MIN_TOPUP_COINS}
                   inputMode="numeric"
                   value={coins}
-                  onChange={(e) => setCoins(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+                  onChange={(e) => {
+                    setFiatEdit(null);
+                    setCoins(Math.max(0, Math.floor(Number(e.target.value) || 0)));
+                  }}
                 />
                 <span className="custom-unit">coins</span>
               </div>
@@ -194,11 +219,14 @@ export function BuyCoinsGrid({ packs, localizedPacks = [], locale: _locale }: Pr
                   min={0}
                   step={zeroDec ? 1 : 0.01}
                   inputMode="decimal"
-                  value={fmtFiat(fiatForCoins)}
+                  value={fiatValue}
+                  placeholder={fmtFiat(0)}
                   onChange={(e) => {
+                    setFiatEdit(e.target.value);
                     const f = Number(e.target.value) || 0;
                     setCoins(Math.max(0, Math.round(f / perCoin)));
                   }}
+                  onBlur={() => setFiatEdit(null)}
                 />
               </div>
             </label>
