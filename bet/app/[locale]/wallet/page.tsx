@@ -225,7 +225,13 @@ export default async function WalletPage({
             {/* BUY COINS — BuyCoinsGrid owns the card-head (it has the
                 client-side "Custom amount" toggle). */}
             <section className="card" id="buy">
-              <BuyCoinsGrid packs={COIN_PACKS} localizedPacks={localizedPacks} locale={locale} />
+              <BuyCoinsGrid
+                packs={COIN_PACKS}
+                localizedPacks={localizedPacks}
+                currencyCode={currencyCode}
+                currencySymbol={localized?.symbol ?? null}
+                locale={locale}
+              />
             </section>
 
             {/* WITHDRAW */}
