@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import "@/lib/boot";
 import { SessionProvider } from "@/components/SessionProvider";
@@ -36,6 +36,17 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-jetbrains-mono",
+});
+/**
+ * Space Grotesk powers the display/heading stack (`--font-display`).
+ * Without it loaded, headings silently fell back to Inter — losing the
+ * geometric, premium character the v2 market/wallet designs expect.
+ */
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-space-grotesk",
 });
 
 /** Mobile viewport. Without this, Next.js doesn't emit a viewport meta
@@ -107,7 +118,7 @@ export default async function RootLayout({
     <html
       lang={locale}
       dir={dir}
-      className={`dark ${inter.variable} ${jetbrainsMono.variable}`}
+      className={`dark ${inter.variable} ${jetbrainsMono.variable} ${spaceGrotesk.variable}`}
     >
       <body className="min-h-screen font-sans antialiased">
         <SessionProvider>

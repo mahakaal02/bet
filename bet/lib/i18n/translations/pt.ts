@@ -402,6 +402,11 @@ const pt: Partial<Dictionary> = {
     showLess: "Ver menos",
     empty: "Ainda não há candidatos neste evento.",
     notFound: "Evento não encontrado",
+    titleLead: "Explore",
+    titleEm: "cada evento",
+    subtitle: "Mercados de múltiplos resultados agrupados por evento — escolha um lado em qualquer candidato.",
+    statEvents: "Eventos",
+    statCandidates: "Candidatos",
   },
 
   wallet: {

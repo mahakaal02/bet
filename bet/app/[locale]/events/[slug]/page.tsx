@@ -4,6 +4,11 @@ import { notFound } from "next/navigation";
 // topbar, animated mesh background) so the event page is visually in harmony
 // with the rest of the app rather than carrying its own bespoke chrome.
 import "../../wallet/wallet-v2.css";
+// The embedded trade panel (MarketTradePanel) is styled by the `.tradepanel`
+// family that lives in markets-v2.css. Those rules are unscoped (not under
+// `.mkt`) and the token block is identical to wallet-v2's, so importing it
+// here only adds the panel styling without disturbing the event page theme.
+import "../../markets/markets-v2.css";
 import { db } from "@/lib/db";
 import { priceYes } from "@/lib/amm";
 import { getAuthedUser } from "@/lib/auth";
@@ -123,7 +128,7 @@ export default async function EventPage({
       })
     : null;
 
-  const [tradersGroups, recentTrades] = await Promise.all([
+  const [tradersGroups, recentTrades, myPositions] = await Promise.all([
     ids.length
       ? db.trade.groupBy({ by: ["userId"], where: { marketId: { in: ids } } })
       : Promise.resolve([] as { userId: string }[]),
@@ -138,7 +143,32 @@ export default async function EventPage({
           },
         })
       : Promise.resolve([]),
+    me && ids.length
+      ? db.position.findMany({
+          where: { userId: me.id, marketId: { in: ids } },
+          select: { marketId: true, outcome: true, shares: true, costBasis: true },
+        })
+      : Promise.resolve(
+          [] as {
+            marketId: string;
+            outcome: "YES" | "NO";
+            shares: number;
+            costBasis: number;
+          }[],
+        ),
   ]);
+
+  // Group the signed-in user's positions by candidate market so the embedded
+  // trade panel can show holdings and enable SELL for the right outcome.
+  const positionsByMarket = new Map<
+    string,
+    { outcome: "YES" | "NO"; shares: number; costBasis: number }[]
+  >();
+  for (const p of myPositions) {
+    const arr = positionsByMarket.get(p.marketId) ?? [];
+    arr.push({ outcome: p.outcome, shares: p.shares, costBasis: p.costBasis });
+    positionsByMarket.set(p.marketId, arr);
+  }
 
   const exclusive = group.type === "EXCLUSIVE";
   const groupResolved =
@@ -163,6 +193,11 @@ export default async function EventPage({
       yesPrice: yes,
       volumeCoins: m.volumeCoins,
       liquidity: Math.round(m.yesShares + m.noShares),
+      // Raw AMM reserves so the embedded MarketTradePanel can quote and trade
+      // against this candidate's own pool (same as the standalone market page).
+      yesShares: m.yesShares,
+      noShares: m.noShares,
+      positions: positionsByMarket.get(m.id) ?? [],
       series: sampleSeries(m.pricePoints, yes),
     };
   });

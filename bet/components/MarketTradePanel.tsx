@@ -5,10 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Badge } from "@/components/ui/Badge";
 import { quoteBuy, quoteSell, priceYes } from "@/lib/amm";
 import { fmtCoins, fmtPrice, cn } from "@/lib/utils";
 import { toast } from "@/components/ui/Toaster";
@@ -167,26 +163,21 @@ export function MarketTradePanel({
   }
 
   return (
-    <Card>
+    <div className="tradepanel">
       {/* BUY / SELL action tabs */}
-      <div className="mb-3 flex gap-2">
+      <div className="tp-seg">
         {(["BUY", "SELL"] as const).map((a) => (
           <button
             key={a}
             onClick={() => setAction(a)}
-            className={cn(
-              "flex-1 rounded-lg border py-1.5 text-xs font-bold uppercase tracking-wider transition",
-              action === a
-                ? "border-cyan-500 bg-cyan-500/15 text-cyan-200"
-                : "border-slate-700 bg-slate-900/60 text-slate-400 hover:text-slate-200",
-            )}
+            className={cn("tp-seg-btn", action === a && "on")}
           >
             {a}
           </button>
         ))}
       </div>
 
-      <div className="mb-3 flex gap-2">
+      <div className="tp-sides">
         {/* Toggle buttons spring up when a new price tick arrives — gives
             a tactile "the market moved" cue without changing the user's
             current selection. Spring is short and tight so traders don't
@@ -196,37 +187,32 @@ export function MarketTradePanel({
           animate={{ scale: flash === "YES" ? 1.05 : 1 }}
           transition={{ type: "spring", stiffness: 500, damping: 22 }}
           className={cn(
-            "flex-1 rounded-lg border py-2 text-sm font-bold",
-            outcome === "YES"
-              ? "border-emerald-500 bg-emerald-500/15 text-emerald-200"
-              : "border-slate-700 bg-slate-900/60 text-slate-400 hover:text-slate-200",
+            "tp-side yes",
+            outcome === "YES" && "on",
             flash === "YES" && "ticker-up",
           )}
         >
-          YES · {fmtPrice(yesPrice)}
+          {tr("market.yes")} <span className="px">{fmtPrice(yesPrice)}</span>
         </motion.button>
         <motion.button
           onClick={() => setOutcome("NO")}
           animate={{ scale: flash === "NO" ? 1.05 : 1 }}
           transition={{ type: "spring", stiffness: 500, damping: 22 }}
           className={cn(
-            "flex-1 rounded-lg border py-2 text-sm font-bold",
-            outcome === "NO"
-              ? "border-rose-500 bg-rose-500/15 text-rose-200"
-              : "border-slate-700 bg-slate-900/60 text-slate-400 hover:text-slate-200",
+            "tp-side no",
+            outcome === "NO" && "on",
             flash === "NO" && "ticker-down",
           )}
         >
-          NO · {fmtPrice(1 - yesPrice)}
+          {tr("market.no")} <span className="px">{fmtPrice(1 - yesPrice)}</span>
         </motion.button>
       </div>
 
       {action === "BUY" ? (
         <>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-            {tr("market.coinsToSpend")}
-          </label>
-          <Input
+          <label className="tp-label">{tr("market.coinsToSpend")}</label>
+          <input
+            className="tp-input"
             type="number"
             min={1}
             max={1_000_000}
@@ -234,14 +220,13 @@ export function MarketTradePanel({
             onChange={(e) => setCoinsInput(e.target.value)}
             disabled={!authed || !tradeOpen}
           />
-          <div className="my-2 flex gap-1.5">
+          <div className="tp-quick">
             {[50, 100, 500, 1000].map((n) => (
               <button
                 key={n}
                 type="button"
                 disabled={!authed || !tradeOpen}
                 onClick={() => setCoinsInput(String(n))}
-                className="flex-1 rounded-md border border-slate-700 bg-slate-900/60 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-40"
               >
                 {n}
               </button>
@@ -250,13 +235,14 @@ export function MarketTradePanel({
         </>
       ) : (
         <>
-          <label className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <label className="tp-label">
             <span>{tr("market.sharesToSell")}</span>
-            <span className="font-mono text-[10px] text-slate-400">
+            <span className="hold">
               {tr("market.youHold", { amount: myShares.toFixed(1) })}
             </span>
           </label>
-          <Input
+          <input
+            className="tp-input"
             type="number"
             min={0.01}
             step="0.01"
@@ -264,7 +250,7 @@ export function MarketTradePanel({
             onChange={(e) => setSharesInput(e.target.value)}
             disabled={!authed || !tradeOpen || myShares === 0}
           />
-          <div className="my-2 flex gap-1.5">
+          <div className="tp-quick">
             {[25, 50, 75, 100].map((pct) => (
               <button
                 key={pct}
@@ -273,27 +259,24 @@ export function MarketTradePanel({
                 onClick={() =>
                   setSharesInput(((myShares * pct) / 100).toFixed(2))
                 }
-                className="flex-1 rounded-md border border-slate-700 bg-slate-900/60 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-40"
               >
                 {pct}%
               </button>
             ))}
           </div>
           {sellOverflow && (
-            <Badge tone="warn" className="mb-2">
+            <span className="tp-warn">
               {tr("market.youHoldOnly", {
                 amount: myShares.toFixed(1),
                 outcome,
               })}
-            </Badge>
+            </span>
           )}
         </>
       )}
 
       {!tradeOpen ? (
-        <Badge tone="warn" className="mb-2">
-          {tr("market.tradingClosed")}
-        </Badge>
+        <span className="tp-warn">{tr("market.tradingClosed")}</span>
       ) : !authed ? (
         <Link
           href={
@@ -302,12 +285,21 @@ export function MarketTradePanel({
             encodeURIComponent(localizedPath(`/markets/${slug}`, locale))
           }
         >
-          <Button className="w-full">{tr("market.signInToTrade")}</Button>
+          <button type="button" className="tp-cta grad">
+            {tr("market.signInToTrade")}
+          </button>
         </Link>
       ) : (
-        <Button
-          variant={action === "BUY" ? (outcome === "YES" ? "yes" : "no") : "secondary"}
-          className="w-full"
+        <button
+          type="button"
+          className={cn(
+            "tp-cta",
+            action === "BUY"
+              ? outcome === "YES"
+                ? "buy-yes"
+                : "buy-no"
+              : "grad",
+          )}
           disabled={submitDisabled}
           onClick={submit}
         >
@@ -316,10 +308,10 @@ export function MarketTradePanel({
             : action === "BUY"
               ? tr("market.buyOutcome", { outcome })
               : tr("market.sellOutcome", { outcome })}
-        </Button>
+        </button>
       )}
 
-      <div className="mt-3 space-y-1 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-400">
+      <div className="tp-summary">
         {action === "BUY" ? (
           buyQuote ? (
             <>
@@ -373,24 +365,21 @@ export function MarketTradePanel({
       )}
 
       {positions.length > 0 && (
-        <div className="mt-3 border-t border-slate-800 pt-3">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-            {tr("market.yourPosition")}
-          </div>
+        <div className="tp-pos">
+          <div className="tp-pos-title">{tr("market.yourPosition")}</div>
           {positions.map((p) => (
-            <div
-              key={p.outcome}
-              className="flex items-center justify-between text-sm"
-            >
-              <Badge tone={p.outcome === "YES" ? "yes" : "no"}>{p.outcome}</Badge>
-              <span className="font-mono">
+            <div key={p.outcome} className="tp-pos-row">
+              <span className={cn("tp-tag", p.outcome === "YES" ? "yes" : "no")}>
+                {p.outcome}
+              </span>
+              <span className="meta">
                 {p.shares.toFixed(1)} {tr("market.sharesAbbrev")} · {fmtCoins(p.costBasis)} {tr("market.cost")}
               </span>
             </div>
           ))}
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -439,32 +428,29 @@ function RoutingDisclosure({
     : tr("market.routingAMMOnly");
 
   return (
-    <div className="mt-3 overflow-hidden rounded-lg border border-slate-800 bg-slate-950/40">
-      <button
-        onClick={onToggle}
-        className="flex w-full items-center justify-between px-3 py-2 text-start text-xs hover:bg-slate-900/40"
-      >
+    <div className="tp-route">
+      <button type="button" onClick={onToggle} className="tp-route-head">
         <span className="flex items-center gap-1.5">
-          <Sparkles className="h-3 w-3 text-cyan-400" />
-          <span className="font-semibold text-slate-300">{tr("market.routing")}</span>
-          <span className="text-slate-500">· {summary}</span>
+          <Sparkles className="sparkle h-3 w-3" />
+          <span style={{ fontWeight: 600 }}>{tr("market.routing")}</span>
+          <span className="muted">· {summary}</span>
         </span>
         {open ? (
-          <ChevronUp className="h-3 w-3 text-slate-500" />
+          <ChevronUp className="muted h-3 w-3" />
         ) : (
-          <ChevronDown className="h-3 w-3 text-slate-500" />
+          <ChevronDown className="muted h-3 w-3" />
         )}
       </button>
       {open && (
-        <div className="border-t border-slate-800 px-3 py-2 text-[11px] font-mono text-slate-400">
+        <div className="tp-route-body">
           {plan.legs.map((l, i) => {
             if (l.kind === "book") {
               return (
-                <div key={i} className="flex justify-between py-0.5">
+                <div key={i} className="tp-route-leg">
                   <span>
-                    <Badge tone="info" className="me-1">
+                    <span className="tp-tag info" style={{ marginInlineEnd: 4 }}>
                       {tr("market.book")}
-                    </Badge>
+                    </span>
                     {(l.shares ?? 0).toFixed(2)} {tr("market.sharesAbbrev")} @ {fmtPrice(l.price ?? 0)}
                   </span>
                   <span>{fmtCoins(Math.round(l.coins ?? 0))}</span>
@@ -474,18 +460,18 @@ function RoutingDisclosure({
             const sharesOut = plan.side === "BUY" ? (l.output ?? 0) : (l.input ?? 0);
             const coins = plan.side === "BUY" ? (l.input ?? 0) : (l.output ?? 0);
             return (
-              <div key={i} className="flex justify-between py-0.5">
+              <div key={i} className="tp-route-leg">
                 <span>
-                  <Badge tone="default" className="me-1">
+                  <span className="tp-tag" style={{ marginInlineEnd: 4 }}>
                     {tr("market.amm")}
-                  </Badge>
+                  </span>
                   {sharesOut.toFixed(2)} {tr("market.sharesAbbrev")}
                 </span>
                 <span>{fmtCoins(Math.round(coins))}</span>
               </div>
             );
           })}
-          <div className="mt-2 flex justify-between border-t border-slate-800 pt-1.5 text-slate-300">
+          <div className="tp-route-total">
             <span>{tr("market.avgPrice")}</span>
             <span>{fmtPrice(plan.avgPrice)}</span>
           </div>
@@ -497,14 +483,12 @@ function RoutingDisclosure({
 
 function Row({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="tp-row">
       <span>
         {label}
-        {hint && (
-          <span className="ms-1 text-[10px] text-slate-600">({hint})</span>
-        )}
+        {hint && <span className="hint">({hint})</span>}
       </span>
-      <span className="font-mono text-slate-200">{value}</span>
+      <span className="v">{value}</span>
     </div>
   );
 }

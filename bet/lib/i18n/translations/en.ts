@@ -267,6 +267,7 @@ const en: Dictionary = {
     no: "NO",
     volume: "Volume",
     liquidity: "Liquidity",
+    probability: "Probability",
     midPrice: "Mid price",
     ends: "Ends",
     endsDate: "Ends {date}",
@@ -428,6 +429,11 @@ const en: Dictionary = {
     showLess: "Show less",
     empty: "No candidates in this event yet.",
     notFound: "Event not found",
+    titleLead: "Browse",
+    titleEm: "every event",
+    subtitle: "Multi-outcome markets grouped by event — pick a side on any candidate.",
+    statEvents: "Events",
+    statCandidates: "Candidates",
   },
 
   wallet: {

@@ -41,10 +41,30 @@ import { ImpersonationScopeGuard } from './foundation/guards/impersonation-scope
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot([
-      // Global default: 60 requests per minute per IP.
-      { name: 'default', ttl: 60_000, limit: 60 },
+      // Global default: 60 requests per minute per IP in production.
+      // Local dev relaxes this heavily because every browser request
+      // shares one IP (localhost) and the polling/SSE pages would
+      // otherwise trip the limit during a normal walkthrough.
+      // Override explicitly with THROTTLE_LIMIT if needed.
+      {
+        name: 'default',
+        ttl: 60_000,
+        limit: Number(process.env.THROTTLE_LIMIT) ||
+          (process.env.NODE_ENV === 'production' ? 60 : 2000),
+      },
       // Tight burst limit reserved for bid placement (see @Throttle there).
-      { name: 'bid', ttl: 10_000, limit: 5 },
+      // NOTE: every throttler in this array applies to ALL routes by
+      // default; the per-route @Throttle({ bid: ... }) decorators on the
+      // bid/aviator endpoints override this with the real 5/10s limit.
+      // So locally we neutralise the *global* bid limit (it would
+      // otherwise cap every page to 5 requests / 10s) while the
+      // per-route decorators keep actual bid placement protected.
+      {
+        name: 'bid',
+        ttl: 10_000,
+        limit: Number(process.env.THROTTLE_BID_LIMIT) ||
+          (process.env.NODE_ENV === 'production' ? 5 : 2000),
+      },
     ]),
     ScheduleModule.forRoot(),
     PrismaModule,

@@ -396,6 +396,11 @@ const fr: Partial<Dictionary> = {
     showLess: "Afficher moins",
     empty: "Aucun candidat dans cet événement pour l'instant.",
     notFound: "Événement introuvable",
+    titleLead: "Parcourez",
+    titleEm: "chaque événement",
+    subtitle: "Marchés à résultats multiples regroupés par événement — choisissez un camp sur n'importe quel candidat.",
+    statEvents: "Événements",
+    statCandidates: "Candidats",
   },
 
   wallet: {

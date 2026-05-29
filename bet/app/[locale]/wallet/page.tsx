@@ -143,11 +143,12 @@ export default async function WalletPage({
         <div className="topbar-inner">
           <a className="brand" href={hubHomeUrl()} aria-label="Kalki Exchange">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="brand-mark" src="/kalki-logo.png" alt="Kalki Exchange" width={34} height={34} />
+            <img className="brand-mark" src="/kalki-logo.png?v=2" alt="Kalki Exchange" width={34} height={34} />
           </a>
 
           <nav className="nav" aria-label="primary">
             <Link href={lp("/markets")}>{tr("nav.markets")}</Link>
+            <Link href={lp("/events")}>{tr("nav.events")}</Link>
             <Link href={lp("/portfolio")}>{tr("nav.portfolio")}</Link>
             <Link href={lp("/watchlist")}>{tr("nav.watchlist")}</Link>
             <Link className="active" href={lp("/wallet")}>

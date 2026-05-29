@@ -11,6 +11,7 @@ import {
 import Link from "next/link";
 import { ThemeSwitch } from "@/app/[locale]/wallet/wallet-client";
 import { Comments, type CommentRow } from "@/components/Comments";
+import { MarketTradePanel } from "@/components/MarketTradePanel";
 import { useMarketStream } from "@/lib/useMarketStream";
 import { groupDisplayPrices } from "@/lib/market-group";
 import { fmtCoins } from "@/lib/utils";
@@ -32,6 +33,12 @@ export interface EventCandidate {
   yesPrice: number;
   volumeCoins: number;
   liquidity: number;
+  /** Raw AMM reserves — let the embedded trade panel quote against this
+   *  candidate's own pool exactly like the standalone market page does. */
+  yesShares: number;
+  noShares: number;
+  /** The signed-in user's holdings on this candidate market (empty otherwise). */
+  positions: { outcome: "YES" | "NO"; shares: number; costBasis: number }[];
   /** YES probability history, 0..100, evenly sampled. */
   series: number[];
 }
@@ -189,8 +196,6 @@ export function EventDetailView({
   const [selectedId, setSelectedId] = useState<string>(
     () => ranked[0]?.cand.id ?? candidates[0]?.id ?? "",
   );
-  const [side, setSide] = useState<"y" | "n">("y");
-  const [qty, setQty] = useState<number>(250);
   const [tab, setTab] = useState<"overview" | "activity" | "comments">("overview");
   const [range, setRange] = useState<string>("all");
 
@@ -202,9 +207,8 @@ export function EventDetailView({
      a single boolean flag would fail to re-fire. */
   const [blinkN, setBlinkN] = useState(0);
   const ticketRef = useRef<HTMLDivElement>(null);
-  const selectCand = useCallback((id: string, s?: "y" | "n") => {
+  const selectCand = useCallback((id: string) => {
     setSelectedId(id);
-    if (s) setSide(s);
     setBlinkN((n) => n + 1);
     requestAnimationFrame(() => {
       ticketRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -217,10 +221,6 @@ export function EventDetailView({
     candidates.find((c) => c.id === selectedId) ?? candidates[0] ?? null;
   const selLive = selected ? (deferredPrices[selected.id] ?? selected.yesPrice) : 0;
   const yesCents = Math.round(selLive * 100);
-  const px = side === "y" ? yesCents : 100 - yesCents;
-  const cost = (qty * px) / 100;
-  const payout = qty;
-  const profit = payout - cost - cost * 0.005;
 
   /* ----- chart hidden lines ----- */
   const [hidden, setHidden] = useState<Record<string, boolean>>({});
@@ -349,7 +349,7 @@ export function EventDetailView({
                     live={liveIds.has(r.cand.id)}
                     selected={r.cand.id === selected.id}
                     onTick={onTick}
-                    onSelect={(s) => selectCand(r.cand.id, s)}
+                    onSelect={() => selectCand(r.cand.id)}
                     tradeLabel={t("group.buy")}
                   />
                 ))}
@@ -488,70 +488,27 @@ export function EventDetailView({
                 </select>
               </label>
 
-              <div className="side-switch">
-                <button
-                  className={side === "y" ? "on y" : ""}
-                  onClick={() => setSide("y")}
-                >
-                  {t("market.yes")} · {pctToDec(yesCents)}
-                </button>
-                <button
-                  className={side === "n" ? "on n" : ""}
-                  onClick={() => setSide("n")}
-                >
-                  {t("market.no")} · {pctToDec(100 - yesCents)}
-                </button>
-              </div>
-
-              <label className="field">
-                <span>Shares</span>
-                <div className="field-input">
-                  <button
-                    className="field-step"
-                    onClick={() => setQty((q) => Math.max(0, q - 50))}
-                  >
-                    −
-                  </button>
-                  <input
-                    type="number"
-                    min={0}
-                    value={qty}
-                    onChange={(e) =>
-                      setQty(Math.max(0, parseInt(e.target.value, 10) || 0))
-                    }
-                  />
-                  <button className="field-step" onClick={() => setQty((q) => q + 50)}>
-                    +
-                  </button>
-                </div>
-              </label>
-
-              <div className="quick">
-                {[100, 500, 1000].map((v) => (
-                  <button key={v} onClick={() => setQty((q) => q + v)}>
-                    +{v >= 1000 ? "1k" : v}
-                  </button>
-                ))}
-                <button onClick={() => setQty(20000)}>Max</button>
-              </div>
-
-              <div className="summary">
-                <Row k="Avg price" v={pctToDec(px)} />
-                <Row k="Cost" v={`${cost.toFixed(2)} ${t("toast.coins")}`} />
-                <Row k="Payout if win" v={`${payout.toFixed(2)} ${t("toast.coins")}`} />
-                <Row k="Profit" v={`${profit.toFixed(2)} ${t("toast.coins")}`} accent />
-              </div>
-
-              <Link
-                href={lp(`/markets/${selected.slug}`)}
-                className={`place ${side}`}
-              >
-                {resolved
-                  ? "View market"
-                  : `${t("group.buy")} ${side === "y" ? t("market.yes") : t("market.no")} · ${selected.title}`}
-              </Link>
+              {/* Real trade panel — quotes and places orders against THIS
+                  candidate's own AMM/order book via /api/trade/smart, exactly
+                  like the standalone market page. Keyed by candidate id so all
+                  internal input state resets cleanly when the user switches
+                  outcomes from the dropdown above. A filled order calls
+                  router.refresh(), which re-runs the server page and feeds the
+                  updated reserves + the user's new holdings back down. */}
+              <MarketTradePanel
+                key={selected.id}
+                marketId={selected.id}
+                slug={selected.slug}
+                yesShares={selected.yesShares}
+                noShares={selected.noShares}
+                status={selected.status}
+                authed={authed}
+                positions={selected.positions}
+              />
               <p className="ticket-note">
-                Orders are placed on the candidate&apos;s own market page.
+                <Link href={lp(`/markets/${selected.slug}`)}>
+                  {t("market.openMarket")}
+                </Link>
               </p>
             </div>
           </aside>
@@ -585,7 +542,7 @@ function CandRow({
   live: boolean;
   selected: boolean;
   onTick: (id: string, yesPrice: number) => void;
-  onSelect: (side?: "y" | "n") => void;
+  onSelect: () => void;
   tradeLabel: string;
 }) {
   const tick = useMarketStream(live ? cand.id : "", cand.yesPrice);
@@ -635,7 +592,7 @@ function CandRow({
         className="cand-trade"
         onClick={(e) => {
           e.stopPropagation();
-          onSelect("y");
+          onSelect();
         }}
       >
         {tradeLabel}
@@ -914,7 +871,7 @@ function EventTopbar({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             className="brand-mark"
-            src="/kalki-logo.png"
+            src="/kalki-logo.png?v=2"
             alt="Kalki Exchange"
             width={34}
             height={34}
@@ -965,15 +922,6 @@ function Fact({ k, v }: { k: string; v: string }) {
     <div className="fact">
       <span className="fact-k">{k}</span>
       <span className="fact-v">{v}</span>
-    </div>
-  );
-}
-
-function Row({ k, v, accent }: { k: string; v: string; accent?: boolean }) {
-  return (
-    <div className="sum-row">
-      <span>{k}</span>
-      <strong className={accent ? "accent" : ""}>{v}</strong>
     </div>
   );
 }
@@ -1158,7 +1106,9 @@ const EVT_CSS = `
 .evt .place.y { background: linear-gradient(135deg, var(--yes), #10b981); }
 .evt .place.n { background: linear-gradient(135deg, var(--no), #ef4444); color: #fff; }
 .evt .place:hover { filter: brightness(1.06); }
-.evt .ticket-note { font-size: 11px; color: var(--faint); text-align: center; }
+.evt .ticket-note { font-size: 11px; color: var(--faint); text-align: center; margin-top: 2px; }
+.evt .ticket-note a { color: var(--dim); text-decoration: underline; text-underline-offset: 2px; }
+.evt .ticket-note a:hover { color: var(--cyan); }
 
 /* Keep the primary nav (Markets / Events / Portfolio / Wallet) visible on the
    event page even on narrow screens — the shared wallet chrome hides it ≤720.
