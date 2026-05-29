@@ -1,11 +1,18 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Navbar } from "@/components/Navbar";
-import { Badge } from "@/components/ui/Badge";
-import { GroupMarketList } from "@/components/GroupMarketList";
-import type { GroupChildView } from "@/components/GroupMarketRow";
+// Reuse the approved Wallet v2 design system (fonts, palette, themes, glassy
+// topbar, animated mesh background) so the event page is visually in harmony
+// with the rest of the app rather than carrying its own bespoke chrome.
+import "../../wallet/wallet-v2.css";
 import { db } from "@/lib/db";
 import { priceYes } from "@/lib/amm";
+import { getAuthedUser } from "@/lib/auth";
+import {
+  EventDetailView,
+  type EventCandidate,
+  type EventTrade,
+} from "@/components/EventDetailView";
+import type { CommentRow } from "@/components/Comments";
 import {
   DEFAULT_LOCALE,
   buildLocalizedMetadata,
@@ -49,11 +56,39 @@ export async function generateMetadata({
   });
 }
 
+/** Resample a child market's price history into exactly `n` evenly-spaced
+ *  YES-probability points (0..100). Markets with too little history fall
+ *  back to a flat line at the current price so the chart still renders a
+ *  clean baseline instead of a single jagged dot. */
+function sampleSeries(
+  points: { yesPrice: number }[],
+  current: number,
+  n = 40,
+): number[] {
+  const pct = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 100);
+  if (points.length === 0) return Array.from({ length: n }, () => pct(current));
+  if (points.length <= n) {
+    const head = Array.from({ length: n - points.length }, () =>
+      pct(points[0].yesPrice),
+    );
+    return [...head, ...points.map((p) => pct(p.yesPrice))];
+  }
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const idx = Math.round((i / (n - 1)) * (points.length - 1));
+    out.push(pct(points[idx].yesPrice));
+  }
+  return out;
+}
+
 /**
- * Event (grouped-markets) page. An aggregating index over a set of child
- * binary markets — header + a live ranked candidate list. Trading happens on
- * the child markets' own detail pages (each row links there); this page never
- * mutates markets.
+ * Event (grouped-markets) detail page — the aggregate view over a set of
+ * child binary markets that belong to the same real-world event.
+ *
+ * Read-only with respect to the markets: it never mutates the AMM or places
+ * orders. Trading happens on each child market's own detail page; the in-page
+ * trade ticket is a quote/calculator that deep-links the user to the selected
+ * candidate's market to actually place the order.
  */
 export default async function EventPage({
   params,
@@ -63,32 +98,62 @@ export default async function EventPage({
   const { locale: raw, slug } = await params;
   if (!isLocale(raw)) notFound();
   const locale: Locale = raw;
-  const tr = (k: string, vars?: Record<string, string | number>) => t(k, locale, vars);
 
   const group = await db.marketGroup.findUnique({
     where: { slug },
     include: {
       markets: {
         orderBy: { groupSortOrder: "asc" },
-        include: marketTranslationInclude(locale),
+        include: {
+          ...marketTranslationInclude(locale),
+          pricePoints: { orderBy: { recordedAt: "asc" }, take: 200 },
+        },
       },
     },
   });
   if (!group) notFound();
 
-  const exclusive = group.type === "EXCLUSIVE";
-  const groupResolved = group.status === "RESOLVED" || group.status === "CANCELLED";
+  const ids = group.markets.map((m) => m.id);
+  const me = await getAuthedUser();
+  // Wallet balance for the topbar pill (mirrors the Wallet/Navbar chrome).
+  const wallet = me
+    ? await db.wallet.findUnique({
+        where: { userId: me.id },
+        select: { balance: true },
+      })
+    : null;
 
-  const items: GroupChildView[] = group.markets.map((m) => {
-    // Resolved children clamp to 1/0 so the bar reflects the outcome.
+  const [tradersGroups, recentTrades] = await Promise.all([
+    ids.length
+      ? db.trade.groupBy({ by: ["userId"], where: { marketId: { in: ids } } })
+      : Promise.resolve([] as { userId: string }[]),
+    ids.length
+      ? db.trade.findMany({
+          where: { marketId: { in: ids } },
+          orderBy: { createdAt: "desc" },
+          take: 15,
+          include: {
+            user: { select: { username: true } },
+            market: { select: { title: true, slug: true } },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const exclusive = group.type === "EXCLUSIVE";
+  const groupResolved =
+    group.status === "RESOLVED" || group.status === "CANCELLED";
+
+  const candidates: EventCandidate[] = group.markets.map((m) => {
+    const rawYes = priceYes({ yesShares: m.yesShares, noShares: m.noShares });
     const yes =
       m.status === "RESOLVED"
         ? m.resolvedAs === "YES"
           ? 1
           : m.resolvedAs === "NO"
             ? 0
-            : priceYes({ yesShares: m.yesShares, noShares: m.noShares })
-        : priceYes({ yesShares: m.yesShares, noShares: m.noShares });
+            : rawYes
+        : rawYes;
     return {
       id: m.id,
       slug: m.slug,
@@ -97,34 +162,101 @@ export default async function EventPage({
       resolvedAs: m.resolvedAs,
       yesPrice: yes,
       volumeCoins: m.volumeCoins,
+      liquidity: Math.round(m.yesShares + m.noShares),
+      series: sampleSeries(m.pricePoints, yes),
     };
   });
 
-  return (
-    <main className="min-h-screen pb-20">
-      <Navbar />
-      <div className="mx-auto max-w-3xl px-4 py-6">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <Badge>{formatCategory(group.category, locale)}</Badge>
-          {groupResolved && (
-            <Badge tone={group.status === "CANCELLED" ? "warn" : "info"}>
-              {group.status === "CANCELLED" ? tr("market.cancelled") : tr("market.resolved")}
-            </Badge>
-          )}
-        </div>
-        <h1 className="text-2xl font-black md:text-3xl">{group.title}</h1>
-        {group.description && (
-          <p className="mt-3 max-w-prose text-sm text-slate-300">{group.description}</p>
-        )}
-        <p className="mb-4 mt-2 text-sm text-slate-400">
-          {tr("group.candidateCount", {
-            count: items.length,
-            s: items.length === 1 ? "" : "s",
-          })}
-        </p>
+  const totalVolume = group.markets.reduce((s, m) => s + m.volumeCoins, 0);
+  const totalLiquidity = group.markets.reduce(
+    (s, m) => s + Math.round(m.yesShares + m.noShares),
+    0,
+  );
 
-        <GroupMarketList items={items} exclusive={exclusive} />
-      </div>
-    </main>
+  // Latest child close date stands in for the event's resolution date.
+  const resolvesAt =
+    group.markets.reduce<number>(
+      (max, m) => Math.max(max, new Date(m.endsAt).getTime()),
+      0,
+    ) || null;
+
+  const trades: EventTrade[] = recentTrades.map((tr) => ({
+    id: tr.id,
+    username: tr.user.username,
+    outcome: tr.outcome,
+    cost: tr.cost,
+    shares: tr.shares,
+    marketTitle: tr.market.title,
+    marketSlug: tr.market.slug,
+    at: tr.createdAt.toISOString(),
+  }));
+
+  // Preload comment threads for every candidate so the Discussion tab paints
+  // immediately (SWR fallbackData) — the event page holds many open SSE
+  // streams that can otherwise starve the client-side comments fetch in dev.
+  const commentRows = ids.length
+    ? await db.comment.findMany({
+        where: { marketId: { in: ids }, hidden: false },
+        orderBy: { createdAt: "asc" },
+        take: 1000,
+        include: { user: { select: { username: true } } },
+      })
+    : [];
+
+  const initialComments: Record<string, CommentRow[]> = {};
+  {
+    const repliesByParent = new Map<string, CommentRow[]>();
+    const shape = (c: (typeof commentRows)[number]): CommentRow => ({
+      id: c.id,
+      body: c.body,
+      createdAt: c.createdAt.toISOString(),
+      likeCount: c.likeCount,
+      parentId: c.parentId,
+      user: { username: c.user.username },
+    });
+    for (const c of commentRows) {
+      if (c.parentId) {
+        const arr = repliesByParent.get(c.parentId) ?? [];
+        arr.push(shape(c));
+        repliesByParent.set(c.parentId, arr);
+      }
+    }
+    for (const c of commentRows) {
+      if (c.parentId) continue;
+      const node: CommentRow = {
+        ...shape(c),
+        replies: repliesByParent.get(c.id) ?? [],
+      };
+      (initialComments[c.marketId] ??= []).push(node);
+    }
+    // Newest top-level comment first (replies stay oldest-first).
+    for (const mid of Object.keys(initialComments)) {
+      initialComments[mid].sort(
+        (a, b) => +new Date(b.createdAt) - +new Date(a.createdAt),
+      );
+    }
+  }
+
+  return (
+    <EventDetailView
+      locale={locale}
+      slug={slug}
+      title={group.title}
+      description={group.description}
+      categoryLabel={formatCategory(group.category, locale)}
+      exclusive={exclusive}
+      resolved={groupResolved}
+      status={group.status}
+      candidates={candidates}
+      trades={trades}
+      totalVolume={totalVolume}
+      totalLiquidity={totalLiquidity}
+      tradersCount={tradersGroups.length}
+      resolvesAt={resolvesAt}
+      authed={!!me}
+      balance={wallet?.balance ?? null}
+      username={me?.username ?? null}
+      initialComments={initialComments}
+    />
   );
 }

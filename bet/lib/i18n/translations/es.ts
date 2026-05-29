@@ -392,6 +392,7 @@ const es: Partial<Dictionary> = {
     candidateCount: "{count} candidato{s}",
     chance: "Probabilidad",
     buy: "Comprar",
+    switchOutcome: "Cambiar resultado",
     vol: "Vol",
     showAll: "Ver todos ({count})",
     showLess: "Ver menos",
@@ -665,6 +666,11 @@ const es: Partial<Dictionary> = {
     couldntPost: "No se pudo publicar el comentario.",
     signInPrompt: "Inicia sesión para unirte a la discusión.",
     emptyState: "Aún no hay comentarios.",
+    likeButton: "Me gusta",
+    replyButton: "Responder",
+    replyPlaceholder: "Escribe una respuesta…",
+    viewReplies: "Ver {count} respuestas",
+    hideReplies: "Ocultar respuestas",
   },
 
   share: {

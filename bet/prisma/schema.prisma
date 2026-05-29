@@ -545,12 +545,22 @@ model Comment {
   userId    String
   body      String   @db.VarChar(500)
   hidden    Boolean  @default(false)
+  // Instagram-style single-level threading: a reply points at its top-level
+  // parent (parentId = null ⇒ the comment is itself top-level). Replies of
+  // replies still pin to the same top-level parent so threads stay one deep.
+  parentId  String?
+  // Lightweight like counter. Demo-grade: incremented/decremented by the like
+  // endpoint; no per-user dedupe table (kept intentionally simple).
+  likeCount Int      @default(0)
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("CommentReplies")
 
   @@index([marketId, createdAt(sort: Desc)])
+  @@index([parentId])
 }
 
 model Notification {

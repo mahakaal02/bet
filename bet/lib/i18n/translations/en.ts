@@ -422,6 +422,7 @@ const en: Dictionary = {
     candidateCount: "{count} candidate{s}",
     chance: "Chance",
     buy: "Buy",
+    switchOutcome: "Switch outcome",
     vol: "Vol",
     showAll: "Show all {count}",
     showLess: "Show less",
@@ -699,6 +700,11 @@ const en: Dictionary = {
     couldntPost: "Couldn't post comment.",
     signInPrompt: "Sign in to join the discussion.",
     emptyState: "No comments yet.",
+    likeButton: "Like",
+    replyButton: "Reply",
+    replyPlaceholder: "Write a reply…",
+    viewReplies: "View {count} replies",
+    hideReplies: "Hide replies",
   },
 
   share: {
