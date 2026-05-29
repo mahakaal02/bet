@@ -113,6 +113,16 @@ export function middleware(req: NextRequest) {
   }
 
   if (pathLocale) {
+    // PR-HUB-TO-MARKETS — the locale root no longer hosts a marketing
+    // landing page. Send `/{locale}` straight to the markets list so
+    // the hub tile (and any bare-root link) lands users on tradable
+    // content in one hop. Non-localized roots reach here on their
+    // second pass, after being prefixed with a locale above.
+    if (rest === "/") {
+      const url = req.nextUrl.clone();
+      url.pathname = `/${pathLocale}/markets`;
+      return NextResponse.redirect(url);
+    }
     // URL already has a locale prefix. Trust it as the user's intent
     // and let it through unchanged — but surface the locale to the
     // root layout via a request header so `<html lang>` and
