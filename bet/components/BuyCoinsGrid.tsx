@@ -43,7 +43,7 @@ const MIN_TOPUP_COINS = 100;
  *   PPP-localized; the custom amount is priced SERVER-SIDE from the
  *   coins (the client only sends coins, never a trusted fiat figure).
  */
-export function BuyCoinsGrid({ packs, localizedPacks = [], locale: _locale }: Props) {
+export function BuyCoinsGrid({ packs, localizedPacks = [], locale }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
@@ -55,7 +55,7 @@ export function BuyCoinsGrid({ packs, localizedPacks = [], locale: _locale }: Pr
   function priceLabel(p: CoinPack): string {
     const loc = localizedByCoins.get(p.coins);
     if (loc) return `${loc.symbol}${loc.price}`;
-    return `₹${fmtCoins(p.priceInr)}`;
+    return `₹${fmtCoins(p.priceInr, locale)}`;
   }
 
   // Per-coin rate for the custom card, anchored on the 1000-coin pack
@@ -67,7 +67,7 @@ export function BuyCoinsGrid({ packs, localizedPacks = [], locale: _locale }: Pr
   const curCode = anchor?.currency ?? "INR";
   const zeroDec = ZERO_DECIMAL.has(curCode);
   function fmtFiat(n: number): string {
-    return zeroDec ? Math.round(n).toLocaleString("en-IN") : n.toFixed(2);
+    return zeroDec ? Math.round(n).toLocaleString(locale) : n.toFixed(2);
   }
   const fiatForCoins = perCoin * Math.max(0, coins);
 
@@ -107,8 +107,8 @@ export function BuyCoinsGrid({ packs, localizedPacks = [], locale: _locale }: Pr
       body.duplicate
         ? t("wallet.alreadyCreditedPack")
         : t("wallet.creditsBalance", {
-            coins: fmtCoins(body.credited),
-            balance: fmtCoins(body.balance),
+            coins: fmtCoins(body.credited, locale),
+            balance: fmtCoins(body.balance, locale),
           }),
       "ok",
     );
@@ -213,13 +213,13 @@ export function BuyCoinsGrid({ packs, localizedPacks = [], locale: _locale }: Pr
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <>
-                  {t("wallet.buyCoins")} · {fmtCoins(coins)} {t("wallet.coins")}
+                  {t("wallet.buyCoins")} · {fmtCoins(coins, locale)} {t("wallet.coins")}
                 </>
               )}
             </button>
             {coins < MIN_TOPUP_COINS && (
               <div className="custom-note">
-                {t("wallet.minTopup", { amount: fmtCoins(MIN_TOPUP_COINS) })}
+                {t("wallet.minTopup", { amount: fmtCoins(MIN_TOPUP_COINS, locale) })}
               </div>
             )}
           </div>
@@ -240,7 +240,7 @@ export function BuyCoinsGrid({ packs, localizedPacks = [], locale: _locale }: Pr
               >
                 {p.highlight && <span className="pack-tag">{p.highlight}</span>}
                 <div className="pack-amount">
-                  {fmtCoins(p.coins)}
+                  {fmtCoins(p.coins, locale)}
                   <span className="sub">{t("wallet.coins")}</span>
                 </div>
                 <div className="pack-rate">{priceLabel(p)}</div>

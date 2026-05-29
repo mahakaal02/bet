@@ -22,15 +22,16 @@ import { useTranslation } from '@/lib/i18n/client';
  *              both the correct surface and avoids duplicating
  *              the form logic in two apps.
  *
- * Withdrawal lock kicks in below the platform minimum (2,000 coins,
+ * Withdrawal lock kicks in below the platform minimum (2,999 coins,
  * matching `MIN_WITHDRAW_COINS` in `bet/lib/coins.ts`). Keep this
  * value in lockstep with the Bet constant — the server enforces it
- * via Zod, so a mismatch here would only confuse players (they'd
+ * via Zod (`bet/app/api/wallet/withdraw/route.ts` → `.min(MIN_WITHDRAW_COINS)`),
+ * so a mismatch here would only confuse players (they'd
  * tap a "ready" Encash button and get bounced by validation on the
  * next screen). Below the threshold the button is visibly disabled
  * with a progress bar counting down the gap.
  */
-const WITHDRAW_MIN = 2000;
+const WITHDRAW_MIN = 2999;
 
 function exchangeOrigin(): string {
   const fromEnv = process.env.NEXT_PUBLIC_EXCHANGE_URL;

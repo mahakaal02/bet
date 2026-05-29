@@ -41,9 +41,6 @@ const es: Partial<Dictionary> = {
     notificationsTitle: "Notificaciones",
     notificationsDescription:
       "Ejecuciones de órdenes, resoluciones de mercado, menciones y recompensas — tu bandeja para todo lo que ocurrió mientras estabas fuera.",
-    leaderboardTitle: "Clasificación — mejores traders",
-    leaderboardDescription:
-      "Mejores traders ordenados por XP. Gana XP operando en mercados de predicción — 1 XP por cada 20 monedas gastadas.",
     achievementsTitle: "Logros — insignias de trader",
     achievementsDescription:
       "Desbloquea insignias operando, invitando amigos y alcanzando hitos. Gana XP y monedas extra.",
@@ -77,8 +74,6 @@ const es: Partial<Dictionary> = {
     portfolio: "Portafolio",
     wallet: "Billetera",
     profile: "Perfil",
-    leaderboard: "Clasificación",
-    leaderboardMobile: "Top",
     watchlist: "Favoritos",
     achievements: "Logros",
     notifications: "Notificaciones",
@@ -99,7 +94,6 @@ const es: Partial<Dictionary> = {
     statsUsers: "Jugadores",
     statsTrades: "Negociaciones realizadas",
     trendingHeader: "Mercados destacados",
-    leaderboardHeader: "Mejores traders",
   },
 
   forms: {
@@ -121,7 +115,6 @@ const es: Partial<Dictionary> = {
     wallet: "Cargando billetera…",
     portfolio: "Cargando portafolio…",
     profile: "Cargando perfil…",
-    leaderboard: "Cargando clasificación…",
   },
 
   validation: {
@@ -749,13 +742,6 @@ const es: Partial<Dictionary> = {
     allRead: "Todo leído.",
     emptyState:
       "Estás al día. Haz una operación para empezar a recibir notificaciones.",
-  },
-
-  leaderboard: {
-    heading: "Clasificación",
-    subtext:
-      "Mejores traders por XP total. Gana XP operando — 1 XP por cada 20 monedas gastadas.",
-    emptyState: "Aún no hay traders.",
   },
 
   achievements: {

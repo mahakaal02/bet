@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   DocumentKind,
@@ -16,6 +17,9 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../foundation/audit-log.service';
 import { SettingsService } from '../foundation/settings.service';
+import { ReferralsService } from '../referrals/referrals.service';
+import { isUniqueViolation } from '../common/prisma-errors';
+import { clampPageLimit, cursorPage } from '../common/pagination';
 import { KYC_STORAGE, type KycStorage } from './kyc.tokens';
 import { VIRUS_SCANNER, type VirusScanner } from './kyc.tokens';
 import { DOCUMENT_CIPHER, type DocumentCipher } from './kyc.tokens';
@@ -82,6 +86,11 @@ export class KycService {
     @Inject(KYC_STORAGE) private readonly storage: KycStorage,
     @Inject(VIRUS_SCANNER) private readonly scanner: VirusScanner,
     @Inject(DOCUMENT_CIPHER) private readonly cipher: DocumentCipher,
+    // Optional: KYC promotion is a documented trigger for referral
+    // qualification (a referee who hits KYC TIER_1 satisfies one of
+    // the two referral gates). Best-effort + optional so KYC promotion
+    // never hard-depends on the referrals subsystem.
+    @Optional() private readonly referrals?: ReferralsService,
   ) {}
 
   /**
@@ -305,16 +314,12 @@ export class KycService {
       });
     } catch (err: unknown) {
       // P2002 — unique violation, lost the race. Re-read.
-      if (this.isUniqueViolation(err)) {
+      if (isUniqueViolation(err)) {
         const refetch = await this.prisma.kycVerification.findUnique({ where: { userId } });
         if (refetch) return refetch;
       }
       throw err;
     }
-  }
-
-  private isUniqueViolation(err: unknown): boolean {
-    return Boolean(err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === 'P2002');
   }
 
   /**
@@ -373,6 +378,21 @@ export class KycService {
       before: { tier: kyc.tier },
       after: { tier: target },
     });
+
+    // A promotion to TIER_1+ trips the KYC half of the referral
+    // qualification gate. Fire `maybeQualify` best-effort — it re-reads
+    // both gates and no-ops unless the deposit gate is also met, and it
+    // must never break KYC promotion if the referrals subsystem hiccups.
+    if (this.referrals && target !== KycTier.TIER_0) {
+      void this.referrals.maybeQualify(userId).catch((err) => {
+        this.logger.warn(
+          `referral maybeQualify after KYC promotion failed for ${userId}: ${
+            (err as Error).message
+          }`,
+        );
+      });
+    }
+
     return updated;
   }
 
@@ -399,7 +419,7 @@ export class KycService {
     limit?: number;
     state?: ReviewState;
   }): Promise<{ items: AdminQueueRow[]; nextCursor: string | null }> {
-    const take = Math.min(50, Math.max(1, input.limit ?? 25));
+    const take = clampPageLimit(input.limit);
     const docs = await this.prisma.kycDocument.findMany({
       where: {
         ...(input.kind ? { kind: input.kind } : {}),
@@ -412,7 +432,8 @@ export class KycService {
         kyc: { select: { userId: true, tier: true, user: { select: { username: true, email: true } } } },
       },
     });
-    const items: AdminQueueRow[] = docs.slice(0, take).map((d) => ({
+    const { page, nextCursor } = cursorPage(docs, take);
+    const items: AdminQueueRow[] = page.map((d) => ({
       documentId: d.id,
       userId: d.kyc.userId,
       username: d.kyc.user.username,
@@ -425,7 +446,6 @@ export class KycService {
       mimeType: d.mimeType,
       submittedAt: d.createdAt,
     }));
-    const nextCursor = docs.length > take ? docs[take].id : null;
     return { items, nextCursor };
   }
 

@@ -131,7 +131,7 @@ export default async function ProfilePage({
             <CardTitle className="mb-2">{tr("profile.wallet")}</CardTitle>
             <div className="flex items-center gap-2 text-3xl font-black text-cyan-300">
               <Coins className="h-7 w-7" />
-              {fmtCoins(wallet?.balance ?? 0)}
+              {fmtCoins(wallet?.balance ?? 0, locale)}
             </div>
             <p className="mt-1 text-xs text-slate-500">
               {tr("profile.walletCoins")}

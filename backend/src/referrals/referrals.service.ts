@@ -8,6 +8,7 @@ import {
 import { OutboxKind, Prisma, ReferralStatus } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { isUniqueViolation } from '../common/prisma-errors';
 import { OutboxService } from '../foundation/outbox.service';
 import { SettingsService } from '../foundation/settings.service';
 import { NotificationService } from '../foundation/notification.service';
@@ -86,7 +87,7 @@ export class ReferralsService {
         // P2002 — unique violation on referralCode. Try again with a
         // fresh random. Collision probability at 32^8 keyspace is
         // ~1e-12 per pair, so this loop rarely fires twice.
-        if (this.isUniqueViolation(err)) continue;
+        if (isUniqueViolation(err)) continue;
         throw err;
       }
     }
@@ -175,7 +176,7 @@ export class ReferralsService {
       });
       return { claimId: claim.id, status: claim.status };
     } catch (err) {
-      if (this.isUniqueViolation(err)) {
+      if (isUniqueViolation(err)) {
         throw new ConflictException({ code: 'REFERRAL_ALREADY_CLAIMED' });
       }
       throw err;
@@ -223,23 +224,32 @@ export class ReferralsService {
       return { qualified: false, claimId: claim.id };
     }
 
-    // Flip + enqueue payouts atomically. We use the global Prisma
-    // client (not a transaction client) because OutboxService.enqueue
-    // accepts either — the at-least-once guarantee survives.
+    // Flip + enqueue payouts atomically, guarded against a concurrent
+    // qualify. The two gates are tripped by different events (KYC
+    // promotion vs first deposit), so both can land at the same
+    // instant and call this together. The conditional
+    // `updateMany(where status=PENDING)` lets exactly one caller win
+    // the flip; the loser sees `count === 0` and returns without
+    // re-enqueuing. Without this guard the loser's enqueue would hit
+    // the unique constraint on `Outbox.idempotencyKey` and throw P2002
+    // up into the KYC / payment flow that triggered it.
     const now = new Date();
-    await this.prisma.$transaction(async (tx) => {
-      await tx.referralClaim.update({
-        where: { id: claim.id },
+    const won = await this.prisma.$transaction(async (tx) => {
+      const flip = await tx.referralClaim.updateMany({
+        where: { id: claim.id, status: ReferralStatus.PENDING },
         data: { status: ReferralStatus.QUALIFIED, qualifiedAt: now },
       });
+      if (flip.count === 0) return false;
       await this.outbox.enqueue(tx, {
         kind: OutboxKind.BET_WALLET_CREDIT,
         sourceTable: 'ReferralClaim',
         sourceId: claim.id,
         payload: {
           userId: claim.referrerId,
-          coins: claim.referrerRewardCoins,
-          reason: 'referral_reward_referrer',
+          amount: claim.referrerRewardCoins,
+          kind: 'referral_reward_referrer',
+          reference: `referral:${claim.id}:referrer`,
+          metadata: { claimId: claim.id, role: 'referrer' },
         },
         idempotencyKey: `referral:${claim.id}:referrer`,
       });
@@ -249,12 +259,22 @@ export class ReferralsService {
         sourceId: claim.id,
         payload: {
           userId: claim.refereeId,
-          coins: claim.refereeRewardCoins,
-          reason: 'referral_reward_referee',
+          amount: claim.refereeRewardCoins,
+          kind: 'referral_reward_referee',
+          reference: `referral:${claim.id}:referee`,
+          metadata: { claimId: claim.id, role: 'referee' },
         },
         idempotencyKey: `referral:${claim.id}:referee`,
       });
+      return true;
     });
+
+    // Concurrent loser: another call already flipped this claim and
+    // owns the payout + notification. Report success without redoing
+    // either.
+    if (!won) {
+      return { qualified: true, claimId: claim.id };
+    }
 
     // Best-effort notification to the referrer. INAPP via the
     // standard pipeline; the template is referral_qualified_v1
@@ -325,14 +345,5 @@ export class ReferralsService {
       out.push(ReferralsService.CODE_ALPHABET[b % ReferralsService.CODE_ALPHABET.length]);
     }
     return out.join('');
-  }
-
-  private isUniqueViolation(err: unknown): boolean {
-    return Boolean(
-      err &&
-        typeof err === 'object' &&
-        'code' in err &&
-        (err as { code?: string }).code === 'P2002',
-    );
   }
 }

@@ -144,7 +144,7 @@ export function MarketTradePanel({
           tr("market.boughtToast", {
             shares: plan.totalShares.toFixed(1),
             outcome,
-            coins: fmtCoins(Math.round(plan.totalCoins)),
+            coins: fmtCoins(Math.round(plan.totalCoins), locale),
           }),
           "ok",
         );
@@ -153,7 +153,7 @@ export function MarketTradePanel({
           tr("market.soldToast", {
             shares: plan.totalShares.toFixed(1),
             outcome,
-            coins: fmtCoins(Math.round(plan.totalCoins)),
+            coins: fmtCoins(Math.round(plan.totalCoins), locale),
           }),
           "ok",
         );
@@ -203,7 +203,7 @@ export function MarketTradePanel({
             flash === "YES" && "ticker-up",
           )}
         >
-          YES · {fmtPrice(yesPrice)}
+          YES · {fmtPrice(yesPrice, 2, locale)}
         </motion.button>
         <motion.button
           onClick={() => setOutcome("NO")}
@@ -217,7 +217,7 @@ export function MarketTradePanel({
             flash === "NO" && "ticker-down",
           )}
         >
-          NO · {fmtPrice(1 - yesPrice)}
+          NO · {fmtPrice(1 - yesPrice, 2, locale)}
         </motion.button>
       </div>
 
@@ -327,11 +327,11 @@ export function MarketTradePanel({
                 label={tr("market.youReceive")}
                 value={`${buyQuote.sharesOut.toFixed(2)} ${outcome} ${tr("market.shares")}`}
               />
-              <Row label={tr("market.avgPrice")} value={fmtPrice(buyQuote.avgPrice)} />
-              <Row label={tr("market.priceAfter")} value={fmtPrice(buyQuote.newYesPrice)} />
+              <Row label={tr("market.avgPrice")} value={fmtPrice(buyQuote.avgPrice, 2, locale)} />
+              <Row label={tr("market.priceAfter")} value={fmtPrice(buyQuote.newYesPrice, 2, locale)} />
               <Row
                 label={tr("market.maxPayout")}
-                value={`${fmtCoins(Math.floor(buyQuote.sharesOut))} ${tr("toast.coins")}`}
+                value={`${fmtCoins(Math.floor(buyQuote.sharesOut), locale)} ${tr("toast.coins")}`}
                 hint={tr("market.maxPayoutHint")}
               />
             </>
@@ -342,10 +342,10 @@ export function MarketTradePanel({
           <>
             <Row
               label={tr("market.youReceive")}
-              value={`${fmtCoins(Math.floor(sellQuote.coinsOut))} ${tr("toast.coins")}`}
+              value={`${fmtCoins(Math.floor(sellQuote.coinsOut), locale)} ${tr("toast.coins")}`}
             />
-            <Row label={tr("market.avgPrice")} value={fmtPrice(sellQuote.avgPrice)} />
-            <Row label={tr("market.priceAfter")} value={fmtPrice(sellQuote.newYesPrice)} />
+            <Row label={tr("market.avgPrice")} value={fmtPrice(sellQuote.avgPrice, 2, locale)} />
+            <Row label={tr("market.priceAfter")} value={fmtPrice(sellQuote.newYesPrice, 2, locale)} />
             {myPos && shares <= myShares && (
               <Row
                 label={tr("market.realisedPL")}
@@ -384,7 +384,7 @@ export function MarketTradePanel({
             >
               <Badge tone={p.outcome === "YES" ? "yes" : "no"}>{p.outcome}</Badge>
               <span className="font-mono">
-                {p.shares.toFixed(1)} {tr("market.sharesAbbrev")} · {fmtCoins(p.costBasis)} {tr("market.cost")}
+                {p.shares.toFixed(1)} {tr("market.sharesAbbrev")} · {fmtCoins(p.costBasis, locale)} {tr("market.cost")}
               </span>
             </div>
           ))}
@@ -426,7 +426,7 @@ function RoutingDisclosure({
   open: boolean;
   onToggle: () => void;
 }) {
-  const { t: tr } = useTranslation();
+  const { t: tr, locale } = useTranslation();
   const bookLegs = plan.legs.filter((l) => l.kind === "book");
   const ammLegs = plan.legs.filter((l) => l.kind === "amm");
   const usedBook = bookLegs.length > 0;
@@ -465,9 +465,9 @@ function RoutingDisclosure({
                     <Badge tone="info" className="me-1">
                       {tr("market.book")}
                     </Badge>
-                    {(l.shares ?? 0).toFixed(2)} {tr("market.sharesAbbrev")} @ {fmtPrice(l.price ?? 0)}
+                    {(l.shares ?? 0).toFixed(2)} {tr("market.sharesAbbrev")} @ {fmtPrice(l.price ?? 0, 2, locale)}
                   </span>
-                  <span>{fmtCoins(Math.round(l.coins ?? 0))}</span>
+                  <span>{fmtCoins(Math.round(l.coins ?? 0), locale)}</span>
                 </div>
               );
             }
@@ -481,13 +481,13 @@ function RoutingDisclosure({
                   </Badge>
                   {sharesOut.toFixed(2)} {tr("market.sharesAbbrev")}
                 </span>
-                <span>{fmtCoins(Math.round(coins))}</span>
+                <span>{fmtCoins(Math.round(coins), locale)}</span>
               </div>
             );
           })}
           <div className="mt-2 flex justify-between border-t border-slate-800 pt-1.5 text-slate-300">
             <span>{tr("market.avgPrice")}</span>
-            <span>{fmtPrice(plan.avgPrice)}</span>
+            <span>{fmtPrice(plan.avgPrice, 2, locale)}</span>
           </div>
         </div>
       )}

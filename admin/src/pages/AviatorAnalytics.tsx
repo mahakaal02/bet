@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
+import { useVisiblePolling } from '../lib/useVisiblePolling';
 
 interface Analytics {
   sinceHours: number;
@@ -52,14 +53,10 @@ export default function AviatorAnalytics() {
     }
   }
 
-  useEffect(() => {
-    refresh();
-    // 3s pulls keep the bettor + stake tiles "live enough" without
-    // hammering the backend. The historical analytics under it stays
-    // on the slower 10s cadence implicit in the page render.
-    const id = setInterval(refresh, 3_000);
-    return () => clearInterval(id);
-  }, [hours]);
+  // 3s pulls keep the bettor + stake tiles "live enough" without
+  // hammering the backend — and only while the tab is visible (see
+  // hook). Re-subscribes + refreshes immediately when `hours` changes.
+  useVisiblePolling(refresh, 3_000, [hours]);
 
   if (!data) {
     return (

@@ -107,77 +107,104 @@ export class AnalyticsService {
     const weeksBack = Math.min(26, Math.max(1, input.weeksBack ?? 8));
     const retentionWeeks = Math.min(12, Math.max(1, input.retentionWeeks ?? 4));
 
+    const WEEK_MS = 7 * 24 * 60 * 60_000;
     const now = new Date();
     const currentMonday = AnalyticsService.toUtcMonday(now);
+    // Cohorts run oldest → newest. Cohort i begins `oldestStart + i*WEEK`.
+    const oldestStart = new Date(currentMonday.getTime() - (weeksBack - 1) * WEEK_MS);
+    // Latest retention window we could ever need is cohort (weeksBack-1)
+    // at retention week (retentionWeeks-1), which ends here.
+    const horizonEnd = new Date(
+      oldestStart.getTime() + (weeksBack + retentionWeeks - 1) * WEEK_MS,
+    );
+    // Global week grid anchored at the oldest cohort's Monday. Because
+    // every cohort Monday is 7-day-aligned to this same grid, cohort i's
+    // retention-week r window is *exactly* global week (i + r) — which is
+    // what lets us bucket all activity once instead of querying per cell.
+    const weekIndex = (t: Date): number =>
+      Math.floor((t.getTime() - oldestStart.getTime()) / WEEK_MS);
+
+    // (1) One query for every user who signed up anywhere in the cohort
+    //     span, bucketed into their signup-week cohort. (Was one query
+    //     per cohort week.)
+    const users = await this.prisma.user.findMany({
+      where: {
+        createdAt: { gte: oldestStart, lt: new Date(currentMonday.getTime() + WEEK_MS) },
+      },
+      select: { id: true, createdAt: true },
+    });
+    const cohortOfUser = new Map<string, number>();
+    const cohortTotals = new Array<number>(weeksBack).fill(0);
+    for (const u of users) {
+      const i = weekIndex(u.createdAt);
+      if (i < 0 || i >= weeksBack) continue;
+      cohortOfUser.set(u.id, i);
+      cohortTotals[i] += 1;
+    }
+
+    // (2) All activity for those users across the whole horizon in 3
+    //     queries total (was 3 per cohort×retention cell → up to ~960).
+    //     We record, per user, the set of global weeks in which they did
+    //     anything (bid OR coin purchase OR aviator bet).
+    const userIds = [...cohortOfUser.keys()];
+    const activeWeeks = new Map<string, Set<number>>();
+    const mark = (userId: string, t: Date) => {
+      const g = weekIndex(t);
+      if (g < 0) return;
+      let s = activeWeeks.get(userId);
+      if (!s) {
+        s = new Set<number>();
+        activeWeeks.set(userId, s);
+      }
+      s.add(g);
+    };
+    if (userIds.length > 0) {
+      const window = { gte: oldestStart, lt: horizonEnd };
+      const [bids, txns, aviator] = await Promise.all([
+        this.prisma.bid.findMany({
+          where: { userId: { in: userIds }, createdAt: window },
+          select: { userId: true, createdAt: true },
+        }),
+        this.prisma.coinTransaction.findMany({
+          where: { userId: { in: userIds }, createdAt: window, reason: 'coin_purchase' },
+          select: { userId: true, createdAt: true },
+        }),
+        this.prisma.aviatorBet.findMany({
+          where: { userId: { in: userIds }, createdAt: window },
+          select: { userId: true, createdAt: true },
+        }),
+      ]);
+      bids.forEach((b) => mark(b.userId, b.createdAt));
+      txns.forEach((t) => mark(t.userId, t.createdAt));
+      aviator.forEach((a) => mark(a.userId, a.createdAt));
+    }
+
+    // (3) counts[i][r] = # of cohort-i users active in global week (i+r).
+    const counts: number[][] = Array.from({ length: weeksBack }, () =>
+      new Array<number>(retentionWeeks).fill(0),
+    );
+    for (const [userId, weeks] of activeWeeks) {
+      const i = cohortOfUser.get(userId);
+      if (i === undefined) continue;
+      for (const g of weeks) {
+        const r = g - i;
+        if (r >= 0 && r < retentionWeeks) counts[i][r] += 1;
+      }
+    }
 
     const cohorts: CohortRow[] = [];
-    for (let w = weeksBack - 1; w >= 0; w--) {
-      const cohortStart = new Date(currentMonday.getTime() - w * 7 * 24 * 60 * 60_000);
-      const cohortEnd = new Date(cohortStart.getTime() + 7 * 24 * 60 * 60_000);
-
-      const cohortUserIds = await this.prisma.user.findMany({
-        where: { createdAt: { gte: cohortStart, lt: cohortEnd } },
-        select: { id: true },
-      });
-      const totalUsers = cohortUserIds.length;
-      const ids = cohortUserIds.map((u) => u.id);
-
+    for (let i = 0; i < weeksBack; i++) {
+      const cohortStart = new Date(oldestStart.getTime() + i * WEEK_MS);
+      const totalUsers = cohortTotals[i];
       const retention: number[] = [];
       for (let r = 0; r < retentionWeeks; r++) {
-        const winStart = new Date(cohortStart.getTime() + r * 7 * 24 * 60 * 60_000);
-        const winEnd = new Date(winStart.getTime() + 7 * 24 * 60 * 60_000);
-
-        if (totalUsers === 0) {
-          retention.push(0);
-          continue;
-        }
-        if (winStart.getTime() > now.getTime()) {
-          retention.push(0);
-          continue;
-        }
-
-        const activeIds = await this.activeUserIds(ids, winStart, winEnd);
-        retention.push(activeIds.size / totalUsers);
+        // Future windows have no events → 0, matching the old explicit
+        // `winStart > now` guard. Empty cohorts → 0 (no divide-by-zero).
+        retention.push(totalUsers === 0 ? 0 : counts[i][r] / totalUsers);
       }
-
-      cohorts.push({
-        cohortWeekStart: cohortStart.toISOString(),
-        totalUsers,
-        retention,
-      });
+      cohorts.push({ cohortWeekStart: cohortStart.toISOString(), totalUsers, retention });
     }
     return { weeksBack, retentionWeeks, cohorts };
-  }
-
-  /** Unique users active (bid OR deposit OR aviator bet) in the window. */
-  private async activeUserIds(candidates: string[], from: Date, to: Date): Promise<Set<string>> {
-    if (candidates.length === 0) return new Set();
-    const active = new Set<string>();
-    const bids = await this.prisma.bid.findMany({
-      where: { userId: { in: candidates }, createdAt: { gte: from, lt: to } },
-      select: { userId: true },
-      distinct: ['userId'],
-    });
-    bids.forEach((b) => active.add(b.userId));
-
-    const txns = await this.prisma.coinTransaction.findMany({
-      where: {
-        userId: { in: candidates },
-        createdAt: { gte: from, lt: to },
-        reason: 'coin_purchase',
-      },
-      select: { userId: true },
-      distinct: ['userId'],
-    });
-    txns.forEach((t) => active.add(t.userId));
-
-    const aviator = await this.prisma.aviatorBet.findMany({
-      where: { userId: { in: candidates }, createdAt: { gte: from, lt: to } },
-      select: { userId: true },
-      distinct: ['userId'],
-    });
-    aviator.forEach((a) => active.add(a.userId));
-    return active;
   }
 
   /** UTC Monday of the week containing `d`. */

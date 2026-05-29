@@ -13,6 +13,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { NotificationChannel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { isUniqueViolation } from '../common/prisma-errors';
 import { NotificationService } from '../foundation/notification.service';
 import { EmailAdapter } from '../notifications/adapters/email.adapter';
 
@@ -312,7 +313,7 @@ If you didn't expect this, ignore the email — the change won't go through unle
         }),
       ]);
     } catch (e: any) {
-      if (e?.code === 'P2002') {
+      if (isUniqueViolation(e)) {
         throw new ConflictException(
           'that email was just taken by another account — request a new change with a different address',
         );

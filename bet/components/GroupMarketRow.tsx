@@ -71,11 +71,11 @@ export function GroupMarketRow({ child, rank, displayPct, live, onTick }: GroupM
         </Link>
         <ProbabilityBar pct={displayPct} className="mt-1.5" />
         <div className="mt-1 flex items-center gap-2 font-mono text-[10px] text-slate-500">
-          <span>{t("market.yes")} {fmtPrice(yes)}</span>
+          <span>{t("market.yes")} {fmtPrice(yes, 2, locale)}</span>
           <span>·</span>
-          <span>{t("market.no")} {fmtPrice(1 - yes)}</span>
+          <span>{t("market.no")} {fmtPrice(1 - yes, 2, locale)}</span>
           <span>·</span>
-          <span>{t("group.vol")} {fmtCoins(child.volumeCoins)}</span>
+          <span>{t("group.vol")} {fmtCoins(child.volumeCoins, locale)}</span>
         </div>
       </div>
 

@@ -56,7 +56,7 @@ export function WithdrawForm({ available, min }: Props) {
 
   const [busy, setBusy] = useState(false);
   const [, startTransition] = useTransition();
-  const { t: tr } = useTranslation();
+  const { t: tr, locale } = useTranslation();
 
   const amt = Number(amount);
   const amountValid =
@@ -165,18 +165,18 @@ export function WithdrawForm({ available, min }: Props) {
         />
         <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
           <span>
-            {tr("withdrawForm.amountMinMax", { min: fmtCoins(min), max: fmtCoins(available) })}
+            {tr("withdrawForm.amountMinMax", { min: fmtCoins(min, locale), max: fmtCoins(available, locale) })}
           </span>
           {amountValid ? (
             <span className="text-emerald-300">
-              {tr("withdrawForm.amountPayout", { amount: fmtCoins(amt) })}
+              {tr("withdrawForm.amountPayout", { amount: fmtCoins(amt, locale) })}
             </span>
           ) : (
             <span className="text-rose-300">
               {amt > available
                 ? tr("withdrawForm.amountExceeds")
                 : amt < min
-                  ? tr("withdrawForm.amountMin", { min: fmtCoins(min) })
+                  ? tr("withdrawForm.amountMin", { min: fmtCoins(min, locale) })
                   : tr("withdrawForm.amountInteger")}
             </span>
           )}
@@ -285,7 +285,7 @@ export function WithdrawForm({ available, min }: Props) {
         {busy
           ? tr("withdrawForm.submitting")
           : amountValid
-            ? tr("withdrawForm.submitButton", { amount: fmtCoins(amt) })
+            ? tr("withdrawForm.submitButton", { amount: fmtCoins(amt, locale) })
             : tr("withdrawForm.submitButtonEmpty")}
       </Button>
     </div>

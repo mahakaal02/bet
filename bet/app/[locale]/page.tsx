@@ -15,18 +15,12 @@ import { fmtCoins, fmtPrice } from "@/lib/utils";
 import {
   DEFAULT_LOCALE,
   buildLocalizedMetadata,
+  formatDate,
   isLocale,
   localizedPath,
   t,
   type Locale,
 } from "@/lib/i18n";
-import {
-  TrendingUp,
-  Trophy,
-  Coins,
-  ShieldCheck,
-  ArrowRight,
-} from "lucide-react";
 
 /**
  * Landing-page SEO metadata. Because this is the locale root (e.g.
@@ -139,15 +133,15 @@ export default async function LocalizedLandingPage({
 
         {/* Stat strip. */}
         <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label={tr("landing.statsMarkets")} value={fmtCoins(openMarkets)} />
+          <Stat label={tr("landing.statsMarkets")} value={fmtCoins(openMarkets, locale)} />
           <Stat
             label={tr("landing.statsUsers")}
-            value={fmtCoins(userCount)}
+            value={fmtCoins(userCount, locale)}
           />
-          <Stat label={tr("landing.statsTrades")} value={fmtCoins(tradeCount)} />
+          <Stat label={tr("landing.statsTrades")} value={fmtCoins(tradeCount, locale)} />
           <Stat
             label={tr("nav.markets")}
-            value={fmtCoins(marketCount)}
+            value={fmtCoins(marketCount, locale)}
             sub={tr("market.resolved")}
           />
         </div>
@@ -182,11 +176,11 @@ export default async function LocalizedLandingPage({
                     <span className="text-sm font-semibold text-slate-100">
                       {m.title}
                     </span>
-                    <Badge tone="info">{fmtPrice(yes)}</Badge>
+                    <Badge tone="info">{fmtPrice(yes, 2, locale)}</Badge>
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
-                    {tr("market.volume")} {fmtCoins(m.volumeCoins)} ·{" "}
-                    {tr("market.ends")} {m.endsAt.toLocaleDateString(locale)}
+                    {tr("market.volume")} {fmtCoins(m.volumeCoins, locale)} ·{" "}
+                    {tr("market.ends")} {formatDate(m.endsAt, locale)}
                   </p>
                 </Link>
               </li>

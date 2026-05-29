@@ -56,9 +56,6 @@ const en: Dictionary = {
     notificationsTitle: "Notifications",
     notificationsDescription:
       "Trade fills, market resolutions, mentions and rewards — your inbox for everything that happened while you were away.",
-    leaderboardTitle: "Leaderboard — top traders",
-    leaderboardDescription:
-      "Top traders ranked by XP. Earn XP by trading on prediction markets — 1 XP per 20 coins spent.",
     achievementsTitle: "Achievements — trader badges",
     achievementsDescription:
       "Unlock badges by trading, inviting friends and hitting milestones. Earn XP and bonus coins.",
@@ -92,8 +89,6 @@ const en: Dictionary = {
     portfolio: "Portfolio",
     wallet: "Wallet",
     profile: "Profile",
-    leaderboard: "Leaderboard",
-    leaderboardMobile: "Top",
     watchlist: "Watchlist",
     achievements: "Achievements",
     notifications: "Notifications",
@@ -114,7 +109,6 @@ const en: Dictionary = {
     statsUsers: "Players",
     statsTrades: "Trades placed",
     trendingHeader: "Trending markets",
-    leaderboardHeader: "Top traders",
   },
 
   forms: {
@@ -136,7 +130,6 @@ const en: Dictionary = {
     wallet: "Loading wallet…",
     portfolio: "Loading portfolio…",
     profile: "Loading profile…",
-    leaderboard: "Loading leaderboard…",
   },
 
   validation: {
@@ -785,12 +778,6 @@ const en: Dictionary = {
     allRead: "All read.",
     emptyState:
       "You're all caught up. Trade something to get notifications flowing.",
-  },
-
-  leaderboard: {
-    heading: "Leaderboard",
-    subtext: "Top traders by total XP. Earn XP by trading — 1 XP per 20 coins spent.",
-    emptyState: "No traders yet.",
   },
 
   achievements: {

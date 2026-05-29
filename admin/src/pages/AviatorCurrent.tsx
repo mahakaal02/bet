@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
+import { useVisiblePolling } from '../lib/useVisiblePolling';
 
 interface CurrentRound {
   phase: string | null;
@@ -59,11 +60,8 @@ export default function AviatorCurrent() {
     }
   }
 
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 2_000);
-    return () => clearInterval(id);
-  }, []);
+  // Poll every 2s, but only while the tab is visible (see hook).
+  useVisiblePolling(refresh, 2_000);
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();

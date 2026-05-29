@@ -245,7 +245,7 @@ export default async function WatchlistPage({
             <Link href={lp("/wallet")}>{tr("nav.wallet")}</Link>
           </nav>
           <div className="topbar-right">
-            <span className="balance-pill"><span className="lbl">BAL</span> {fmtCoins(balance)}</span>
+            <span className="balance-pill"><span className="lbl">BAL</span> {fmtCoins(balance, locale)}</span>
             <ThemeSwitch />
             <Link className="deposit-btn" href={lp("/wallet")}>+ {tr("wallet.buyCoins")}</Link>
             <div className="avatar">{initial}</div>
@@ -389,18 +389,18 @@ export default async function WatchlistPage({
                         <Link className="label" href={lp(`/markets/${it.market.slug}`)}>{it.title}</Link>
                         <div className="sub">
                           <span className={`cat ${catClass(it.market.category)}`}>{formatCategory(it.market.category, locale)}</span>
-                          <span>{tr("market.vol")} {fmtCoins(it.market.volumeCoins)}</span>
+                          <span>{tr("market.vol")} {fmtCoins(it.market.volumeCoins, locale)}</span>
                         </div>
                       </div>
                       <div className="yn-cell y hide-sm">
-                        <span className="v">{fmtPrice(it.yes)}</span>
+                        <span className="v">{fmtPrice(it.yes, 2, locale)}</span>
                         <span className={`d ${it.deltaPp >= 0 ? "pos" : "neg"}`}>{it.deltaPp >= 0 ? "▲" : "▼"} {it.deltaPp >= 0 ? "+" : "−"}{Math.abs(it.deltaPp)}%</span>
                       </div>
                       <div className="yn-cell n hide-sm">
-                        <span className="v">{fmtPrice(1 - it.yes)}</span>
+                        <span className="v">{fmtPrice(1 - it.yes, 2, locale)}</span>
                         <span className={`d ${it.deltaPp <= 0 ? "pos" : "neg"}`}>{it.deltaPp <= 0 ? "▲" : "▼"} {it.deltaPp <= 0 ? "+" : "−"}{Math.abs(it.deltaPp)}%</span>
                       </div>
-                      <div className="vol hide-sm"><strong>{fmtCoins(it.market.volumeCoins)}</strong><span className="sub">{tr("market.liq")} {fmtCoins(it.liq)}</span></div>
+                      <div className="vol hide-sm"><strong>{fmtCoins(it.market.volumeCoins, locale)}</strong><span className="sub">{tr("market.liq")} {fmtCoins(it.liq, locale)}</span></div>
                       <svg className="spark hide-sm" viewBox="0 0 80 26" preserveAspectRatio="none">
                         <path d={it.spark.path} stroke={it.spark.color} strokeWidth="1.6" fill="none" />
                       </svg>
@@ -440,7 +440,7 @@ export default async function WatchlistPage({
                       <span className="rank">{i + 1}</span>
                       <div className="meta">
                         <div className="nm">{it.title}</div>
-                        <div className="sub">{formatCategory(it.market.category, locale)} · {tr("market.yes")} {fmtPrice(it.yes)}</div>
+                        <div className="sub">{formatCategory(it.market.category, locale)} · {tr("market.yes")} {fmtPrice(it.yes, 2, locale)}</div>
                       </div>
                       <span className={`delta ${it.deltaPp > 0 ? "pos" : it.deltaPp < 0 ? "neg" : "flat"}`}>
                         {it.deltaPp >= 0 ? "+" : "−"}{Math.abs(it.deltaPp)}%
@@ -498,7 +498,7 @@ export default async function WatchlistPage({
                       </div>
                       <div className="sub">
                         <span className={`cat ${catClass(s.market.category)}`}>{formatCategory(s.market.category, locale)}</span>
-                        <span>{tr("market.yes")} {fmtPrice(s.yes)} · {tr("market.vol")} {fmtCoins(s.market.volumeCoins)}</span>
+                        <span>{tr("market.yes")} {fmtPrice(s.yes, 2, locale)} · {tr("market.vol")} {fmtCoins(s.market.volumeCoins, locale)}</span>
                       </div>
                     </div>
                   ))

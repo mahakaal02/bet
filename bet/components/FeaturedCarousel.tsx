@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
 import { priceYes } from "@/lib/amm";
 import { cn, fmtCoins, fmtPrice } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n/client";
 import { Badge } from "@/components/ui/Badge";
 
 interface Market {
@@ -31,6 +32,7 @@ interface Props {
  */
 export function FeaturedCarousel({ markets }: Props) {
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const { locale } = useTranslation();
 
   if (markets.length === 0) return null;
 
@@ -124,7 +126,7 @@ export function FeaturedCarousel({ markets }: Props) {
                         YES
                       </div>
                       <div className="text-2xl font-black text-emerald-300">
-                        {fmtPrice(yes)}
+                        {fmtPrice(yes, 2, locale)}
                       </div>
                     </div>
                     <div className="text-end">
@@ -132,17 +134,17 @@ export function FeaturedCarousel({ markets }: Props) {
                         NO
                       </div>
                       <div className="text-2xl font-black text-rose-300">
-                        {fmtPrice(1 - yes)}
+                        {fmtPrice(1 - yes, 2, locale)}
                       </div>
                     </div>
                   </div>
                   <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
-                    <span>Vol {fmtCoins(m.volumeCoins)}</span>
+                    <span>Vol {fmtCoins(m.volumeCoins, locale)}</span>
                     <span>
-                      Ends {new Date(m.endsAt).toLocaleDateString(undefined, {
+                      Ends {new Intl.DateTimeFormat(locale, {
                         month: "short",
                         day: "numeric",
-                      })}
+                      }).format(new Date(m.endsAt))}
                     </span>
                   </div>
                 </div>

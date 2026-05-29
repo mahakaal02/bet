@@ -128,7 +128,7 @@ export default async function WalletPage({
   const emailVerified = !!me?.emailVerified;
   const username = me?.username ?? "user";
   const initial = username.slice(0, 1).toUpperCase();
-  const syncedLabel = `SYNCED · ${fmtAbs(new Date())}`;
+  const syncedLabel = `SYNCED · ${fmtAbs(new Date(), locale)}`;
 
   return (
     <div className="wlt">
@@ -162,7 +162,7 @@ export default async function WalletPage({
 
           <div className="topbar-right">
             <span className="balance-pill">
-              <span className="lbl">BAL</span> {fmtCoins(balance)}
+              <span className="lbl">BAL</span> {fmtCoins(balance, locale)}
             </span>
             <ThemeSwitch />
             <a className="deposit-btn" href="#buy">+ {tr("wallet.buyCoins")}</a>
@@ -244,12 +244,12 @@ export default async function WalletPage({
                 <div className="left">
                   <div className="card-eyebrow">{tr("wallet.available")}</div>
                   <div className="withdraw-amount">
-                    <span>{fmtCoins(balance)}</span>
+                    <span>{fmtCoins(balance, locale)}</span>
                     <span className="unit">{tr("wallet.coins")}</span>
                     {estValue && <span className="x">≈ {estValue}</span>}
                   </div>
                   <div className="withdraw-min">
-                    {tr("withdraw.subtext", { amount: fmtCoins(MIN_WITHDRAW_COINS) })}
+                    {tr("withdraw.subtext", { amount: fmtCoins(MIN_WITHDRAW_COINS, locale) })}
                   </div>
 
                   <Link className="withdraw-cta" href={lp("/wallet/withdraw")} style={{ marginTop: "auto" }}>
@@ -286,10 +286,10 @@ export default async function WalletPage({
                           </div>
                           <div className="method-meta">
                             <div className="method-name">
-                              {fmtCoins(w.amountCoins)} {tr("wallet.coins")}
+                              {fmtCoins(w.amountCoins, locale)} {tr("wallet.coins")}
                             </div>
                             <div className="method-sub">
-                              {w.payoutMethod} · {timeAgo(w.createdAt)}
+                              {w.payoutMethod} · {timeAgo(w.createdAt, locale)}
                             </div>
                           </div>
                           <div className={`method-time ${w.status === "PENDING" ? "warn" : ""}`}>
@@ -369,16 +369,16 @@ export default async function WalletPage({
                           )}
                         </div>
                         <div className="row-time">
-                          {timeAgo(tx.createdAt)}
-                          <span className="abs">{fmtAbs(new Date(tx.createdAt))}</span>
+                          {timeAgo(tx.createdAt, locale)}
+                          <span className="abs">{fmtAbs(new Date(tx.createdAt), locale)}</span>
                         </div>
                         <div className="row-balance">
                           <span className="lbl">{tr("wallet.balanceLabel")}</span>
-                          {fmtCoins(after)}
+                          {fmtCoins(after, locale)}
                         </div>
                         <div className={`row-amt ${tx.delta >= 0 ? "pos" : "neg"}`}>
                           {tx.delta >= 0 ? "+" : "−"}
-                          {fmtCoins(Math.abs(tx.delta))}
+                          {fmtCoins(Math.abs(tx.delta), locale)}
                         </div>
                       </div>
                     );
@@ -401,18 +401,18 @@ export default async function WalletPage({
               <div className="stat">
                 <div className="lbl">{tr("wallet.stat7dNet")}</div>
                 <div className={`v ${net7d > 0 ? "pos" : net7d < 0 ? "neg" : ""}`}>
-                  {net7d >= 0 ? "+" : "−"}{fmtCoins(Math.abs(net7d))}
+                  {net7d >= 0 ? "+" : "−"}{fmtCoins(Math.abs(net7d), locale)}
                 </div>
                 <div className="delta">{tr("wallet.coins")}</div>
               </div>
               <div className="stat">
                 <div className="lbl">{tr("wallet.stat7dVolume")}</div>
-                <div className="v">{fmtCoins(vol7d)}</div>
+                <div className="v">{fmtCoins(vol7d, locale)}</div>
                 <div className="delta">{weekTxns.length} {tr("wallet.txUnit")}</div>
               </div>
               <div className="stat">
                 <div className="lbl">{tr("wallet.balanceLabel")}</div>
-                <div className="v cy" style={{ color: "var(--cyan-200)" }}>{fmtCoins(balance)}</div>
+                <div className="v cy" style={{ color: "var(--cyan-200)" }}>{fmtCoins(balance, locale)}</div>
                 <div className="delta">{tr("wallet.coins")}</div>
               </div>
               <div className="stat">
@@ -459,12 +459,15 @@ export default async function WalletPage({
 
 /* ── helpers ───────────────────────────────────────────────── */
 
-function fmtAbs(d: Date): string {
-  return new Intl.DateTimeFormat("en-GB", {
+function fmtAbs(d: Date, locale: Locale): string {
+  // Locale-aware month names, but pinned to 24-hour so the ledger keeps
+  // its compact log-style timestamps regardless of locale defaults.
+  return new Intl.DateTimeFormat(locale, {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   })
     .format(d)
     .toUpperCase();

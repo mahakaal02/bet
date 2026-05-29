@@ -3,11 +3,12 @@ import Decimal from 'decimal.js';
 import { PrismaService } from '../prisma/prisma.service';
 import { BidsService } from '../bids/bids.service';
 import { BidEventsService } from '../bids/bid-events.service';
+import { OrdersService } from '../orders/orders.service';
 import {
   type BidRow,
   type BidStatusKind,
-  type ClassifyOpts,
   classifyBidFor,
+  classifyOptsFromAuction,
   selectWinnerFromBids,
 } from '../bids/bidding-engine';
 
@@ -19,19 +20,39 @@ export class AuctionsService {
     private readonly prisma: PrismaService,
     private readonly bids: BidsService,
     private readonly bidEvents: BidEventsService,
+    private readonly orders: OrdersService,
   ) {}
 
   /**
-   * Return every auction with its winner info. The list is sorted client-side
-   * via SQL: LIVE first (by endsAt asc, so the soonest-ending is on top),
-   * then UPCOMING by startsAt asc, then ENDED by closedAt desc.
+   * Most-recent ENDED auctions to surface in the public list. LIVE/UPCOMING
+   * counts are naturally bounded (you can only run so many at once), but ENDED
+   * grows without limit, so the historical tail is capped here. The response
+   * stays a bare `Auction[]` — the public frontends consume it as such.
+   */
+  private static readonly ENDED_LIMIT = 50;
+
+  /**
+   * Return current auctions plus a capped tail of recently-ended ones, with
+   * winner info. Sorted in memory: LIVE first (by endsAt asc, so the
+   * soonest-ending is on top), then UPCOMING by startsAt asc, then ENDED by
+   * closedAt desc.
    */
   async list() {
-    const rows = await this.prisma.auction.findMany({
-      include: {
-        winner: { select: { username: true } },
-      },
-    });
+    // Two bounded reads instead of one unbounded scan: every LIVE/UPCOMING
+    // auction (inherently few) and only the most-recently-closed ENDED ones.
+    const [current, ended] = await Promise.all([
+      this.prisma.auction.findMany({
+        where: { status: { in: ['LIVE', 'UPCOMING'] } },
+        include: { winner: { select: { username: true } } },
+      }),
+      this.prisma.auction.findMany({
+        where: { status: 'ENDED' },
+        orderBy: { closedAt: 'desc' },
+        take: AuctionsService.ENDED_LIMIT,
+        include: { winner: { select: { username: true } } },
+      }),
+    ]);
+    const rows = [...current, ...ended];
 
     const order: Record<string, number> = { LIVE: 0, UPCOMING: 1, ENDED: 2 };
     rows.sort((a, b) => {
@@ -274,15 +295,10 @@ export class AuctionsService {
           amount: new Decimal(b.amount.toString()),
           createdAt: b.createdAt,
         }));
-        winner = selectWinnerFromBids(richBids, {
-          fixedWinningAmount:
-            auction.manipulationMode === 'FIXED_WINNER' && auction.fixedWinningAmount
-              ? new Decimal(auction.fixedWinningAmount.toString())
-              : null,
-        });
+        winner = selectWinnerFromBids(richBids, classifyOptsFromAuction(auction));
       }
 
-      return tx.auction.update({
+      const updated = await tx.auction.update({
         where: { id },
         data: {
           status: 'ENDED',
@@ -291,6 +307,21 @@ export class AuctionsService {
           winnerAmount: winner ? winner.amount.toFixed(2) : null,
         },
       });
+
+      // Create the winner's fulfilment order in the SAME transaction
+      // as the ENDED flip. A physical-prize order must never be lost
+      // to a crash between "auction closed" and "order created", and
+      // the ENDED early-return at the top of close() makes this a
+      // first-time create on every committed close (so the unique
+      // constraint on Order.auctionId is never actually hit here).
+      if (winner) {
+        await this.orders.createForWin(
+          { auctionId: id, winnerId: winner.userId },
+          tx,
+        );
+      }
+
+      return updated;
     });
   }
 
@@ -335,12 +366,7 @@ export class AuctionsService {
       },
     });
 
-    const opts: ClassifyOpts = {
-      fixedWinningAmount:
-        auction.manipulationMode === 'FIXED_WINNER' && auction.fixedWinningAmount
-          ? new Decimal(auction.fixedWinningAmount.toString())
-          : null,
-    };
+    const opts = classifyOptsFromAuction(auction);
 
     const allBidRows: BidRow[] = rows.map((b) => ({
       id: b.id,

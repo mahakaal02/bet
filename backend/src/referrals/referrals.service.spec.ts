@@ -121,6 +121,17 @@ function makeMocks(opts: {
         Object.assign(c, data);
         return c;
       }),
+      // Conditional flip used by maybeQualify — only rows matching the
+      // full `where` (id + status) are updated, mirroring the DB.
+      updateMany: jest.fn(async ({ where, data }: any) => {
+        const matches = claims.filter(
+          (c) =>
+            (where.id === undefined || c.id === where.id) &&
+            (where.status === undefined || c.status === where.status),
+        );
+        for (const c of matches) Object.assign(c, data);
+        return { count: matches.length };
+      }),
     },
     kycVerification: {
       findUnique: jest.fn(async ({ where }: any) => kyc.get(where.userId) ?? null),
@@ -337,6 +348,17 @@ describe('ReferralsService.maybeQualify', () => {
     const { svc } = makeMocks({});
     const res = await svc.maybeQualify('any-user');
     expect(res.qualified).toBe(false);
+  });
+
+  it('concurrent loser (conditional flip count=0): no double enqueue, still reports qualified', async () => {
+    const { svc, prisma, outbox } = setupQualified();
+    // Simulate a concurrent caller that flipped the row between our
+    // findUnique (read PENDING) and our conditional updateMany. The
+    // loser must NOT enqueue a second pair of payouts.
+    prisma.referralClaim.updateMany = jest.fn(async () => ({ count: 0 }));
+    const res = await svc.maybeQualify('referee');
+    expect(res.qualified).toBe(true);
+    expect(outbox.enqueue).not.toHaveBeenCalled();
   });
 });
 

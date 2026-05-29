@@ -41,15 +41,24 @@ function BettingPill({ bettingEndsAt }: { bettingEndsAt: number | null }) {
   const [remainingSec, setRemainingSec] = useState<number>(0);
   useEffect(() => {
     if (!bettingEndsAt) return;
-    const update = () =>
-      setRemainingSec(Math.max(0, Math.ceil((bettingEndsAt - Date.now()) / 1000)));
-    update();
-    // 200 ms poll keeps the displayed second in sync with the wall
-    // clock without a full second of drift before the next tick
-    // boundary — but the *displayed value* still snaps in 1-second
-    // increments thanks to `Math.ceil`.
-    const id = setInterval(update, 200);
-    return () => clearInterval(id);
+    let timer: ReturnType<typeof setTimeout>;
+    // Self-correcting countdown: recompute from the wall clock each tick
+    // (so drift never accumulates) and schedule the NEXT wake-up at the
+    // next whole-second boundary rather than polling at a fixed 5 Hz. The
+    // displayed value only changes once per second (`Math.ceil`), so this
+    // fires once per visible change instead of five times — same crispness,
+    // a fifth of the timer wake-ups.
+    const tick = () => {
+      const msLeft = bettingEndsAt - Date.now();
+      setRemainingSec(Math.max(0, Math.ceil(msLeft / 1000)));
+      if (msLeft <= 0) return; // done — stop scheduling
+      // Fractional remainder to the next boundary (+ a small fudge so
+      // `ceil` has definitely ticked down by the time we re-read).
+      const msToBoundary = msLeft % 1000 || 1000;
+      timer = setTimeout(tick, msToBoundary + 20);
+    };
+    tick();
+    return () => clearTimeout(timer);
   }, [bettingEndsAt]);
 
   // Visual urgency — last 3 seconds shift the pill from cool violet

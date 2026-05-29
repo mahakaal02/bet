@@ -1,5 +1,11 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, PricingSnapshotStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import Decimal from 'decimal.js';
+// Pure (decorator-free) pricing modules only — importing the
+// `@Injectable()` PricingEngine would drag `reflect-metadata` into the
+// ts-node seed. The math here mirrors PricingEngine.priceRow exactly.
+import { roundPriceForRegion } from '../src/pricing/regional-rounding';
+import { BASELINE_COUNTRY, COUNTRY_CATALOG } from '../src/pricing/pricing.config';
 
 const prisma = new PrismaClient();
 
@@ -91,6 +97,12 @@ async function main() {
     where: { id: { in: ['pack-50', 'pack-120', 'pack-300'] } },
     data: { active: false },
   });
+
+  // Bootstrap an active PPP pricing snapshot so a fresh DB serves
+  // localized prices (and the admin pricing/coin-pack screens show
+  // PPP) WITHOUT first needing a successful annual sync against the
+  // external forex/World-Bank APIs.
+  await bootstrapPricing();
 
   // ─── Auctions ────────────────────────────────────────────────────────
   //
@@ -294,6 +306,139 @@ async function main() {
   console.log(
     `Seeded ${auctions.length} auctions: ${liveCount} live, ${upcomingCount} upcoming, ${endedCount} ended (with winners).`,
   );
+}
+
+/**
+ * Static, offline bootstrap values for the PPP pricing snapshot.
+ * These are intentionally APPROXIMATE — illustrative affordability
+ * multipliers (already normalized vs the US baseline of 1.0 and within
+ * the engine's [0.25, 1.25] clamp band) and rough USD→currency rates.
+ * They exist only so a fresh database has working localized pricing
+ * before the real annual sync runs; the first `runAnnualPricingSync`
+ * for this year REPLACES this snapshot wholesale with live data.
+ */
+const BOOTSTRAP_PPP_MULTIPLIER: Readonly<Record<string, number>> = {
+  US: 1.0, IN: 0.25, BR: 0.4, TR: 0.45, JP: 0.65, ID: 0.3,
+  NG: 0.25, PH: 0.3, MX: 0.45, FR: 0.8, AE: 0.95, CN: 0.45,
+  CH: 1.05, GB: 0.8, RU: 0.45, ZA: 0.35,
+};
+/** 1 USD = N units of the currency. Approximate, early-2026 vintage. */
+const BOOTSTRAP_USD_RATE: Readonly<Record<string, number>> = {
+  USD: 1, INR: 86, BRL: 5.7, TRY: 39, JPY: 156, IDR: 16300,
+  NGN: 1550, PHP: 58, MXN: 20, EUR: 0.95, AED: 3.67, CNY: 7.2,
+  CHF: 0.9, GBP: 0.79, RUB: 92, ZAR: 18.5,
+};
+
+async function bootstrapPricing(): Promise<void> {
+  const year = new Date().getUTCFullYear();
+
+  // Idempotent + non-destructive: skip if a real (or prior bootstrap)
+  // snapshot already covers this year, or if ANY published snapshot is
+  // already active — never clobber live pricing on a re-seed.
+  const [sameYear, activePublished] = await Promise.all([
+    prisma.pricingSnapshot.findUnique({ where: { effectiveYear: year } }),
+    prisma.pricingSnapshot.findFirst({
+      where: { isActive: true, status: PricingSnapshotStatus.PUBLISHED },
+    }),
+  ]);
+  if (sameYear || activePublished) {
+    console.log(
+      `Pricing: snapshot already present (year=${sameYear?.effectiveYear ?? '-'}, ` +
+        `active=${activePublished?.effectiveYear ?? '-'}) — skipping bootstrap.`,
+    );
+    return;
+  }
+
+  const packs = await prisma.coinPack.findMany({
+    where: { active: true, baseUsdPrice: { not: null } },
+    orderBy: [{ sortOrder: 'asc' }, { coins: 'asc' }],
+  });
+  if (packs.length === 0) {
+    console.log('Pricing: no active packs with a baseUsdPrice — skipping bootstrap.');
+    return;
+  }
+
+  // Fail loudly if the catalog grew without bootstrap data for the new
+  // market, rather than silently mispricing it.
+  for (const cfg of COUNTRY_CATALOG) {
+    if (BOOTSTRAP_PPP_MULTIPLIER[cfg.country] === undefined) {
+      throw new Error(`bootstrapPricing: missing PPP multiplier for ${cfg.country}`);
+    }
+    if (BOOTSTRAP_USD_RATE[cfg.currency] === undefined) {
+      throw new Error(`bootstrapPricing: missing USD rate for ${cfg.currency}`);
+    }
+  }
+
+  const SOURCE = 'bootstrap-seed (static)';
+  await prisma.$transaction(async (tx) => {
+    const snapshot = await tx.pricingSnapshot.create({
+      data: {
+        effectiveYear: year,
+        status: PricingSnapshotStatus.PUBLISHED,
+        isActive: true,
+        baselineCountry: BASELINE_COUNTRY,
+        forexSource: SOURCE,
+        pppSource: SOURCE,
+        notes: 'Seed bootstrap — replaced by the first annual pricing sync.',
+      },
+    });
+
+    // De-duplicate currencies (e.g. EUR shared across markets).
+    const currencies = Array.from(new Set(COUNTRY_CATALOG.map((c) => c.currency)));
+    await tx.forexRateSnapshot.createMany({
+      data: currencies.map((currencyCode) => ({
+        snapshotId: snapshot.id,
+        effectiveYear: year,
+        currencyCode,
+        usdRate: new Decimal(BOOTSTRAP_USD_RATE[currencyCode]).toFixed(6),
+        source: SOURCE,
+      })),
+    });
+    await tx.pppFactorSnapshot.createMany({
+      data: COUNTRY_CATALOG.map((cfg) => ({
+        snapshotId: snapshot.id,
+        effectiveYear: year,
+        countryCode: cfg.country,
+        rawPppValue: null,
+        normalizedMultiplier: new Decimal(BOOTSTRAP_PPP_MULTIPLIER[cfg.country]).toFixed(4),
+        source: SOURCE,
+        isFallback: false,
+      })),
+    });
+
+    const rows = [];
+    for (const pack of packs) {
+      const baseUsd = new Decimal(pack.baseUsdPrice!.toString());
+      for (const cfg of COUNTRY_CATALOG) {
+        const mult = new Decimal(BOOTSTRAP_PPP_MULTIPLIER[cfg.country]);
+        const rate = new Decimal(BOOTSTRAP_USD_RATE[cfg.currency]);
+        // local = base_usd × ppp_multiplier × usd_rate, then charm-round.
+        const calculated = baseUsd.times(mult).times(rate);
+        const rounded = roundPriceForRegion(cfg.country, calculated);
+        rows.push({
+          snapshotId: snapshot.id,
+          coinPackId: pack.id,
+          countryCode: cfg.country,
+          currencyCode: cfg.currency,
+          baseUsdPrice: baseUsd.toFixed(2),
+          forexRate: rate.toFixed(6),
+          pppMultiplier: mult.toFixed(4),
+          calculatedLocalPrice: calculated.toFixed(4),
+          roundedFinalPrice: rounded.toFixed(cfg.fractionDigits),
+          effectiveYear: year,
+          sourceExchangeRate: SOURCE,
+          sourcePppData: SOURCE,
+          isActive: true,
+        });
+      }
+    }
+    await tx.regionalCoinPricing.createMany({ data: rows });
+
+    console.log(
+      `Pricing: bootstrapped snapshot ${year} — ${rows.length} rows ` +
+        `(${packs.length} packs × ${COUNTRY_CATALOG.length} countries), published + active.`,
+    );
+  });
 }
 
 main()

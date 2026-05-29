@@ -9,6 +9,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from "recharts";
+import { useTranslation } from "@/lib/i18n/client";
 
 interface Point {
   t: number;
@@ -22,6 +23,7 @@ export function PriceChart({
   points: Point[];
   fallbackY: number;
 }) {
+  const { locale } = useTranslation();
   // If we only have 1 or 0 points, synthesize an opening sample so the line
   // chart has something to draw. The opening sample is just the current
   // mid-market — gives a flat line, but communicates "no movement yet"
@@ -44,7 +46,7 @@ export function PriceChart({
           <XAxis
             dataKey="t"
             tickFormatter={(v) =>
-              new Date(v).toLocaleTimeString([], {
+              new Date(v).toLocaleTimeString(locale, {
                 hour: "2-digit",
                 minute: "2-digit",
               })
@@ -66,7 +68,7 @@ export function PriceChart({
               borderRadius: 8,
               fontSize: 12,
             }}
-            labelFormatter={(v) => new Date(v).toLocaleString()}
+            labelFormatter={(v) => new Date(v).toLocaleString(locale)}
             formatter={(v: number) => [`${v.toFixed(3)} YES`, "Price"]}
           />
           <Line

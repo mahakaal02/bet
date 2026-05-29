@@ -98,12 +98,12 @@ export default async function WithdrawPage({
         </Link>
         <h1 className="text-2xl font-black">{tr("withdraw.heading")}</h1>
         <p className="text-sm text-slate-400">
-          {tr("withdraw.subtext", { amount: fmtCoins(MIN_WITHDRAW_COINS) })}
+          {tr("withdraw.subtext", { amount: fmtCoins(MIN_WITHDRAW_COINS, locale) })}
         </p>
         {estValue && (
           <p className="mt-1 text-sm text-slate-300">
             {tr("withdraw.estValue", {
-              coins: fmtCoins(wallet?.balance ?? 0),
+              coins: fmtCoins(wallet?.balance ?? 0, locale),
               value: estValue,
             })}
           </p>
@@ -114,7 +114,7 @@ export default async function WithdrawPage({
             <CardTitle>{tr("withdraw.submitRequest")}</CardTitle>
             <span className="font-mono text-xs text-slate-400">
               {tr("withdraw.available", {
-                amount: fmtCoins(wallet?.balance ?? 0),
+                amount: fmtCoins(wallet?.balance ?? 0, locale),
               })}
             </span>
           </CardHeader>
@@ -122,7 +122,7 @@ export default async function WithdrawPage({
           {!me?.emailVerified && (
             <p className="mb-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
               {tr("withdraw.emailThresholdNote", {
-                amount: fmtCoins(WITHDRAW_EMAIL_VERIFY_THRESHOLD_COINS),
+                amount: fmtCoins(WITHDRAW_EMAIL_VERIFY_THRESHOLD_COINS, locale),
               })}{" "}
               <Link
                 href={lp("/profile")}
@@ -162,7 +162,7 @@ export default async function WithdrawPage({
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-mono">
-                        {fmtCoins(w.amountCoins)} {tr("wallet.coins")}
+                        {fmtCoins(w.amountCoins, locale)} {tr("wallet.coins")}
                       </span>
                       <Badge
                         tone={
@@ -181,8 +181,8 @@ export default async function WithdrawPage({
                       </Badge>
                     </div>
                     <div className="text-[10px] text-slate-500">
-                      {w.payoutMethod} · {timeAgo(w.createdAt)}
-                      {w.decidedAt && ` · ${timeAgo(w.decidedAt)}`}
+                      {w.payoutMethod} · {timeAgo(w.createdAt, locale)}
+                      {w.decidedAt && ` · ${timeAgo(w.decidedAt, locale)}`}
                     </div>
                     {w.decisionNote && (
                       <div className="text-[11px] italic text-slate-500">

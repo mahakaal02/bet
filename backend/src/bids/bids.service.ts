@@ -14,10 +14,12 @@ import { OutboxService } from '../foundation/outbox.service';
 import { FeatureFlagService } from '../foundation/feature-flags.service';
 import { OutbidListenerService } from '../notifications/outbid-listener.service';
 import { ResponsibleGamblingService } from '../responsible-gambling/responsible-gambling.service';
+import { FraudService } from '../fraud/fraud.service';
 import {
   type BidRow,
   type ClassifyOpts,
   classifyBidFor,
+  classifyOptsFromAuction,
   classifyPlacedAmount,
 } from './bidding-engine';
 
@@ -39,6 +41,7 @@ export class BidsService {
     private readonly flags: FeatureFlagService,
     private readonly outbidListener: OutbidListenerService,
     private readonly rg: ResponsibleGamblingService,
+    private readonly fraud: FraudService,
   ) {}
 
   /**
@@ -82,12 +85,7 @@ export class BidsService {
     // wager-limit reached. Audit row is written inside the service.
     await this.rg.assertCanBet(userId, auction.coinsPerBid);
 
-    const classifyOpts: ClassifyOpts = {
-      fixedWinningAmount:
-        auction.manipulationMode === 'FIXED_WINNER' && auction.fixedWinningAmount
-          ? new Decimal(auction.fixedWinningAmount.toString())
-          : null,
-    };
+    const classifyOpts: ClassifyOpts = classifyOptsFromAuction(auction);
 
     // Block re-bidding while the user already holds the winning bid —
     // under NORMAL rules AND under FIXED_WINNER (where "winning" means
@@ -231,6 +229,20 @@ export class BidsService {
         );
       });
 
+    // Fraud velocity check — fire-and-forget, like the outbid listener.
+    // Gated by the same `fraud.evaluator_enabled` flag as the nightly
+    // cluster sweep (default OFF) so the security team controls when
+    // signals start being written. The flag check + count run off the
+    // request path; any failure is swallowed so it can never fail a bid.
+    void this.flags
+      .isEnabled('fraud.evaluator_enabled')
+      .then((on) => (on ? this.fraud.checkBidVelocity(userId) : undefined))
+      .catch((err) => {
+        this.logger.error(
+          `fraud velocity check failed for bid=${bid.id}: ${(err as Error).message}`,
+        );
+      });
+
     return bid;
   }
 
@@ -276,12 +288,7 @@ export class BidsService {
       select: { manipulationMode: true, fixedWinningAmount: true },
     });
     if (!a) return {};
-    return {
-      fixedWinningAmount:
-        a.manipulationMode === 'FIXED_WINNER' && a.fixedWinningAmount
-          ? new Decimal(a.fixedWinningAmount.toString())
-          : null,
-    };
+    return classifyOptsFromAuction(a);
   }
 
   /**

@@ -115,13 +115,16 @@ function makeService(opts: Parameters<typeof makePrismaMock>[0] = {}) {
   const trustedDevice = {
     revokeAll: jest.fn(async (_userId: string) => ({ revoked: 0 })),
   };
+  // Short-TTL user-row cache invalidated on successful reset.
+  const userCache = { invalidate: jest.fn((_userId: string) => undefined) };
   const svc = new PasswordResetService(
     prisma as any,
     notifications as any,
     config as any,
     trustedDevice as any,
+    userCache as any,
   );
-  return { svc, prisma, notifications, config, trustedDevice };
+  return { svc, prisma, notifications, config, trustedDevice, userCache };
 }
 
 describe('PasswordResetService.request', () => {
@@ -236,10 +239,14 @@ describe('PasswordResetService.confirm', () => {
   });
 
   it('happy path: rotates password, bumps passwordChangedAt, marks usedAt, enqueues notification', async () => {
-    const { svc, prisma, notifications } = makeService({
+    const { svc, prisma, notifications, userCache } = makeService({
       existingRow: existingRow(),
     });
     await svc.confirm({ token: plain, newPassword: 'longenough123' });
+
+    // Cached user row dropped so validateJwt sees the new
+    // passwordChangedAt immediately (every existing JWT now stale).
+    expect(userCache.invalidate).toHaveBeenCalledWith('u-1');
 
     // Password rotated + passwordChangedAt set.
     const userUpd = prisma._userUpdate.mock.calls[0][0];

@@ -193,6 +193,11 @@ model Bid {
   // auction's bids by amount.
   @@index([auctionId, amount])
   @@index([auctionId, userId])
+  // Per-user, time-ranged scans. The RG daily-wager check runs on EVERY
+  // bid (`where: { userId, createdAt: { gte: todayStart } }`) and was
+  // otherwise unindexed; also serves fraud velocity, account export and
+  // cohort analytics.
+  @@index([userId, createdAt])
 }
 
 // Singleton row (id = "default"). Admin-controlled coin economy.
@@ -442,6 +447,10 @@ model AviatorRound {
   @@index([status])
   @@index([startedAt(sort: Desc)])
   @@index([seedId])
+  // Analytics scans CRASHED rounds by crashedAt range (`crashedAt: { gte:
+  // since }`). crashedAt is the selective predicate (status='CRASHED' is
+  // the majority of historical rounds), so a dedicated index pays off.
+  @@index([crashedAt])
 }
 
 enum AviatorRoundStatus {

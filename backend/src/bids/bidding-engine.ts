@@ -67,6 +67,27 @@ export interface ClassifyOpts {
 }
 
 /**
+ * Build `ClassifyOpts` from an auction's manipulation fields. The single
+ * source of truth for "is this auction rigged to a fixed amount?" —
+ * every classify/winner call site derives its opts from here instead of
+ * re-inlining the `mode === 'FIXED_WINNER' && amount` ternary.
+ *
+ * Accepts the raw row shape (Prisma `Decimal`, a string, or null for the
+ * amount) without importing Prisma — anything with `toString()` works.
+ */
+export function classifyOptsFromAuction(auction: {
+  manipulationMode?: string | null;
+  fixedWinningAmount?: { toString(): string } | null;
+}): ClassifyOpts {
+  return {
+    fixedWinningAmount:
+      auction.manipulationMode === 'FIXED_WINNER' && auction.fixedWinningAmount
+        ? new Decimal(auction.fixedWinningAmount.toString())
+        : null,
+  };
+}
+
+/**
  * Classify a hypothetical [candidate] amount against the set of [others]
  * already placed in the auction. `others` is what the database returns —
  * the candidate is NOT in that list yet.

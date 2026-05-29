@@ -20,6 +20,7 @@ import {
   DEFAULT_LOCALE,
   buildLocalizedMetadata,
   formatCategory,
+  formatDateTime,
   formatResolvedAs,
   isLocale,
   marketTranslationInclude,
@@ -186,7 +187,7 @@ export default async function MarketPage({
               </Badge>
             ) : (
               <Badge tone="default">
-                {tr("market.endsDate", { date: endsAt.toLocaleString(locale) })}
+                {tr("market.endsDate", { date: formatDateTime(endsAt, locale) })}
               </Badge>
             )}
             {me && (
@@ -226,7 +227,7 @@ export default async function MarketPage({
               <CardTitle>{tr("market.priceHistory")}</CardTitle>
               <div className="flex items-baseline gap-3">
                 <div className="text-3xl font-black text-emerald-300">
-                  {fmtPrice(yesPrice)}
+                  {fmtPrice(yesPrice, 2, locale)}
                 </div>
                 <div className="text-sm text-slate-500">{tr("market.yes")}</div>
               </div>
@@ -268,13 +269,13 @@ export default async function MarketPage({
                     </div>
                     <div className="text-end">
                       <div className="font-mono">
-                        {fmtCoins(t.cost)}{" "}
+                        {fmtCoins(t.cost, locale)}{" "}
                         <span className="text-slate-500">
                           {tr("toast.coins")}
                         </span>
                       </div>
                       <div className="text-[10px] text-slate-500">
-                        {timeAgo(t.createdAt)}
+                        {timeAgo(t.createdAt, locale)}
                       </div>
                     </div>
                   </li>
@@ -325,17 +326,17 @@ export default async function MarketPage({
             <CardTitle className="mb-2">{tr("market.marketStats")}</CardTitle>
             <Stat
               label={tr("market.volume")}
-              value={`${fmtCoins(market.volumeCoins)} ${tr("toast.coins")}`}
+              value={`${fmtCoins(market.volumeCoins, locale)} ${tr("toast.coins")}`}
             />
             <Stat
               label={tr("market.liquidity")}
-              value={`${fmtCoins(Math.round(market.yesShares + market.noShares))} ${tr("market.shares")}`}
+              value={`${fmtCoins(Math.round(market.yesShares + market.noShares), locale)} ${tr("market.shares")}`}
             />
             <Stat
               label={tr("market.midPrice")}
-              value={`${fmtPrice(yesPrice)} ${tr("market.yes")} · ${fmtPrice(1 - yesPrice)} ${tr("market.no")}`}
+              value={`${fmtPrice(yesPrice, 2, locale)} ${tr("market.yes")} · ${fmtPrice(1 - yesPrice, 2, locale)} ${tr("market.no")}`}
             />
-            <Stat label={tr("market.created")} value={timeAgo(market.createdAt)} />
+            <Stat label={tr("market.created")} value={timeAgo(market.createdAt, locale)} />
           </Card>
         </div>
       </div>

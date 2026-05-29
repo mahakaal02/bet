@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { toast } from "@/components/ui/Toaster";
 import { cn, fmtCoins, fmtPrice } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n/client";
 
 interface Props {
   marketId: string;
@@ -31,6 +32,7 @@ export function LimitOrderForm({
   noPosition,
 }: Props) {
   const router = useRouter();
+  const { locale } = useTranslation();
   const [, startTransition] = useTransition();
   const [outcome, setOutcome] = useState<"YES" | "NO">("YES");
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
@@ -79,7 +81,7 @@ export function LimitOrderForm({
       } else if (filled > 0) {
         toast(`Filled ${filled.toFixed(2)} shares.`, "ok");
       } else {
-        toast(`Order resting at ${fmtPrice(price)}.`, "info");
+        toast(`Order resting at ${fmtPrice(price, 2, locale)}.`, "info");
       }
       startTransition(() => router.refresh());
     } finally {
@@ -183,7 +185,7 @@ export function LimitOrderForm({
       >
         {busy
           ? "Placing…"
-          : `${side} ${outcome} · lock ${fmtCoins(lockEstimate)} ${lockLabel}`}
+          : `${side} ${outcome} · lock ${fmtCoins(lockEstimate, locale)} ${lockLabel}`}
       </Button>
 
       <p className="mt-2 text-[10px] leading-snug text-slate-500">

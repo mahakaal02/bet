@@ -113,11 +113,11 @@ export function ActivityTicker() {
             </Link>
             <div className="text-end">
               <div className="font-mono text-[11px]">
-                {fmtCoins(e.coins)} <span className="text-slate-500">@</span>{" "}
-                {fmtPrice(e.price)}
+                {fmtCoins(e.coins, locale)} <span className="text-slate-500">@</span>{" "}
+                {fmtPrice(e.price, 2, locale)}
               </div>
               <div className="font-mono text-[9px] text-slate-500">
-                {timeAgo(new Date(e.at))}
+                {timeAgo(new Date(e.at), locale)}
               </div>
             </div>
           </li>

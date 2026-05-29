@@ -11,7 +11,7 @@ import { WebSocket, WebSocketServer as WsServer } from 'ws';
 import { AuthService, JwtPayload } from '../auth/auth.service';
 import { BidsService } from './bids.service';
 import { BidEventsService } from './bid-events.service';
-import { classifyBidFor } from './bidding-engine';
+import { classifyBidFor, type BidRow } from './bidding-engine';
 
 interface ClientState {
   userId: string;
@@ -134,15 +134,22 @@ export class BidGateway implements OnGatewayConnection, OnGatewayDisconnect, OnM
       this.bids.fetchBidRows(auctionId),
       this.bids.classifyOptsForAuction(auctionId),
     ]);
+    // Derive each subscriber's latest bid from the already-fetched set
+    // instead of a per-subscriber DB round-trip (this loop ran on EVERY
+    // bid placement, so the old `getLatestBidForUser` call was an N+1).
+    // allBids is ordered createdAt asc, so the last row seen per user is
+    // their most recent.
+    const latestByUser = new Map<string, BidRow>();
+    for (const b of allBids) latestByUser.set(b.userId, b);
+
     for (const [ws, st] of subscribers) {
-      const latest = await this.bids.getLatestBidForUser(auctionId, st.userId);
+      const latest = latestByUser.get(st.userId);
       if (!latest) continue;
-      const amount = new Decimal(latest.amount.toString());
       const kind = classifyBidFor(latest.id, allBids, opts);
       this.send(ws, {
         type: 'status',
         auctionId,
-        amount: amount.toFixed(2),
+        amount: latest.amount.toFixed(2),
         kind,
       });
     }
