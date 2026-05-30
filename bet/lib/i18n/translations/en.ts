@@ -315,7 +315,7 @@ const en: Dictionary = {
     titleLead: "Trade",
     titleEm: "real-world events",
     subtitle:
-      "Buy YES or NO on what happens next. Prices move with the crowd, settle when the truth lands.",
+      "Real-time probability markets powered by collective intelligence. Price the odds of the events that will define the next decade — AI, markets, geopolitics, science. Buy YES or NO on what happens next. Prices move with the crowd, settle when the truth lands.",
     liveMarkets: "{count} live markets",
     openInterest: "{coins} coins traded",
     settleFast: "Settles in seconds",

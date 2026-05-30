@@ -23,7 +23,8 @@ export interface BackendJwtPayload {
   username: string;
   /** Set when the backend account was created via email signup. */
   email?: string | null;
-  /** Set when the backend account was created via WhatsApp signup. */
+  /** Optional phone claim. No longer populated since WhatsApp signup was
+   *  removed; retained for forward compatibility (e.g. SMS/Telegram phone). */
   phone?: string | null;
   iat?: number;
   exp?: number;

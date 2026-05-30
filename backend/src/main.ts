@@ -59,6 +59,31 @@ process.on('unhandledRejection', (reason: unknown) => {
   );
 });
 
+// ── Production secret guard ───────────────────────────────────────────
+//
+// The JWT signing key has a `?? 'dev-secret'` fallback at its use sites
+// (auth.module.ts, jwt.strategy.ts, …) so local dev works with no env.
+// That convenience is a critical hole if it ever reaches production:
+// a publicly-known signing key means anyone can forge tokens — including
+// admin/impersonation tokens. Fail fast on boot in prod rather than
+// silently serving forgeable auth. No-op outside production.
+const DEV_SECRET_MARKERS = ['dev-secret', 'replace-in-production', 'change-me'];
+function assertProductionSecrets(): void {
+  if (process.env.NODE_ENV !== 'production') return;
+  const secret = process.env.JWT_SECRET ?? '';
+  const looksDev =
+    !secret ||
+    secret.length < 16 ||
+    DEV_SECRET_MARKERS.some((m) => secret.toLowerCase().includes(m));
+  if (looksDev) {
+    throw new Error(
+      'FATAL: JWT_SECRET is missing or set to a known dev/placeholder value ' +
+        'in production. Refusing to boot with a forgeable auth key. Set a ' +
+        'strong, unique JWT_SECRET (>= 16 chars).',
+    );
+  }
+}
+
 async function bootstrapApi(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.useGlobalPipes(
@@ -148,6 +173,7 @@ async function bootstrapWorker(): Promise<void> {
 }
 
 async function bootstrap(): Promise<void> {
+  assertProductionSecrets();
   switch (ROLE) {
     case 'worker':
       await bootstrapWorker();

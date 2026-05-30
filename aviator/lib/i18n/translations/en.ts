@@ -209,7 +209,7 @@ const en: Dictionary = {
       "Signs you out of all three Kalki games and clears your session on this device.",
     signOutButton: "Sign out of all games",
     signingOut: "Signing out…",
-    defaultEmail: "WhatsApp / email account",
+    defaultEmail: "Email account",
   },
 
   withdraw: {

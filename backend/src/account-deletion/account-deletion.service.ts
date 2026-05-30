@@ -31,7 +31,7 @@ import { NotificationService } from '../foundation/notification.service';
  *
  *   - `User.email = null`, `passwordHash = '<purged>'` (invalid bcrypt),
  *     `username = 'deleted-<sha1-prefix>'`, `displayName = null`,
- *     `avatarKey = null`, `legalName = null`, `whatsappPhone = null`,
+ *     `avatarKey = null`, `legalName = null`,
  *     `betUserId = null` (Bet side does its own purge — see
  *     PR-DELETION-2 Bet-side bridge), `referralCode = null`,
  *     `bannedReason = '<purged>'` so admin views still render.
@@ -214,7 +214,6 @@ export class AccountDeletionService {
           displayName: null,
           avatarKey: null,
           legalName: null,
-          whatsappPhone: null,
           betUserId: null,
           referralCode: null,
           bannedReason: '<purged>',
@@ -261,7 +260,6 @@ export class AccountDeletionService {
         displayName: true,
         legalName: true,
         avatarKey: true,
-        whatsappPhone: true,
         phoneVerified: true,
         emailVerified: true,
         isAdmin: true,

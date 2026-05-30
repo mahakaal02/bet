@@ -126,7 +126,7 @@ export class ReferralsService {
 
   /**
    * Bind a referrer to a freshly-signed-up referee. Called from the
-   * signup path (auth.service / auth-whatsapp.service) when the
+   * signup path (auth.service) when the
    * incoming request carries `?ref=<code>` or a body `referralCode`
    * field.
    *

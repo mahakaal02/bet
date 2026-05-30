@@ -287,7 +287,7 @@ export default async function PortfolioPage({
             <span className="balance-pill"><span className="lbl">BAL</span> {fmtCoins(balance)}</span>
             <ThemeSwitch />
             <Link className="deposit-btn" href={lp("/wallet")}>+ {tr("wallet.buyCoins")}</Link>
-            <div className="avatar">{initial}</div>
+            <Link className="avatar" href={lp("/profile")}>{initial}</Link>
           </div>
         </div>
       </header>
