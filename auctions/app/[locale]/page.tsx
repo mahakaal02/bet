@@ -83,7 +83,7 @@ function aviatorBaseServer(): string {
 }
 
 function adminBaseServer(): string {
-  return (process.env.NEXT_PUBLIC_ADMIN_URL ?? "http://localhost:4173").replace(
+  return (process.env.NEXT_PUBLIC_ADMIN_URL ?? "http://localhost:5173/admin").replace(
     /\/$/,
     "",
   );

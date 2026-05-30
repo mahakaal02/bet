@@ -19,10 +19,11 @@ export interface JwtPayload {
   sub: string;
   username: string;
   /**
-   * Email + phone are embedded so other services (Bet / Kalki Exchange) can
+   * Email is embedded so other services (Bet / Kalki Exchange) can
    * identify the user from the JWT alone, without an extra round-trip back
-   * to this backend. Either may be undefined depending on the signup path:
-   * email-first signup omits `phone`, WhatsApp signup omits `email`.
+   * to this backend. `phone` is retained as an optional claim for forward
+   * compatibility (e.g. future SMS/Telegram phone), but is no longer
+   * populated now that WhatsApp signup has been removed.
    */
   email?: string | null;
   phone?: string | null;
@@ -341,14 +342,13 @@ export class AuthService {
   }
 
   private issue(
-    u: { id: string; username: string; email: string | null; whatsappPhone?: string | null },
+    u: { id: string; username: string; email: string | null },
     user: ReturnType<AuthService['sanitize']>,
   ) {
     const token = this.jwt.sign({
       sub: u.id,
       username: u.username,
       email: u.email ?? undefined,
-      phone: u.whatsappPhone ?? undefined,
     } satisfies JwtPayload);
     return { token, user };
   }

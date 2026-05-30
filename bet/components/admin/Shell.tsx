@@ -33,8 +33,8 @@ export function AdminShell({
     // honour the `kalki_logged_out` cookie set by bet/sso-logout
     // (PR-WEB-LOGOUT-FIX).
     await signOut({ redirect: false }).catch(() => {});
-    const auctions = process.env.NEXT_PUBLIC_AUCTIONS_URL ?? "/";
-    const aviator = process.env.NEXT_PUBLIC_AVIATOR_URL ?? "/";
+    const auctions = process.env.NEXT_PUBLIC_AUCTIONS_URL ?? "http://localhost:3200";
+    const aviator = process.env.NEXT_PUBLIC_AVIATOR_URL ?? "http://localhost:3000";
     const final = `${auctions.replace(/\/$/, "")}/login`;
     const auctionsStep = `${auctions.replace(/\/$/, "")}/api/auth/sso-logout?next=${encodeURIComponent(final)}`;
     const aviatorStep = `${aviator.replace(/\/$/, "")}/logout?next=${encodeURIComponent(auctionsStep)}`;
