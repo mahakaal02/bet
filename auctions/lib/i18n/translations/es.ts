@@ -232,7 +232,7 @@ const es: Partial<Dictionary> = {
       "Cuando el temporizador llegue a cero, la puja única más baja gana.",
     aboutThisItem: "Sobre este artículo",
     bidNow: "Hacer puja",
-    bidAmountLabel: "Importe de la puja (₹)",
+    bidAmountLabel: "Importe de la puja",
     bidPlacing: "Enviando…",
     bidSuccess: "Puja registrada.",
     bidErrorInsufficientCoins:

@@ -153,7 +153,7 @@ export default async function AuctionDetailPage({
                     <span className="text-emerald-300">
                       @{auction.winner.username}
                       {auction.winnerAmount && (
-                        <> · 🪙 {formatLocalNumber(auction.winnerAmount, country, 2)}</>
+                        <> · {formatLocalNumber(auction.winnerAmount, country, 2)}</>
                       )}
                     </span>
                   }

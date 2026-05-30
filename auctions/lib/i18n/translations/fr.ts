@@ -237,7 +237,7 @@ const fr: Partial<Dictionary> = {
       "Quand le minuteur tombe à zéro, la plus petite mise unique gagne.",
     aboutThisItem: "À propos de cet article",
     bidNow: "Placer une mise",
-    bidAmountLabel: "Montant de la mise (₹)",
+    bidAmountLabel: "Montant de la mise",
     bidPlacing: "Envoi…",
     bidSuccess: "Mise placée.",
     bidErrorInsufficientCoins:

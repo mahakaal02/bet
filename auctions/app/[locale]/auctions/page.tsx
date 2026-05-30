@@ -238,7 +238,7 @@ function WinnerLine({
             {" "}
             {tr("auction.winnerWonAt")}{" "}
             <span className="amt">
-              🪙 {formatLocalNumber(auction.winnerAmount, country, 2)}
+              {formatLocalNumber(auction.winnerAmount, country, 2)}
             </span>
           </>
         )}
