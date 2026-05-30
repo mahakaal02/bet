@@ -56,7 +56,7 @@ export async function generateMetadata({
   if (!auction) {
     return { title: "Auction not found · Kalki Auctions" };
   }
-  const cover = auction.imageUrls[0] ?? "/og-default.png";
+  const cover = auction.imageUrls[0] ?? "/kalki-mark.png";
   const desc = `Bid on ${auction.title} — retail ₹${Number(auction.retailPrice).toLocaleString("en-IN")}. Lowest unique bid wins.`;
   return {
     title: `${auction.title} · Kalki Auctions`,
@@ -152,7 +152,7 @@ export default async function SharePage({
               {ended ? "See live auctions" : "Open auction"}
             </Link>
             <Link
-              href="/signup"
+              href="/login"
               className="rounded-lg border border-amber-400/40 px-4 py-2 text-sm font-medium text-amber-100 hover:bg-amber-500/10"
             >
               Sign up

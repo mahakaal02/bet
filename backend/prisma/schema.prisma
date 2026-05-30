@@ -19,8 +19,9 @@ model User {
   passwordHash  String?
   emailVerified Boolean  @default(false)
   isAdmin       Boolean  @default(false)
-  // WhatsApp-based identity (alternative to email signup).
-  whatsappPhone String?  @unique
+  // Phone-verification flag. Retained for the signup-funnel analytics
+  // (analytics.service.ts). No longer set by any active flow now that
+  // WhatsApp OTP signup has been removed; kept for forward use (SMS/Telegram).
   phoneVerified Boolean  @default(false)
   /// ───── Telegram identity (PR-TELEGRAM-LOGIN) ─────────────────
   ///
@@ -403,23 +404,6 @@ enum PaymentStatus {
   PENDING
   CAPTURED
   FAILED
-}
-
-// Short-lived OTP for WhatsApp phone verification. The code is stored as a
-// SHA-256 hash; constant-time compared on verify.
-model PhoneOtp {
-  id        String   @id @default(uuid())
-  phone     String
-  codeHash  String
-  expiresAt DateTime
-  consumed  Boolean  @default(false)
-  attempts  Int      @default(0)
-  // Pending account material — applied when the OTP is verified.
-  username  String?
-  passwordHash String?
-  createdAt DateTime @default(now())
-
-  @@index([phone, createdAt(sort: Desc)])
 }
 
 // ─── Aviator (multiplier game) ──────────────────────────────────────────────

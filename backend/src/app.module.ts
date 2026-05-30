@@ -15,7 +15,6 @@ import { PaymentsModule } from './payments/payments.module';
 import { AdminModule } from './admin/admin.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AviatorModule } from './aviator/aviator.module';
-import { WhatsappAuthModule } from './auth-whatsapp/auth-whatsapp.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { WatchlistModule } from './watchlist/watchlist.module';
 import { ResponsibleGamblingModule } from './responsible-gambling/responsible-gambling.module';
@@ -79,7 +78,6 @@ import { ImpersonationScopeGuard } from './foundation/guards/impersonation-scope
     AdminModule,
     NotificationsModule,
     AviatorModule,
-    WhatsappAuthModule,
     UploadsModule,
     WatchlistModule,
     ResponsibleGamblingModule,

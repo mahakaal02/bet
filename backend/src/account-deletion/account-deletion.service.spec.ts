@@ -24,7 +24,6 @@ interface UserRow {
   displayName: string | null;
   avatarKey: string | null;
   legalName: string | null;
-  whatsappPhone: string | null;
   betUserId: string | null;
   referralCode: string | null;
   bannedReason: string | null;
@@ -55,7 +54,6 @@ function defaultUser(overrides: Partial<UserRow> = {}): UserRow {
     displayName: 'Alice',
     avatarKey: null,
     legalName: null,
-    whatsappPhone: null,
     betUserId: 'bet-1',
     referralCode: 'ALI-123',
     bannedReason: null,

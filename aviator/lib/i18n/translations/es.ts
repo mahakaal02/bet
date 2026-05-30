@@ -189,7 +189,7 @@ const es: Partial<Dictionary> = {
       "Cierra tu sesión en los tres juegos Kalki y borra los datos de este dispositivo.",
     signOutButton: "Cerrar sesión en todos los juegos",
     signingOut: "Cerrando…",
-    defaultEmail: "Cuenta de WhatsApp / correo",
+    defaultEmail: "Cuenta de correo",
   },
 
   withdraw: {

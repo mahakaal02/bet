@@ -61,7 +61,7 @@ export class AviatorChatService {
       take: limit,
       include: {
         user: {
-          select: { id: true, username: true, whatsappPhone: true, email: true },
+          select: { id: true, username: true, email: true },
         },
       },
     });
@@ -69,7 +69,7 @@ export class AviatorChatService {
       id: r.id,
       userId: r.userId,
       username: r.user.username,
-      contact: r.user.whatsappPhone ?? r.user.email ?? null,
+      contact: r.user.email ?? null,
       message: r.message,
       createdAt: r.createdAt.toISOString(),
     }));
