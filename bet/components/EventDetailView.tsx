@@ -897,7 +897,7 @@ function EventTopbar({
           <Link className="deposit-btn" href={lp("/wallet")}>
             + {t("wallet.buyCoins")}
           </Link>
-          {username && <div className="avatar">{initial}</div>}
+          {username && <Link className="avatar" href={lp("/profile")}>{initial}</Link>}
         </div>
       </div>
     </header>
