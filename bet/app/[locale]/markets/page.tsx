@@ -3,7 +3,9 @@ import type { CSSProperties } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import "./markets-v2.css";
+import "./how-it-works.css";
 import { ThemeSwitch } from "../wallet/wallet-client";
+import { HowItWorks } from "./HowItWorks";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
@@ -351,6 +353,7 @@ export default async function MarketsPage({
                 {tr("market.titleLead")} <em>{tr("market.titleEm")}</em>
               </h1>
               <p className="page-sub">{tr("market.subtitle")}</p>
+              <HowItWorks />
               <div className="page-stats">
                 <div className="pstat">
                   <div className="v">{openCount}</div>
