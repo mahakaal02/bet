@@ -212,6 +212,24 @@ export class BidsService {
       }
     }
 
+    // Snapshot the classification the bidder sees right now and store it
+    // as the bid's historical "status at placement" (PR-MY-BIDS). The
+    // present status is always recomputed live; this is the "what I saw
+    // then" half of the My-bids view. Best-effort — a failure here must
+    // never fail an already-committed bid.
+    try {
+      const allBids = await this.fetchBidRows(auctionId);
+      const placedStatus = classifyBidFor(bid.id, allBids, classifyOpts);
+      await this.prisma.bid.update({
+        where: { id: bid.id },
+        data: { placedStatus },
+      });
+    } catch (err) {
+      this.logger.error(
+        `failed to snapshot placedStatus for bid ${bid.id}: ${(err as Error).message}`,
+      );
+    }
+
     // Outbid notifications — fire-and-forget. The listener owns its
     // own feature-flag gate (watchlist.outbid_notifications), its
     // own debounce, and its own error swallow, so a notification
@@ -301,6 +319,66 @@ export class BidsService {
       where: { auctionId, userId },
       orderBy: { createdAt: 'desc' },
       select: { id: true, amount: true, createdAt: true },
+    });
+  }
+
+  /**
+   * Every bid the user has ever placed, newest first, across all auctions
+   * (PR-MY-BIDS). Each row carries three statuses the My-bids view shows:
+   *   - placedStatus  — snapshot taken when the bid landed (may be null for
+   *                     bids placed before the column existed)
+   *   - presentStatus — recomputed live against the auction's current bids
+   *   - auction.status — LIVE | UPCOMING | ENDED
+   * Present status is classified once per auction (bids grouped) to keep
+   * the query count bounded regardless of how many bids the user has.
+   */
+  async listUserBids(userId: string) {
+    const bids = await this.prisma.bid.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        amount: true,
+        createdAt: true,
+        placedStatus: true,
+        auction: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            imageUrls: true,
+            manipulationMode: true,
+            fixedWinningAmount: true,
+          },
+        },
+      },
+    });
+
+    const auctionIds = [...new Set(bids.map((b) => b.auction.id))];
+    const rowsByAuction = new Map<string, BidRow[]>();
+    await Promise.all(
+      auctionIds.map(async (id) =>
+        rowsByAuction.set(id, await this.fetchBidRows(id)),
+      ),
+    );
+
+    return bids.map((b) => {
+      const rows = rowsByAuction.get(b.auction.id) ?? [];
+      const opts = classifyOptsFromAuction(b.auction);
+      const presentStatus = classifyBidFor(b.id, rows, opts);
+      return {
+        id: b.id,
+        amount: b.amount.toString(),
+        placedAt: b.createdAt,
+        placedStatus: b.placedStatus ?? null,
+        presentStatus,
+        auction: {
+          id: b.auction.id,
+          title: b.auction.title,
+          status: b.auction.status,
+          imageUrl: b.auction.imageUrls[0] ?? null,
+        },
+      };
     });
   }
 

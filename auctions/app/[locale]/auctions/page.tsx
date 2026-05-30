@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { backend, type Auction } from "@/lib/backend";
+import { getSessionToken } from "@/lib/session";
 import { detectCountry, type CountryCode } from "@/lib/locale-detect";
 import { loadFxRates, type FxRates } from "@/lib/fx";
 import { formatMoneyFromINR, formatLocalNumber } from "@/lib/currency";
@@ -20,7 +21,29 @@ import "./auctions-theme.css";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "LIVE" | "UPCOMING" | "ENDED";
+type Tab = "LIVE" | "UPCOMING" | "ENDED" | "MINE";
+
+type BidStatusKind =
+  | "LOWEST_UNIQUE"
+  | "DUPLICATE_COLLIDING"
+  | "UNIQUE_LOSING"
+  | "NO_BID";
+
+/** One row from `GET /me/bids` — the user's bid with both its
+ *  placement-time snapshot and the live present status. */
+type MyBid = {
+  id: string;
+  amount: string;
+  placedAt: string;
+  placedStatus: BidStatusKind | null;
+  presentStatus: BidStatusKind;
+  auction: {
+    id: string;
+    title: string;
+    status: "LIVE" | "UPCOMING" | "ENDED";
+    imageUrl: string | null;
+  };
+};
 
 export async function generateMetadata({
   params,
@@ -62,6 +85,7 @@ export default async function AuctionsListPage({
     { value: "LIVE", label: tr("auction.tabLive") },
     { value: "UPCOMING", label: tr("auction.tabUpcoming") },
     { value: "ENDED", label: tr("auction.tabClosed") },
+    { value: "MINE", label: "My bids" },
   ];
 
   const sp = await searchParams;
@@ -81,7 +105,29 @@ export default async function AuctionsListPage({
     fetchError = err instanceof Error ? err.message : tr("auction.fetchError", { error: "" });
   }
 
-  const countFor = (v: Tab) => all.filter((x) => x.status === v).length;
+  // "My bids" needs the signed-in user's bid history (status snapshot at
+  // placement + live present status + auction status).
+  let myBids: MyBid[] | null = null;
+  let mineSignedOut = false;
+  if (tab === "MINE") {
+    const token = await getSessionToken();
+    if (!token) {
+      mineSignedOut = true;
+    } else {
+      try {
+        myBids = await backend.authed(token).get<MyBid[]>("/me/bids");
+      } catch (err) {
+        fetchError = err instanceof Error ? err.message : tr("auction.fetchError", { error: "" });
+      }
+    }
+  }
+
+  const countFor = (v: Tab): number | null =>
+    v === "MINE"
+      ? myBids
+        ? myBids.length
+        : null
+      : all.filter((x) => x.status === v).length;
   const filtered = all.filter((a) => a.status === tab);
   if (tab === "ENDED") {
     filtered.sort((a, b) => {
@@ -91,7 +137,7 @@ export default async function AuctionsListPage({
     });
   }
 
-  const empty: Record<Tab, string> = {
+  const empty: Record<"LIVE" | "UPCOMING" | "ENDED", string> = {
     LIVE: tr("auction.emptyLive"),
     UPCOMING: tr("auction.emptyUpcoming"),
     ENDED: tr("auction.emptyEnded"),
@@ -124,7 +170,9 @@ export default async function AuctionsListPage({
                   aria-current={active ? "page" : undefined}
                 >
                   {tabDef.label}
-                  <span className="hiw-count">{countFor(tabDef.value)}</span>
+                  {countFor(tabDef.value) !== null && (
+                    <span className="hiw-count">{countFor(tabDef.value)}</span>
+                  )}
                 </Link>
               );
             })}
@@ -136,8 +184,21 @@ export default async function AuctionsListPage({
             </div>
           )}
 
-          {filtered.length === 0 ? (
-            <div className="hiw-note">{empty[tab]}</div>
+          {tab === "MINE" ? (
+            mineSignedOut ? (
+              <div className="hiw-note">
+                <Link href={lp("/login")} className="hiw-link">
+                  Sign in
+                </Link>{" "}
+                to see your bids.
+              </div>
+            ) : !myBids || myBids.length === 0 ? (
+              <div className="hiw-note">You haven&apos;t placed any bids yet.</div>
+            ) : (
+              <MyBidsList bids={myBids} locale={locale} />
+            )
+          ) : filtered.length === 0 ? (
+            <div className="hiw-note">{empty[tab as "LIVE" | "UPCOMING" | "ENDED"]}</div>
           ) : (
             <div className="hiw-grid">
               {filtered.map((a) => (
@@ -269,4 +330,77 @@ function TimeHint({
     return <>{tr("auction.timeEndedAt", { time: relativeTime(now - new Date(auction.closedAt).getTime(), "ago") })}</>;
   }
   return <>{tr("auction.timeEnded")}</>;
+}
+
+/**
+ * "My bids" view: one row per bid the user has placed, showing the
+ * status snapshot from when they bid, the live present status, and the
+ * auction's status. Bid amounts render as plain numbers (they're coins).
+ */
+function MyBidsList({ bids, locale }: { bids: MyBid[]; locale: Locale }) {
+  return (
+    <div className="hiw-bidlist">
+      {bids.map((b) => {
+        const placed = bidChip(b.placedStatus);
+        const present = bidChip(b.presentStatus);
+        const aud = auctionChip(b.auction.status);
+        return (
+          <Link
+            key={b.id}
+            href={`${localizedPath("/auctions", locale)}/${b.auction.id}`}
+            className="hiw-bidrow"
+          >
+            <span className="thumb">
+              {b.auction.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={b.auction.imageUrl} alt={b.auction.title} loading="lazy" />
+              ) : (
+                <span className="ph" aria-hidden>
+                  🛒
+                </span>
+              )}
+            </span>
+            <span className="main">
+              <span className="title">{b.auction.title}</span>
+              <span className="amt">
+                Your bid: <b>{Number(b.amount).toFixed(2)}</b>
+              </span>
+            </span>
+            <span className="chips">
+              <span className={cn("hiw-chip", aud.cls)}>{aud.label}</span>
+              <span className={cn("hiw-chip", placed.cls)}>
+                <span className="lbl">At bid</span> {placed.label}
+              </span>
+              <span className={cn("hiw-chip", present.cls)}>
+                <span className="lbl">Now</span> {present.label}
+              </span>
+            </span>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Map a bid-status kind to a label + theme chip class. */
+function bidChip(kind: BidStatusKind | null): { label: string; cls: string } {
+  switch (kind) {
+    case "LOWEST_UNIQUE":
+      return { label: "Lowest & unique", cls: "win" };
+    case "DUPLICATE_COLLIDING":
+      return { label: "Duplicate", cls: "dup" };
+    case "UNIQUE_LOSING":
+      return { label: "Unique (losing)", cls: "lose" };
+    default:
+      return { label: "—", cls: "" };
+  }
+}
+
+function auctionChip(status: "LIVE" | "UPCOMING" | "ENDED"): {
+  label: string;
+  cls: string;
+} {
+  if (status === "LIVE") return { label: "Live", cls: "live" };
+  if (status === "UPCOMING") return { label: "Upcoming", cls: "upcoming" };
+  return { label: "Ended", cls: "ended" };
 }
