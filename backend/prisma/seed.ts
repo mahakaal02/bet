@@ -4,8 +4,15 @@ import Decimal from 'decimal.js';
 // Pure (decorator-free) pricing modules only — importing the
 // `@Injectable()` PricingEngine would drag `reflect-metadata` into the
 // ts-node seed. The math here mirrors PricingEngine.priceRow exactly.
-import { roundPriceForRegion } from '../src/pricing/regional-rounding';
-import { BASELINE_COUNTRY, COUNTRY_CATALOG } from '../src/pricing/pricing.config';
+//
+// Import from compiled dist/ rather than the .ts source: the runner
+// image ships dist/ but not src/, and on Node 20 ts-node's require
+// hook doesn't satisfy the extensionless ../src/pricing/* lookup
+// (resolution falls through to the ESM resolver and errors with
+// ERR_MODULE_NOT_FOUND). dist/ is plain CJS — require finds the
+// .js directly, no ts-node hop.
+import { roundPriceForRegion } from '../dist/src/pricing/regional-rounding';
+import { BASELINE_COUNTRY, COUNTRY_CATALOG } from '../dist/src/pricing/pricing.config';
 
 const prisma = new PrismaClient();
 
