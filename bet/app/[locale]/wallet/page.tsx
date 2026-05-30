@@ -167,7 +167,7 @@ export default async function WalletPage({
             </span>
             <ThemeSwitch />
             <a className="deposit-btn" href="#buy">+ {tr("wallet.buyCoins")}</a>
-            <div className="avatar">{initial}</div>
+            <Link className="avatar" href={lp("/profile")}>{initial}</Link>
           </div>
         </div>
       </header>
