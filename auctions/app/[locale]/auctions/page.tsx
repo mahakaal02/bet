@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
 import { backend, type Auction } from "@/lib/backend";
+import { getSessionToken } from "@/lib/session";
+import { detectCountry, type CountryCode } from "@/lib/locale-detect";
+import { loadFxRates, type FxRates } from "@/lib/fx";
+import { formatMoneyFromINR, formatLocalNumber } from "@/lib/currency";
 import { cn, relativeTime } from "@/lib/utils";
+import { HowItWorks } from "./HowItWorks";
 import {
   DEFAULT_LOCALE,
   buildLocalizedMetadata,
@@ -15,10 +17,33 @@ import {
   t,
   type Locale,
 } from "@/lib/i18n";
+import "./auctions-theme.css";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "LIVE" | "UPCOMING" | "ENDED";
+type Tab = "LIVE" | "UPCOMING" | "ENDED" | "MINE";
+
+type BidStatusKind =
+  | "LOWEST_UNIQUE"
+  | "DUPLICATE_COLLIDING"
+  | "UNIQUE_LOSING"
+  | "NO_BID";
+
+/** One row from `GET /me/bids` — the user's bid with both its
+ *  placement-time snapshot and the live present status. */
+type MyBid = {
+  id: string;
+  amount: string;
+  placedAt: string;
+  placedStatus: BidStatusKind | null;
+  presentStatus: BidStatusKind;
+  auction: {
+    id: string;
+    title: string;
+    status: "LIVE" | "UPCOMING" | "ENDED";
+    imageUrl: string | null;
+  };
+};
 
 export async function generateMetadata({
   params,
@@ -37,9 +62,10 @@ export async function generateMetadata({
 
 /**
  * Auctions catalog. Three tabs: Live / Upcoming / Closed. Tab choice is
- * carried in `?tab=` so the URL is shareable and a refresh stays on
- * the same view. The closed-tab tiles surface the winner inline — same
- * design pattern as the Android app's HomeScreen.
+ * carried in `?tab=` so the URL is shareable. Styled with the "How It
+ * Works" handoff theme (warm-humanist fintech, dark-first) — see
+ * `auctions-theme.css`. All money is rendered in the viewer's local
+ * currency (resolved from location) — never a hardcoded ₹.
  */
 export default async function AuctionsListPage({
   params,
@@ -55,15 +81,21 @@ export default async function AuctionsListPage({
     t(k, locale, vars);
   const lp = (path: string) => localizedPath(path, locale);
 
-  const tabs: { value: Tab; label: string; count: (a: Auction[]) => number }[] = [
-    { value: "LIVE", label: tr("auction.tabLive"), count: (a) => a.filter((x) => x.status === "LIVE").length },
-    { value: "UPCOMING", label: tr("auction.tabUpcoming"), count: (a) => a.filter((x) => x.status === "UPCOMING").length },
-    { value: "ENDED", label: tr("auction.tabClosed"), count: (a) => a.filter((x) => x.status === "ENDED").length },
+  const tabs: { value: Tab; label: string }[] = [
+    { value: "LIVE", label: tr("auction.tabLive") },
+    { value: "UPCOMING", label: tr("auction.tabUpcoming") },
+    { value: "ENDED", label: tr("auction.tabClosed") },
+    { value: "MINE", label: "My bids" },
   ];
 
   const sp = await searchParams;
   const rawTab = (sp.tab ?? "LIVE").toUpperCase() as Tab;
   const tab: Tab = tabs.some((t) => t.value === rawTab) ? rawTab : "LIVE";
+
+  const country = await detectCountry(
+    sp as Record<string, string | string[] | undefined>,
+  );
+  const { rates } = await loadFxRates();
 
   let all: Auction[] = [];
   let fetchError: string | null = null;
@@ -73,8 +105,30 @@ export default async function AuctionsListPage({
     fetchError = err instanceof Error ? err.message : tr("auction.fetchError", { error: "" });
   }
 
+  // "My bids" needs the signed-in user's bid history (status snapshot at
+  // placement + live present status + auction status).
+  let myBids: MyBid[] | null = null;
+  let mineSignedOut = false;
+  if (tab === "MINE") {
+    const token = await getSessionToken();
+    if (!token) {
+      mineSignedOut = true;
+    } else {
+      try {
+        myBids = await backend.authed(token).get<MyBid[]>("/me/bids");
+      } catch (err) {
+        fetchError = err instanceof Error ? err.message : tr("auction.fetchError", { error: "" });
+      }
+    }
+  }
+
+  const countFor = (v: Tab): number | null =>
+    v === "MINE"
+      ? myBids
+        ? myBids.length
+        : null
+      : all.filter((x) => x.status === v).length;
   const filtered = all.filter((a) => a.status === tab);
-  // For the Closed tab, surface most-recently-closed first.
   if (tab === "ENDED") {
     filtered.sort((a, b) => {
       const ax = a.closedAt ? new Date(a.closedAt).getTime() : 0;
@@ -83,130 +137,142 @@ export default async function AuctionsListPage({
     });
   }
 
-  const empty: Record<Tab, string> = {
+  const empty: Record<"LIVE" | "UPCOMING" | "ENDED", string> = {
     LIVE: tr("auction.emptyLive"),
     UPCOMING: tr("auction.emptyUpcoming"),
     ENDED: tr("auction.emptyEnded"),
   };
 
   return (
-    <main className="min-h-screen pb-20">
+    <>
       <Navbar />
-      <div className="mx-auto max-w-7xl px-4 py-6">
-        <div className="mb-4">
-          <h1 className="text-2xl font-black">{tr("auction.heading")}</h1>
-          <p className="text-sm text-slate-400">
-            {tr("auction.subtext")}
-          </p>
-        </div>
+      <main className="kalki-hiw">
+        <div className="hiw-wrap">
+          <span className="hiw-eyebrow">
+            <span className="pulse" />
+            Lowest Unique Bid auctions
+          </span>
+          <h1 className="hiw-h1">
+            {tr("auction.heading")}
+          </h1>
+          <p className="hiw-sub">{tr("auction.subtext")}</p>
 
-        {/* Tab bar — mirrors the Android HomeScreen's filter chip row.
-            The active tab gets a brand-coloured underline + bold weight;
-            inactive tabs stay quiet. Counts make the catalog scannable
-            at a glance ("Are there even Upcoming ones today?"). */}
-        <nav className="mb-5 flex items-center gap-1 border-b border-[var(--color-divider)]">
-          {tabs.map((tabDef) => {
-            const active = tabDef.value === tab;
-            const count = tabDef.count(all);
-            return (
-              <Link
-                key={tabDef.value}
-                href={`${lp("/auctions")}?tab=${tabDef.value}`}
-                className={cn(
-                  "relative px-3 py-2 text-sm font-semibold transition",
-                  active
-                    ? "text-cyan-300"
-                    : "text-slate-400 hover:text-slate-200",
-                )}
-              >
-                {tabDef.label}
-                <span
-                  className={cn(
-                    "ml-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full border px-1.5 text-[10px] font-bold tabular-nums",
-                    active
-                      ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-200"
-                      : "border-slate-700 bg-slate-900/60 text-slate-500",
-                  )}
+          <HowItWorks browseHref={`${lp("/auctions")}?tab=LIVE`} />
+
+          <nav className="hiw-tabs" aria-label="Auction status">
+            {tabs.map((tabDef) => {
+              const active = tabDef.value === tab;
+              return (
+                <Link
+                  key={tabDef.value}
+                  href={`${lp("/auctions")}?tab=${tabDef.value}`}
+                  className={cn("hiw-tab", active && "active")}
+                  aria-current={active ? "page" : undefined}
                 >
-                  {count}
-                </span>
-                {active && (
-                  <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-cyan-400" />
-                )}
-              </Link>
-            );
-          })}
-        </nav>
+                  {tabDef.label}
+                  {countFor(tabDef.value) !== null && (
+                    <span className="hiw-count">{countFor(tabDef.value)}</span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
 
-        {fetchError && (
-          <Card className="mb-6 border-rose-500/30 bg-rose-500/10 text-sm text-rose-200">
-            {tr("auction.fetchError", { error: fetchError })}
-          </Card>
-        )}
+          {fetchError && (
+            <div className="hiw-note error">
+              {tr("auction.fetchError", { error: fetchError })}
+            </div>
+          )}
 
-        {filtered.length === 0 ? (
-          <Card className="text-sm text-slate-500">{empty[tab]}</Card>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((a) => (
-              <AuctionTile key={a.id} a={a} locale={locale} />
-            ))}
-          </div>
-        )}
-      </div>
-    </main>
+          {tab === "MINE" ? (
+            mineSignedOut ? (
+              <div className="hiw-note">
+                <Link href={lp("/login")} className="hiw-link">
+                  Sign in
+                </Link>{" "}
+                to see your bids.
+              </div>
+            ) : !myBids || myBids.length === 0 ? (
+              <div className="hiw-note">You haven&apos;t placed any bids yet.</div>
+            ) : (
+              <MyBidsList bids={myBids} locale={locale} />
+            )
+          ) : filtered.length === 0 ? (
+            <div className="hiw-note">{empty[tab as "LIVE" | "UPCOMING" | "ENDED"]}</div>
+          ) : (
+            <div className="hiw-grid">
+              {filtered.map((a) => (
+                <AuctionTile
+                  key={a.id}
+                  a={a}
+                  locale={locale}
+                  country={country}
+                  rates={rates}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+    </>
   );
 }
 
-function AuctionTile({ a, locale }: { a: Auction; locale: Locale }) {
+function AuctionTile({
+  a,
+  locale,
+  country,
+  rates,
+}: {
+  a: Auction;
+  locale: Locale;
+  country: CountryCode;
+  rates: FxRates["rates"];
+}) {
   const hero = a.imageUrls[0];
   const tr = (k: string, vars?: Record<string, string | number>) =>
     t(k, locale, vars);
+  const statusLabel =
+    a.status === "LIVE"
+      ? tr("auction.statusLive")
+      : a.status === "UPCOMING"
+        ? tr("auction.statusUpcoming")
+        : tr("auction.statusEnded");
+
   return (
-    <Link
-      href={`${localizedPath("/auctions", locale)}/${a.id}`}
-      className="block transition hover:-translate-y-0.5"
-    >
-      <Card className="overflow-hidden p-0 hover:border-cyan-500/40">
+    <Link className="lot" href={`${localizedPath("/auctions", locale)}/${a.id}`}>
+      <div className="ph">
         {hero ? (
-          <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-950">
-            <Image
-              src={hero}
-              alt={a.title}
-              fill
-              sizes="(min-width: 1024px) 24vw, (min-width: 640px) 50vw, 100vw"
-              className="object-cover"
-              unoptimized
-            />
-            <div className="absolute left-2 top-2">
-              <StatusBadge status={a.status} tr={tr} />
-            </div>
-          </div>
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={hero} alt={a.title} loading="lazy" />
         ) : (
-          <div className="flex aspect-[4/3] w-full items-center justify-center bg-slate-900 text-slate-700">
+          <div className="ph-fallback" aria-hidden>
             🛒
           </div>
         )}
-        <div className="p-3">
-          <h3 className="line-clamp-2 text-sm font-semibold text-slate-100">
-            {a.title}
-          </h3>
-          <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-400">
-            <span>
-              {tr("auction.retailPrice")} ₹
-              {Number(a.retailPrice).toLocaleString("en-IN")}
-            </span>
-            <span>
-              <TimeHint auction={a} tr={tr} />
-            </span>
-          </div>
-          {/* Closed-tab winners get their own row so they stand out from
-              the generic price/time line above. */}
-          {a.status === "ENDED" && (
-            <WinnerLine auction={a} tr={tr} />
+        <span
+          className={cn(
+            "tag",
+            a.status === "LIVE" && "live",
+            a.status === "UPCOMING" && "upcoming",
           )}
+        >
+          {statusLabel}
+        </span>
+        <span className="timeleft">
+          <TimeHint auction={a} tr={tr} />
+        </span>
+      </div>
+      <div className="body">
+        <h3>{a.title}</h3>
+        <div className="val">
+          {tr("auction.retailPrice")}{" "}
+          <b>{formatMoneyFromINR(a.retailPrice, country, rates)}</b>
         </div>
-      </Card>
+        {a.status === "ENDED" && (
+          <WinnerLine auction={a} tr={tr} country={country} />
+        )}
+      </div>
     </Link>
   );
 }
@@ -214,44 +280,32 @@ function AuctionTile({ a, locale }: { a: Auction; locale: Locale }) {
 function WinnerLine({
   auction,
   tr,
+  country,
 }: {
   auction: Auction;
   tr: (k: string, vars?: Record<string, string | number>) => string;
+  country: CountryCode;
 }) {
   if (!auction.winner) {
-    return (
-      <div className="mt-2 text-[11px] text-slate-500">
-        {tr("auction.winnerNoneDeclared")}
-      </div>
-    );
+    return <div className="hiw-winner none">{tr("auction.winnerNoneDeclared")}</div>;
   }
   return (
-    <div className="mt-2 flex items-center gap-1.5 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-2 py-1 text-[11px] text-emerald-200">
-      <span>🏆</span>
-      <span className="truncate">
-        <span className="font-semibold">@{auction.winner.username}</span>{" "}
+    <div className="hiw-winner">
+      <span aria-hidden>🏆</span>
+      <span>
+        <b>@{auction.winner.username}</b>
         {auction.winnerAmount && (
           <>
-            {tr("auction.winnerWonAt")} ₹
-            {Number(auction.winnerAmount).toFixed(2)}
+            {" "}
+            {tr("auction.winnerWonAt")}{" "}
+            <span className="amt">
+              {formatLocalNumber(auction.winnerAmount, country, 2)}
+            </span>
           </>
         )}
       </span>
     </div>
   );
-}
-
-function StatusBadge({
-  status,
-  tr,
-}: {
-  status: Auction["status"];
-  tr: (k: string, vars?: Record<string, string | number>) => string;
-}) {
-  if (status === "LIVE") return <Badge tone="live">{tr("auction.statusLive")}</Badge>;
-  if (status === "UPCOMING")
-    return <Badge tone="upcoming">{tr("auction.statusUpcoming")}</Badge>;
-  return <Badge tone="ended">{tr("auction.statusEnded")}</Badge>;
 }
 
 function TimeHint({
@@ -276,4 +330,77 @@ function TimeHint({
     return <>{tr("auction.timeEndedAt", { time: relativeTime(now - new Date(auction.closedAt).getTime(), "ago") })}</>;
   }
   return <>{tr("auction.timeEnded")}</>;
+}
+
+/**
+ * "My bids" view: one row per bid the user has placed, showing the
+ * status snapshot from when they bid, the live present status, and the
+ * auction's status. Bid amounts render as plain numbers (they're coins).
+ */
+function MyBidsList({ bids, locale }: { bids: MyBid[]; locale: Locale }) {
+  return (
+    <div className="hiw-bidlist">
+      {bids.map((b) => {
+        const placed = bidChip(b.placedStatus);
+        const present = bidChip(b.presentStatus);
+        const aud = auctionChip(b.auction.status);
+        return (
+          <Link
+            key={b.id}
+            href={`${localizedPath("/auctions", locale)}/${b.auction.id}`}
+            className="hiw-bidrow"
+          >
+            <span className="thumb">
+              {b.auction.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={b.auction.imageUrl} alt={b.auction.title} loading="lazy" />
+              ) : (
+                <span className="ph" aria-hidden>
+                  🛒
+                </span>
+              )}
+            </span>
+            <span className="main">
+              <span className="title">{b.auction.title}</span>
+              <span className="amt">
+                Your bid: <b>{Number(b.amount).toFixed(2)}</b>
+              </span>
+            </span>
+            <span className="chips">
+              <span className={cn("hiw-chip", aud.cls)}>{aud.label}</span>
+              <span className={cn("hiw-chip", placed.cls)}>
+                <span className="lbl">At bid</span> {placed.label}
+              </span>
+              <span className={cn("hiw-chip", present.cls)}>
+                <span className="lbl">Now</span> {present.label}
+              </span>
+            </span>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Map a bid-status kind to a label + theme chip class. */
+function bidChip(kind: BidStatusKind | null): { label: string; cls: string } {
+  switch (kind) {
+    case "LOWEST_UNIQUE":
+      return { label: "Lowest & unique", cls: "win" };
+    case "DUPLICATE_COLLIDING":
+      return { label: "Duplicate", cls: "dup" };
+    case "UNIQUE_LOSING":
+      return { label: "Unique (losing)", cls: "lose" };
+    default:
+      return { label: "—", cls: "" };
+  }
+}
+
+function auctionChip(status: "LIVE" | "UPCOMING" | "ENDED"): {
+  label: string;
+  cls: string;
+} {
+  if (status === "LIVE") return { label: "Live", cls: "live" };
+  if (status === "UPCOMING") return { label: "Upcoming", cls: "upcoming" };
+  return { label: "Ended", cls: "ended" };
 }

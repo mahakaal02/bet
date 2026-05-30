@@ -232,7 +232,7 @@ const pt: Partial<Dictionary> = {
       "Quando o tempo zerar, o menor lance único vence o produto.",
     aboutThisItem: "Sobre este item",
     bidNow: "Dar lance",
-    bidAmountLabel: "Valor do lance (₹)",
+    bidAmountLabel: "Valor do lance",
     bidPlacing: "Enviando…",
     bidSuccess: "Lance registrado.",
     bidErrorInsufficientCoins:

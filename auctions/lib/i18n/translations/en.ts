@@ -244,20 +244,20 @@ const en: Dictionary = {
     placeBidHeading: "Place a bid",
     howItWorksHeading: "How it works",
     howItWorks1: "Each bid costs {coins} coin{s} from your wallet.",
-    howItWorks2: "Pick any number from ₹0.01 up to retail price.",
+    howItWorks2: "Pick any number from 0.01 up to retail price.",
     howItWorks3:
       "When the timer hits zero, the lowest unique bid wins the product.",
     aboutThisItem: "About this item",
     // ─── Bid panel ─────────────────────────────────────────────
     bidNow: "Place bid",
-    bidAmountLabel: "Bid amount (₹)",
+    bidAmountLabel: "Bid amount",
     bidPlacing: "Placing…",
     bidSuccess: "Bid placed.",
     bidErrorInsufficientCoins:
       "Not enough coins. Top up your wallet to keep bidding.",
     bidErrorAuctionClosed: "This auction is no longer accepting bids.",
     bidErrorRateLimited: "Slow down — wait before bidding again.",
-    bidErrorInvalidAmount: "Pick an amount between ₹0.01 and the retail price.",
+    bidErrorInvalidAmount: "Pick an amount between 0.01 and the retail price.",
     bidErrorGeneric: "Could not place bid.",
     bidErrorSignedOut: "Please sign in to bid.",
     bidSignInPrompt: "Sign in to place a bid.",

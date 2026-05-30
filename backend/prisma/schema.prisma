@@ -186,6 +186,9 @@ model Bid {
   userId    String
   amount    Decimal  @db.Decimal(12, 2)
   createdAt DateTime @default(now())
+  /// Status the bidder saw at placement time — a snapshot of the bidding-
+  /// engine classification. Nullable for bids placed before this column.
+  placedStatus String?
 
   auction Auction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id])
