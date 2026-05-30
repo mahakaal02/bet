@@ -197,7 +197,7 @@ export function BidPanel({
         setError(body?.message ?? "Couldn't place that bid.");
         return;
       }
-      setNotice(`Bid placed: ₹${body.bid.amount}.`);
+      setNotice(`Bid placed: 🪙 ${body.bid.amount}.`);
       setAmount("");
       // Release iOS's "input is focused, stay zoomed in" state. The viewport
       // + 16px-input fixes prevent the zoom from triggering in the first
@@ -263,7 +263,7 @@ export function BidPanel({
       <div className="flex items-stretch gap-2">
         <div className="relative flex-1">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">
-            ₹
+            🪙
           </span>
           <Input
             ref={amountInputRef}
@@ -346,7 +346,7 @@ function LiveStatusBlock({
   if (!copy) {
     return (
       <p className="text-[11px] text-slate-500">
-        Latest bid: ₹{bid.amount} ({bid.kind})
+        Latest bid: 🪙 {bid.amount} ({bid.kind})
       </p>
     );
   }
@@ -355,7 +355,7 @@ function LiveStatusBlock({
       <div className="mb-1 flex items-center gap-2">
         <Badge tone={copy.tone}>{copy.label}</Badge>
         <span className="font-mono text-sm font-semibold text-slate-100">
-          ₹{bid.amount}
+          🪙 {bid.amount}
         </span>
       </div>
       <p className="text-[11px] text-slate-400">{copy.hint}</p>

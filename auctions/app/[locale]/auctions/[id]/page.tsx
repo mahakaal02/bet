@@ -13,6 +13,9 @@ import {
   type WatchlistListResponse,
 } from "@/lib/backend";
 import { relativeTime } from "@/lib/utils";
+import { detectCountry } from "@/lib/locale-detect";
+import { loadFxRates } from "@/lib/fx";
+import { formatMoneyFromINR, formatLocalNumber } from "@/lib/currency";
 import {
   DEFAULT_LOCALE,
   buildLocalizedMetadata,
@@ -66,6 +69,11 @@ export default async function AuctionDetailPage({
   // `/api/bid/:id` server-side, which reads the cookie directly.
   const token = await getSessionToken();
   const signedIn = !!token;
+
+  // Local-currency money rendering (symbol + FX from the viewer's
+  // location) — see lib/currency.ts. Never a hardcoded ₹.
+  const country = await detectCountry();
+  const { rates } = await loadFxRates();
 
   // Watchlist state: only relevant for signed-in users AND only when
   // the `watchlist.enabled` flag is ON server-side. We piggy-back on
@@ -132,7 +140,7 @@ export default async function AuctionDetailPage({
             <Card className="space-y-2">
               <Stat
                 label={tr("auction.retailPrice")}
-                value={`₹${Number(auction.retailPrice).toLocaleString("en-IN")}`}
+                value={formatMoneyFromINR(auction.retailPrice, country, rates)}
               />
               <Stat
                 label={tr("auction.coinsPerBid")}
@@ -145,7 +153,7 @@ export default async function AuctionDetailPage({
                     <span className="text-emerald-300">
                       @{auction.winner.username}
                       {auction.winnerAmount && (
-                        <> · ₹{Number(auction.winnerAmount).toFixed(2)}</>
+                        <> · 🪙 {formatLocalNumber(auction.winnerAmount, country, 2)}</>
                       )}
                     </span>
                   }

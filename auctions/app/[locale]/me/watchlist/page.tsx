@@ -12,6 +12,9 @@ import {
   type WatchlistListResponse,
 } from "@/lib/backend";
 import { relativeTime } from "@/lib/utils";
+import { detectCountry, type CountryCode } from "@/lib/locale-detect";
+import { loadFxRates, type FxRates } from "@/lib/fx";
+import { formatMoneyFromINR } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "My watchlist · Kalki Auctions" };
@@ -33,6 +36,10 @@ export const metadata = { title: "My watchlist · Kalki Auctions" };
 export default async function MyWatchlistPage() {
   const token = await getSessionToken();
   if (!token) redirect("/login?next=/me/watchlist");
+
+  // Local-currency money rendering from the viewer's location.
+  const country = await detectCountry();
+  const { rates } = await loadFxRates();
 
   let data: WatchlistListResponse | null = null;
   let unavailable = false;
@@ -109,7 +116,7 @@ export default async function MyWatchlistPage() {
         {data && data.items.length > 0 && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {data.items.map((item) => (
-              <WatchTile key={item.id} item={item} />
+              <WatchTile key={item.id} item={item} country={country} rates={rates} />
             ))}
           </div>
         )}
@@ -118,7 +125,15 @@ export default async function MyWatchlistPage() {
   );
 }
 
-function WatchTile({ item }: { item: WatchlistListResponse["items"][number] }) {
+function WatchTile({
+  item,
+  country,
+  rates,
+}: {
+  item: WatchlistListResponse["items"][number];
+  country: CountryCode;
+  rates: FxRates["rates"];
+}) {
   const a = item.auction;
   return (
     <Link href={`/auctions/${a.id}`} className="block transition hover:-translate-y-0.5">
@@ -151,7 +166,7 @@ function WatchTile({ item }: { item: WatchlistListResponse["items"][number] }) {
           </h3>
           <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-400">
             <span>
-              Retail ₹{Number(a.retailPrice).toLocaleString("en-IN")}
+              Retail {formatMoneyFromINR(a.retailPrice, country, rates)}
             </span>
             <span>
               <TimeHint

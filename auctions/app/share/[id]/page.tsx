@@ -1,6 +1,9 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { backend, BackendApiError } from "@/lib/backend";
+import { detectCountry } from "@/lib/locale-detect";
+import { loadFxRates } from "@/lib/fx";
+import { formatMoneyFromINR, currencyForCountry } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
@@ -56,8 +59,10 @@ export async function generateMetadata({
   if (!auction) {
     return { title: "Auction not found · Kalki Auctions" };
   }
-  const cover = auction.imageUrls[0] ?? "/og-default.png";
-  const desc = `Bid on ${auction.title} — retail ₹${Number(auction.retailPrice).toLocaleString("en-IN")}. Lowest unique bid wins.`;
+  const cover = auction.imageUrls[0] ?? "/kalki-mark.png";
+  const country = await detectCountry();
+  const { rates } = await loadFxRates();
+  const desc = `Bid on ${auction.title} — retail ${formatMoneyFromINR(auction.retailPrice, country, rates)}. Lowest unique bid wins.`;
   return {
     title: `${auction.title} · Kalki Auctions`,
     description: desc,
@@ -105,7 +110,9 @@ export default async function SharePage({
   }
 
   const cover = auction.imageUrls[0] ?? null;
-  const retailFormatted = Number(auction.retailPrice).toLocaleString("en-IN");
+  const country = await detectCountry();
+  const { rates } = await loadFxRates();
+  const retailFormatted = formatMoneyFromINR(auction.retailPrice, country, rates);
   const ended = auction.status === "ENDED" || new Date(auction.endsAt).getTime() < Date.now();
 
   return (
@@ -127,11 +134,11 @@ export default async function SharePage({
         <p className="mt-2 text-sm text-slate-400">{auction.description}</p>
 
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Stat label="Retail price" value={`₹${retailFormatted}`} />
+          <Stat label="Retail price" value={retailFormatted} />
           <Stat label="Coins per bid" value={String(auction.coinsPerBid)} />
           <Stat
             label={ended ? "Ended" : "Closes"}
-            value={new Date(auction.endsAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+            value={new Date(auction.endsAt).toLocaleString(currencyForCountry(country).numberFmt, { dateStyle: "medium", timeStyle: "short" })}
           />
         </div>
 
@@ -152,7 +159,7 @@ export default async function SharePage({
               {ended ? "See live auctions" : "Open auction"}
             </Link>
             <Link
-              href="/signup"
+              href="/login"
               className="rounded-lg border border-amber-400/40 px-4 py-2 text-sm font-medium text-amber-100 hover:bg-amber-500/10"
             >
               Sign up
