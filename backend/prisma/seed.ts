@@ -1,18 +1,91 @@
 import { PrismaClient, PricingSnapshotStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import Decimal from 'decimal.js';
-// Pure (decorator-free) pricing modules only — importing the
-// `@Injectable()` PricingEngine would drag `reflect-metadata` into the
-// ts-node seed. The math here mirrors PricingEngine.priceRow exactly.
-//
-// Import from compiled dist/ rather than the .ts source: the runner
-// image ships dist/ but not src/, and on Node 20 ts-node's require
-// hook doesn't satisfy the extensionless ../src/pricing/* lookup
-// (resolution falls through to the ESM resolver and errors with
-// ERR_MODULE_NOT_FOUND). dist/ is plain CJS — require finds the
-// .js directly, no ts-node hop.
-import { roundPriceForRegion } from '../dist/src/pricing/regional-rounding';
-import { BASELINE_COUNTRY, COUNTRY_CATALOG } from '../dist/src/pricing/pricing.config';
+
+// ─── Pricing bootstrap helpers (inlined from src/pricing/) ──────────────
+// Mirrors src/pricing/pricing.config.ts + regional-rounding.ts. Inlined
+// rather than imported because the runner image ships dist/ but not
+// src/, and importing from '../dist/src/pricing/*' fails at tsc time
+// (dist/ doesn't exist yet during `nest build`) while importing from
+// '../src/pricing/*' fails at runtime under Node 20's require/ESM
+// interplay (the extensionless require falls through to the ESM
+// resolver and errors with ERR_MODULE_NOT_FOUND before ts-node's `.ts`
+// hook fires). The src files remain the authoritative copy used by the
+// live backend; this duplication is intentionally tiny (one rounding
+// helper, a 16-row catalog) and only feeds the offline bootstrap which
+// the first annual pricing sync overwrites wholesale.
+type RoundingStrategy =
+  | 'charm_99_minor'
+  | 'charm_9_whole'
+  | 'nearest_10_whole'
+  | 'nearest_100_whole'
+  | 'nearest_500_whole';
+interface CountryConfig {
+  country: string;
+  currency: string;
+  fractionDigits: number;
+  rounding: RoundingStrategy;
+  name: string;
+}
+const BASELINE_COUNTRY = 'US';
+const COUNTRY_CATALOG: readonly CountryConfig[] = [
+  { country: 'US', currency: 'USD', fractionDigits: 2, rounding: 'charm_99_minor', name: 'United States' },
+  { country: 'IN', currency: 'INR', fractionDigits: 0, rounding: 'charm_9_whole', name: 'India' },
+  { country: 'BR', currency: 'BRL', fractionDigits: 2, rounding: 'charm_99_minor', name: 'Brazil' },
+  { country: 'TR', currency: 'TRY', fractionDigits: 0, rounding: 'charm_9_whole', name: 'Türkiye' },
+  { country: 'JP', currency: 'JPY', fractionDigits: 0, rounding: 'nearest_10_whole', name: 'Japan' },
+  { country: 'ID', currency: 'IDR', fractionDigits: 0, rounding: 'nearest_500_whole', name: 'Indonesia' },
+  { country: 'NG', currency: 'NGN', fractionDigits: 0, rounding: 'charm_9_whole', name: 'Nigeria' },
+  { country: 'PH', currency: 'PHP', fractionDigits: 0, rounding: 'charm_9_whole', name: 'Philippines' },
+  { country: 'MX', currency: 'MXN', fractionDigits: 2, rounding: 'charm_99_minor', name: 'Mexico' },
+  { country: 'FR', currency: 'EUR', fractionDigits: 2, rounding: 'charm_99_minor', name: 'France' },
+  { country: 'AE', currency: 'AED', fractionDigits: 2, rounding: 'charm_99_minor', name: 'United Arab Emirates' },
+  { country: 'CN', currency: 'CNY', fractionDigits: 0, rounding: 'charm_9_whole', name: 'China' },
+  { country: 'CH', currency: 'CHF', fractionDigits: 2, rounding: 'charm_99_minor', name: 'Switzerland' },
+  { country: 'GB', currency: 'GBP', fractionDigits: 2, rounding: 'charm_99_minor', name: 'United Kingdom' },
+  { country: 'RU', currency: 'RUB', fractionDigits: 0, rounding: 'charm_9_whole', name: 'Russia' },
+  { country: 'ZA', currency: 'ZAR', fractionDigits: 0, rounding: 'charm_9_whole', name: 'South Africa' },
+];
+const COUNTRY_BY_CODE: ReadonlyMap<string, CountryConfig> = new Map(
+  COUNTRY_CATALOG.map((c) => [c.country, c]),
+);
+function charm99Minor(value: Decimal): Decimal {
+  const floor = value.floor();
+  const candidate = floor.plus('0.99');
+  if (value.lessThanOrEqualTo(candidate)) return candidate;
+  return floor.plus(1).plus('0.99');
+}
+function charm9Whole(value: Decimal): Decimal {
+  const v = value.ceil();
+  let step: Decimal;
+  if (v.lessThan(100)) step = new Decimal(10);
+  else if (v.lessThan(1000)) step = new Decimal(10);
+  else if (v.lessThan(10000)) step = new Decimal(100);
+  else step = new Decimal(1000);
+  const mult = v.dividedBy(step).ceil().times(step);
+  const charm = mult.minus(1);
+  return charm.greaterThanOrEqualTo(v) ? charm : charm.plus(step);
+}
+function nearestWhole(value: Decimal, n: number): Decimal {
+  const step = new Decimal(n);
+  return value.dividedBy(step).ceil().times(step);
+}
+const STRATEGIES: Record<RoundingStrategy, (v: Decimal) => Decimal> = {
+  charm_99_minor: charm99Minor,
+  charm_9_whole: charm9Whole,
+  nearest_10_whole: (v) => nearestWhole(v, 10),
+  nearest_100_whole: (v) => nearestWhole(v, 100),
+  nearest_500_whole: (v) => nearestWhole(v, 500),
+};
+function roundPriceForRegion(country: string, value: Decimal.Value): Decimal {
+  const cfg = COUNTRY_BY_CODE.get(country.toUpperCase());
+  const v = new Decimal(value);
+  if (v.lessThanOrEqualTo(0)) return new Decimal(0);
+  if (!cfg) return v.toDecimalPlaces(2, Decimal.ROUND_UP);
+  const rounded = STRATEGIES[cfg.rounding](v);
+  return rounded.toDecimalPlaces(cfg.fractionDigits, Decimal.ROUND_HALF_UP);
+}
+// ────────────────────────────────────────────────────────────────────────
 
 const prisma = new PrismaClient();
 

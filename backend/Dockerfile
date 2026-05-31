@@ -26,10 +26,6 @@ COPY --from=builder /app/package-lock.json ./package-lock.json
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
-# prisma/seed.ts uses ts-node and imports decorator-free helpers from
-# src/pricing/ at runtime — must ship them or the seed init container
-# can't compile the .ts file.
-COPY --from=builder /app/src/pricing ./src/pricing
 RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app
 USER nodejs
 EXPOSE 4000
