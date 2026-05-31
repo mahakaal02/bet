@@ -43,7 +43,7 @@ describe("middleware analytics safety — query preservation", () => {
       ),
     );
     const loc = locationOf(res);
-    expect(loc.startsWith("/markets/pt/wallet?")).toBe(true);
+    expect(loc.startsWith("/pt/wallet?")).toBe(true);
     expect(loc).toContain("utm_source=twitter");
     expect(loc).toContain("utm_medium=paid_social");
     expect(loc).toContain("utm_campaign=q2_launch");
@@ -79,7 +79,7 @@ describe("middleware analytics safety — query preservation", () => {
       }),
     );
     const loc = locationOf(res);
-    expect(loc.startsWith("/markets/pt/register")).toBe(true);
+    expect(loc.startsWith("/pt/register")).toBe(true);
     expect(loc).toContain("ref=ALICE2024");
   });
 

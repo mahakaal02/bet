@@ -137,7 +137,7 @@ describe("middleware: priority 1 — explicit URL", () => {
       // NextURL serializes the cloned redirect with a trailing slash
       // (`/en/markets/`); accept it with or without, since the intent is
       // simply "locale root → markets list for this locale".
-      expect(locationOf(res)).toMatch(new RegExp(`^${B}/${loc}/markets/?$`));
+      expect(locationOf(res)).toMatch(new RegExp(`^/${loc}/markets/?$`));
     }
   });
 });
@@ -155,7 +155,7 @@ describe("middleware: priority 2 — preferred_language cookie", () => {
     );
     expect(res.status).toBeGreaterThanOrEqual(300);
     expect(res.status).toBeLessThan(400);
-    expect(locationOf(res)).toBe(`${B}/pt/wallet`);
+    expect(locationOf(res)).toBe("/pt/wallet");
   });
 
   it("cookie beats Accept-Language", () => {
@@ -166,7 +166,7 @@ describe("middleware: priority 2 — preferred_language cookie", () => {
         acceptLanguage: "fr-CA,fr;q=0.9",
       }),
     );
-    expect(locationOf(res)).toBe(`${B}/es/markets`);
+    expect(locationOf(res)).toBe("/es/markets");
   });
 
   it("cookie beats Geo-IP", () => {
@@ -177,7 +177,7 @@ describe("middleware: priority 2 — preferred_language cookie", () => {
         country: "BR",
       }),
     );
-    expect(locationOf(res)).toBe(`${B}/en`);
+    expect(locationOf(res)).toBe("/en");
   });
 
   it("ignores cookie set to an unsupported locale (falls through to next step)", () => {
@@ -190,7 +190,7 @@ describe("middleware: priority 2 — preferred_language cookie", () => {
     );
     // Geo would route FR → fr. Step 3 (Accept-Language) is empty, so
     // step 4 (geo) wins.
-    expect(locationOf(res)).toBe(`${B}/fr/wallet`);
+    expect(locationOf(res)).toBe("/fr/wallet");
   });
 });
 
@@ -205,7 +205,7 @@ describe("middleware: priority 3 — Accept-Language", () => {
         acceptLanguage: "fr-CA,fr;q=0.9,en;q=0.5",
       }),
     );
-    expect(locationOf(res)).toBe(`${B}/fr/markets`);
+    expect(locationOf(res)).toBe("/fr/markets");
   });
 
   it("Accept-Language beats Geo-IP", () => {
@@ -216,7 +216,7 @@ describe("middleware: priority 3 — Accept-Language", () => {
         country: "BR",
       }),
     );
-    expect(locationOf(res)).toBe(`${B}/fr/markets`);
+    expect(locationOf(res)).toBe("/fr/markets");
   });
 
   it("falls through when AL only advertises unsupported languages", () => {
@@ -226,7 +226,7 @@ describe("middleware: priority 3 — Accept-Language", () => {
         acceptLanguage: "zh-CN,ja;q=0.9",
       }),
     );
-    expect(locationOf(res)).toBe(`${B}/${DEFAULT_LOCALE}/wallet`);
+    expect(locationOf(res)).toBe(`/${DEFAULT_LOCALE}/wallet`);
   });
 
   it("respects q=0 rejections in AL", () => {
@@ -236,7 +236,7 @@ describe("middleware: priority 3 — Accept-Language", () => {
         acceptLanguage: "en;q=0,fr;q=0.9",
       }),
     );
-    expect(locationOf(res)).toBe(`${B}/fr`);
+    expect(locationOf(res)).toBe("/fr");
   });
 });
 
@@ -249,7 +249,7 @@ describe("middleware: priority 4 — Geo-IP", () => {
     const res = middleware(
       makeRequest("https://kalki.local/markets/markets", { country: "BR" }),
     );
-    expect(locationOf(res)).toBe(`${B}/pt/markets`);
+    expect(locationOf(res)).toBe("/pt/markets");
   });
 
   it("supports the cf-ipcountry header alias", () => {
@@ -258,7 +258,7 @@ describe("middleware: priority 4 — Geo-IP", () => {
         extra: { "cf-ipcountry": "MX" },
       }),
     );
-    expect(locationOf(res)).toBe(`${B}/es`);
+    expect(locationOf(res)).toBe("/es");
   });
 
   it("supports the x-real-country header alias", () => {
@@ -267,14 +267,14 @@ describe("middleware: priority 4 — Geo-IP", () => {
         extra: { "x-real-country": "FR" },
       }),
     );
-    expect(locationOf(res)).toBe(`${B}/fr`);
+    expect(locationOf(res)).toBe("/fr");
   });
 
   it("falls back to DEFAULT_LOCALE for unmapped countries", () => {
     const res = middleware(
       makeRequest("https://kalki.local/", { country: "ZZ" }),
     );
-    expect(locationOf(res)).toBe(`${B}/${DEFAULT_LOCALE}`);
+    expect(locationOf(res)).toBe(`/${DEFAULT_LOCALE}`);
   });
 
   it("stamps the geo-routed sentinel cookie when geo fires", () => {
@@ -299,7 +299,7 @@ describe("middleware: priority 4 — Geo-IP", () => {
       }),
     );
     // Sentinel set, no AL, no cookie → fall through to DEFAULT_LOCALE.
-    expect(locationOf(res)).toBe(`${B}/${DEFAULT_LOCALE}/wallet`);
+    expect(locationOf(res)).toBe(`/${DEFAULT_LOCALE}/wallet`);
   });
 });
 
@@ -310,19 +310,19 @@ describe("middleware: priority 4 — Geo-IP", () => {
 describe("middleware: priority 5 — default fallback", () => {
   it("uses DEFAULT_LOCALE when nothing else matches", () => {
     const res = middleware(makeRequest("https://kalki.local/markets/markets"));
-    expect(locationOf(res)).toBe(`${B}/${DEFAULT_LOCALE}/markets`);
+    expect(locationOf(res)).toBe(`/${DEFAULT_LOCALE}/markets`);
   });
 
   it("preserves the query string on fall-through", () => {
     const res = middleware(
       makeRequest("https://kalki.local/markets/markets?q=elec&cat=POLITICS"),
     );
-    expect(locationOf(res)).toBe(`${B}/${DEFAULT_LOCALE}/markets?q=elec&cat=POLITICS`);
+    expect(locationOf(res)).toBe(`/${DEFAULT_LOCALE}/markets?q=elec&cat=POLITICS`);
   });
 
   it("normalizes / to /{DEFAULT_LOCALE}", () => {
     const res = middleware(makeRequest("https://kalki.local/"));
-    expect(locationOf(res)).toBe(`${B}/${DEFAULT_LOCALE}`);
+    expect(locationOf(res)).toBe(`/${DEFAULT_LOCALE}`);
   });
 });
 
@@ -347,7 +347,7 @@ describe("middleware: bot handling", () => {
       const res = middleware(
         makeRequest("https://kalki.local/markets/markets", { userAgent: ua }),
       );
-      expect(locationOf(res)).toBe(`${B}/${DEFAULT_LOCALE}/markets`);
+      expect(locationOf(res)).toBe(`/${DEFAULT_LOCALE}/markets`);
     });
   }
 
@@ -380,7 +380,7 @@ describe("middleware: bot handling", () => {
         cookies: { [PREFERRED_LOCALE_COOKIE]: "pt" },
       }),
     );
-    expect(locationOf(res)).toBe(`${B}/${DEFAULT_LOCALE}`);
+    expect(locationOf(res)).toBe(`/${DEFAULT_LOCALE}`);
   });
 });
 
@@ -410,7 +410,7 @@ describe("middleware: no redirect loops", () => {
     const first = middleware(
       makeRequest("https://kalki.local/wallet", { country: "BR" }),
     );
-    expect(locationOf(first)).toBe(`${B}/pt/wallet`);
+    expect(locationOf(first)).toBe("/pt/wallet");
 
     // Step 2: the browser follows the redirect and makes a request to
     // /pt/wallet. Middleware should see the locale prefix and pass
@@ -427,7 +427,7 @@ describe("middleware: no redirect loops", () => {
         acceptLanguage: "fr-FR,fr;q=0.9",
       }),
     );
-    expect(locationOf(first)).toBe(`${B}/fr/markets`);
+    expect(locationOf(first)).toBe("/fr/markets");
 
     // Follow the redirect — same AL on the next request.
     const second = middleware(
@@ -444,7 +444,7 @@ describe("middleware: no redirect loops", () => {
         cookies: { [PREFERRED_LOCALE_COOKIE]: "es" },
       }),
     );
-    expect(locationOf(first)).toBe(`${B}/es/wallet`);
+    expect(locationOf(first)).toBe("/es/wallet");
 
     const second = middleware(
       makeRequest("https://kalki.local/es/wallet", {
@@ -478,7 +478,7 @@ describe("middleware: locale persistence", () => {
     const first = middleware(
       makeRequest("https://kalki.local/", { country: "BR" }),
     );
-    expect(locationOf(first)).toBe(`${B}/pt`);
+    expect(locationOf(first)).toBe("/pt");
     const sentinel = first.cookies.get(GEO_ROUTED_COOKIE);
     expect(sentinel?.value).toBe("1");
 
@@ -491,7 +491,7 @@ describe("middleware: locale persistence", () => {
         country: "BR",
       }),
     );
-    expect(locationOf(second)).toBe(`${B}/${DEFAULT_LOCALE}/wallet`);
+    expect(locationOf(second)).toBe(`/${DEFAULT_LOCALE}/wallet`);
   });
 
   it("preferred_language cookie wins over the sentinel", () => {
@@ -506,7 +506,7 @@ describe("middleware: locale persistence", () => {
         },
       }),
     );
-    expect(locationOf(res)).toBe(`${B}/es`);
+    expect(locationOf(res)).toBe("/es");
   });
 
   it("AL wins over the sentinel too — sentinel only blocks geo", () => {
@@ -516,7 +516,7 @@ describe("middleware: locale persistence", () => {
         acceptLanguage: "pt-BR,pt;q=0.9",
       }),
     );
-    expect(locationOf(res)).toBe(`${B}/pt/wallet`);
+    expect(locationOf(res)).toBe("/pt/wallet");
   });
 });
 

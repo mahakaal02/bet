@@ -164,7 +164,7 @@ describe("LanguageSwitcher contract — preferred_language cookie", () => {
     const res = middleware(req);
     const location = res.headers.get("location");
     expect(location).not.toBeNull();
-    expect(new URL(location!).pathname).toBe("/markets/es/wallet");
+    expect(new URL(location!).pathname).toBe("/es/wallet");
   });
 
   it("an unsupported value in the cookie is ignored (defends against tampering)", () => {
@@ -177,7 +177,7 @@ describe("LanguageSwitcher contract — preferred_language cookie", () => {
     const res = middleware(req);
     // No AL, no geo → default fallback.
     expect(new URL(res.headers.get("location")!).pathname).toBe(
-      `/markets/${DEFAULT_LOCALE}/wallet`,
+      `/${DEFAULT_LOCALE}/wallet`,
     );
   });
 
@@ -205,7 +205,7 @@ describe("LanguageSwitcher contract — persistence over a session", () => {
       headers: { "x-vercel-ip-country": "BR" },
     });
     let res = middleware(req);
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/markets/pt");
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/pt");
     // Sentinel cookie was stamped — but no preferred_language cookie
     // yet (the switcher hasn't been used).
     expect(res.cookies.get(PREFERRED_LOCALE_COOKIE)).toBeUndefined();
@@ -222,7 +222,7 @@ describe("LanguageSwitcher contract — persistence over a session", () => {
     });
     res = middleware(req);
     // Cookie beats geo — user lands on /en/markets, not /pt/markets.
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/markets/en/wallet");
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/en/wallet");
   });
 
   it("manual choice survives a VPN-induced country change", () => {
@@ -236,6 +236,6 @@ describe("LanguageSwitcher contract — persistence over a session", () => {
       },
     });
     const res = middleware(req);
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/markets/en/wallet");
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/en/wallet");
   });
 });

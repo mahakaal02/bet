@@ -80,13 +80,20 @@ export function middleware(req: NextRequest) {
   // `req.nextUrl.basePath` returns "" in Next 15.0.3 middleware
   // (verified at runtime — the URL prop is unpopulated even when
   // next.config.ts declares basePath: '/markets'). Hard-code the
-  // matching value here so the strip/prepend pair stays in sync with
-  // the build-time config. Keep them aligned if either changes.
+  // matching value here so we can strip basePath off the incoming
+  // pathname for routing decisions; Next 15 INCLUDES basePath in
+  // req.nextUrl.pathname for middleware. Keep this value in sync with
+  // next.config.ts's basePath.
+  //
+  // We DO NOT prepend basePath when constructing redirect targets:
+  // once next.config.ts is loaded at runtime, Next.js automatically
+  // prepends basePath to NextResponse.redirect Locations on its way
+  // out. Doing it here too produced the /markets/markets/... double-
+  // prefix loop we hit during the bet basePath migration.
   const BASE_PATH = "/markets";
   const internalPathname = req.nextUrl.pathname.startsWith(BASE_PATH)
     ? req.nextUrl.pathname.slice(BASE_PATH.length) || "/"
     : req.nextUrl.pathname;
-  const basePath = BASE_PATH;
 
   /* ----- existing SSO bridge ----- */
   const token = req.nextUrl.searchParams.get("token");
@@ -102,7 +109,7 @@ export function middleware(req: NextRequest) {
     const cleanUrl = req.nextUrl.clone();
     cleanUrl.searchParams.delete("token");
     const sso = req.nextUrl.clone();
-    sso.pathname = `${basePath}/api/auth/sso`;
+    sso.pathname = "/api/auth/sso";
     // `cleanUrl.pathname` includes basePath; the SSO handler will see
     // it as-is. No double-prefixing needed in the `next` param.
     sso.searchParams.set("next", cleanUrl.pathname + cleanUrl.search);
@@ -140,7 +147,7 @@ export function middleware(req: NextRequest) {
     // second pass, after being prefixed with a locale above.
     if (rest === "/") {
       const url = req.nextUrl.clone();
-      url.pathname = `${basePath}/${pathLocale}/markets`;
+      url.pathname = `/${pathLocale}/markets`;
       return NextResponse.redirect(url);
     }
     // URL already has a locale prefix. Trust it as the user's intent
@@ -178,9 +185,7 @@ export function middleware(req: NextRequest) {
     // content in the future (e.g. a redirect to a locale picker).
     const url = req.nextUrl.clone();
     url.pathname =
-      rest === "/"
-        ? `${basePath}/${DEFAULT_LOCALE}`
-        : `${basePath}/${DEFAULT_LOCALE}${rest}`;
+      rest === "/" ? `/${DEFAULT_LOCALE}` : `/${DEFAULT_LOCALE}${rest}`;
     return NextResponse.redirect(url);
   }
 
@@ -190,10 +195,7 @@ export function middleware(req: NextRequest) {
   const cookiePref = req.cookies.get(PREFERRED_LOCALE_COOKIE)?.value;
   if (isLocale(cookiePref)) {
     const url = req.nextUrl.clone();
-    url.pathname =
-      rest === "/"
-        ? `${basePath}/${cookiePref}`
-        : `${basePath}/${cookiePref}${rest}`;
+    url.pathname = rest === "/" ? `/${cookiePref}` : `/${cookiePref}${rest}`;
     return NextResponse.redirect(url);
   }
 
@@ -237,8 +239,7 @@ export function middleware(req: NextRequest) {
   }
 
   const url = req.nextUrl.clone();
-  url.pathname =
-    rest === "/" ? `${basePath}/${chosen}` : `${basePath}/${chosen}${rest}`;
+  url.pathname = rest === "/" ? `/${chosen}` : `/${chosen}${rest}`;
   const res = NextResponse.redirect(url);
   // Stamp the geo-routed sentinel after a geo fall-through so we
   // don't re-fire the geo logic on every subsequent non-localized
