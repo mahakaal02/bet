@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { getSessionToken } from "@/lib/session";
 import { detectCountry } from "@/lib/locale-detect";
+import { backend } from "@/lib/backend";
+import { DEFAULT_LOCALE, isLocale } from "@/lib/i18n";
 import { LoginLanding } from "./LoginLanding";
 
 /**
@@ -33,21 +35,53 @@ export const metadata = {
     "Prediction markets, Aviator crash and lowest-unique-bid auctions. One wallet. Three ways to print. Cash out before everyone else does.",
 };
 
+/**
+ * Is the `kalki_token` session still accepted by the backend? Mirrors
+ * the hub's gate (`app/[locale]/page.tsx` → GET /auth/me). ANY failure —
+ * 401, network error, backend down — counts as "not valid" so we render
+ * the login form rather than redirect into the hub's auth check (which
+ * would bounce straight back here → redirect loop).
+ */
+async function sessionIsValid(token: string): Promise<boolean> {
+  try {
+    await backend.authed(token).get("/auth/me");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default async function LoginPage({
+  params,
   searchParams,
 }: {
+  params: Promise<{ locale: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const { locale: rawLocale } = await params;
+  const locale = isLocale(rawLocale) ? rawLocale : DEFAULT_LOCALE;
   const sp = await searchParams;
   const token = await getSessionToken();
 
-  // Normalise the `next` query — same-origin paths only, default to
-  // the hub home. Cross-origin redirects after login are a phishing
-  // vector and the auctions hub deliberately doesn't follow them.
+  // Normalise the `next` query — same-origin paths only. CRITICAL:
+  // default to the localized hub (`/en`), NEVER bare "/". The apex "/"
+  // is Traefik-rewritten back to THIS login page (kalki-bet-domain.yaml
+  // `kalki-bet-rewrite-root`), so sending an authenticated user to "/"
+  // creates an infinite /↔/en/login loop (ERR_TOO_MANY_REDIRECTS).
+  // Cross-origin redirects after login are also a phishing vector — the
+  // hub deliberately follows same-origin paths only.
   const rawNext = sp.next;
   const nextParam = Array.isArray(rawNext) ? rawNext[0] : rawNext;
-  const safeNext = nextParam && nextParam.startsWith("/") ? nextParam : "/";
-  if (token) redirect(safeNext);
+  const safeNext =
+    nextParam && nextParam.startsWith("/") && nextParam !== "/"
+      ? nextParam
+      : `/${locale}`;
+
+  // Only redirect a *valid* session away from the login page. A
+  // present-but-invalid cookie (expired 7d JWT, rotated secret, backend
+  // down) must fall through and render the form — otherwise the hub
+  // bounces back here on its /auth/me 401 and we loop forever.
+  if (token && (await sessionIsValid(token))) redirect(safeNext);
 
   const initialCountry = await detectCountry(sp);
 

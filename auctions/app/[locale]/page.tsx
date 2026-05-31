@@ -147,7 +147,12 @@ export default async function HubPage({
     me = await backend.authed(token).get<Me>("/auth/me");
   } catch (err) {
     if (err instanceof BackendUnauthorized) {
-      redirect(`${lp("/login")}?next=${encodeURIComponent(lp("/"))}`);
+      // Cookie present but rejected (expired/rotated JWT). A React Server
+      // Component can't mutate cookies during render, so bounce through
+      // the clear route to delete the stale `kalki_token` BEFORE landing
+      // on login — otherwise the login page sees the dead cookie and the
+      // two ping-pong forever (ERR_TOO_MANY_REDIRECTS).
+      redirect(`/api/auth/clear?next=${encodeURIComponent(lp("/login"))}`);
     }
     throw err;
   }
