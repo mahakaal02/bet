@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { WsAdapter } from '@nestjs/platform-ws';
+import compression from 'compression';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
 import { AppModule } from './app.module';
@@ -94,6 +95,14 @@ async function bootstrapApi(): Promise<void> {
   // non-2xx is normalized.
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useWebSocketAdapter(new WsAdapter(app));
+
+  // gzip/br response compression. The API previously shipped JSON
+  // uncompressed (no proxy-level compression on the Traefik IngressRoute
+  // either), so large list payloads (auctions, bid history, markets
+  // feeds) crossed the wire 3–5× larger than necessary — a real cost on
+  // mobile. `compression` negotiates via Accept-Encoding and skips
+  // already-small / non-compressible bodies automatically.
+  app.use(compression());
 
   // CORS — admin SPA uses httpOnly cookies (PR-ADMIN-COOKIE-AUTH),
   // so we must (a) allow credentials and (b) pin the allowed origins

@@ -38,7 +38,11 @@ import { I18nProvider } from "@/lib/i18n/client";
  * splash, embed views).
  */
 
-export const dynamic = "force-dynamic";
+// No blanket `force-dynamic` here — on the segment layout it cascaded to
+// EVERY child route and made the whole app uncacheable (every response
+// `cf-cache-status: DYNAMIC`, full origin SSR per navigation). Pages opt
+// into dynamic rendering themselves by reading cookies()/headers() or
+// fetching with `cache: "no-store"`; truly-static routes can now be cached.
 
 interface LocaleLayoutProps {
   children: React.ReactNode;

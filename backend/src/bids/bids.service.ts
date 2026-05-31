@@ -297,6 +297,44 @@ export class BidsService {
   }
 
   /**
+   * Batched variant of {@link fetchBidRows}: fetch the bid rows for many
+   * auctions in ONE query and group them by auctionId. Lets the My-bids
+   * view stay at a constant query count regardless of how many distinct
+   * auctions the user has bid on (was O(distinct auctions) via a
+   * per-auction fetchBidRows in a Promise.all). Same row shape + same
+   * per-auction createdAt-asc ordering as fetchBidRows.
+   */
+  async fetchBidRowsForAuctions(
+    auctionIds: string[],
+  ): Promise<Map<string, BidRow[]>> {
+    const byAuction = new Map<string, BidRow[]>();
+    if (auctionIds.length === 0) return byAuction;
+    const rows = await this.prisma.bid.findMany({
+      where: { auctionId: { in: auctionIds } },
+      select: {
+        id: true,
+        userId: true,
+        amount: true,
+        createdAt: true,
+        auctionId: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    for (const r of rows) {
+      const row: BidRow = {
+        id: r.id,
+        userId: r.userId,
+        amount: new Decimal(r.amount.toString()),
+        createdAt: r.createdAt,
+      };
+      const arr = byAuction.get(r.auctionId);
+      if (arr) arr.push(row);
+      else byAuction.set(r.auctionId, [row]);
+    }
+    return byAuction;
+  }
+
+  /**
    * Auction-scoped classify opts derived from the manipulation mode +
    * fixed amount. Re-fetches the auction row — keep call sites tight.
    */
@@ -355,12 +393,11 @@ export class BidsService {
     });
 
     const auctionIds = [...new Set(bids.map((b) => b.auction.id))];
-    const rowsByAuction = new Map<string, BidRow[]>();
-    await Promise.all(
-      auctionIds.map(async (id) =>
-        rowsByAuction.set(id, await this.fetchBidRows(id)),
-      ),
-    );
+    // Single batched query for every relevant auction's bid rows, instead
+    // of one findMany per auction in a Promise.all (was N+1 — N = the
+    // number of distinct auctions the user has ever bid on). Grouped in
+    // memory below; per-auction createdAt-asc order is preserved.
+    const rowsByAuction = await this.fetchBidRowsForAuctions(auctionIds);
 
     return bids.map((b) => {
       const rows = rowsByAuction.get(b.auction.id) ?? [];

@@ -39,8 +39,8 @@
   --gold: #FFD166;
   --red: #FF4D6D;
   --blue: #5BB2FF;
-  --font-display: "Space Grotesk", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-display: var(--font-space-grotesk), "Space Grotesk", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, monospace;
 
   background: var(--bg);
   color: var(--text);
@@ -52,10 +52,10 @@
 }
 
 .kalki-login-page[data-lang="zh"] {
-  --font-display: "Noto Sans SC", "Space Grotesk", system-ui, sans-serif;
+  --font-display: "Noto Sans SC", var(--font-space-grotesk), "Space Grotesk", system-ui, sans-serif;
 }
 .kalki-login-page[data-lang="ar"] {
-  --font-display: "Noto Sans Arabic", "Space Grotesk", system-ui, sans-serif;
+  --font-display: "Noto Sans Arabic", var(--font-space-grotesk), "Space Grotesk", system-ui, sans-serif;
 }
 
 .kalki-login-page *,

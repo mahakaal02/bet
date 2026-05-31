@@ -49,8 +49,20 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // Strip console.* from production bundles (keep error/warn for prod
+  // diagnostics). Trims client JS and avoids noisy logs.
+  compiler: {
+    removeConsole:
+      process.env.NODE_ENV === "production"
+        ? { exclude: ["error", "warn"] }
+        : false,
+  },
   experimental: {
     typedRoutes: false,
+    // Tree-shake heavy libs down to per-component imports → smaller
+    // client chunks. recharts (~145KB) + framer-motion (~35KB) are the
+    // two biggest contributors behind login.
+    optimizePackageImports: ["recharts", "framer-motion"],
   },
 };
 

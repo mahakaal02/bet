@@ -5,12 +5,15 @@
    `.kalki-hiw` so it never leaks into the rest of the app.
    ============================================================ */
 
-@import url("https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
+/* Render-blocking external @import removed (PR-PERF). JetBrains Mono is
+   self-hosted via next/font (--font-jetbrains-mono); the Hanken Grotesk
+   display face falls back to the app's self-hosted Inter (--font-inter)
+   for a single, consistent, non-blocking sans across the product. */
 
 .kalki-hiw {
   /* fonts */
-  --hiw-sans: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --hiw-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --hiw-sans: var(--font-inter), "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --hiw-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, "SF Mono", monospace;
 
   /* accent ramp — cyan → blue → indigo */
   --cyan: oklch(0.8 0.115 205);
@@ -247,8 +250,8 @@
    carries its own --vars rather than inheriting from .kalki-hiw)
    ============================================================ */
 .hiw-overlay {
-  --hiw-sans: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --hiw-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --hiw-sans: var(--font-inter), "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --hiw-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, "SF Mono", monospace;
   --cyan: oklch(0.8 0.115 205);
   --blue: oklch(0.66 0.155 252);
   --indigo: oklch(0.6 0.15 282);

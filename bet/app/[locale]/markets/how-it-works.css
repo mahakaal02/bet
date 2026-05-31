@@ -6,12 +6,14 @@
    matter the host page's theme. The overlay is portaled to <body>.
    ============================================================ */
 
-@import url("https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
+/* Render-blocking Google Fonts @import removed (PR-PERF). JetBrains Mono
+   is self-hosted via next/font (--font-jetbrains-mono); the Hanken Grotesk
+   display face falls back to the self-hosted Inter (--font-inter). */
 
 .hiw-howbtn,
 .hiw-overlay {
-  --hiw-sans: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --hiw-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --hiw-sans: var(--font-inter), "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --hiw-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, "SF Mono", monospace;
   --cyan: oklch(0.8 0.115 205);
   --blue: oklch(0.66 0.155 252);
   --indigo: oklch(0.6 0.15 282);

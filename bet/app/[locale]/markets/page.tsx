@@ -7,6 +7,7 @@ import "./how-it-works.css";
 import { ThemeSwitch } from "../wallet/wallet-client";
 import { HowItWorks } from "./HowItWorks";
 import { Prisma } from "@prisma/client";
+import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { priceYes } from "@/lib/amm";
@@ -30,6 +31,34 @@ import { groupDisplayPrices } from "@/lib/market-group";
 export const dynamic = "force-dynamic";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Cached sparkline series for a set of markets. The 45-day YES-price
+ * history is user-independent and slow-moving, so memoize it in Next's
+ * data cache for 60s — collapsing the up-to-8000-row PricePoint scan to
+ * one DB pass per visible id-set per minute, even though the markets page
+ * itself stays dynamic (per-user wallet/username). Callers pass a SORTED
+ * id list so the same visible set shares one cache entry.
+ */
+const getSparkSeries = unstable_cache(
+  async (marketIds: string[]): Promise<Record<string, number[]>> => {
+    if (marketIds.length === 0) return {};
+    const sparkWindow = new Date(Date.now() - 45 * DAY_MS);
+    const rows = await db.pricePoint.findMany({
+      where: { marketId: { in: marketIds }, recordedAt: { gte: sparkWindow } },
+      select: { marketId: true, yesPrice: true },
+      orderBy: { recordedAt: "desc" },
+      take: 8000,
+    });
+    const byMarket: Record<string, number[]> = {};
+    for (const r of rows) (byMarket[r.marketId] ??= []).push(r.yesPrice);
+    // rows arrive newest→oldest; flip to oldest→newest for the sparkline.
+    for (const k of Object.keys(byMarket)) byMarket[k].reverse();
+    return byMarket;
+  },
+  ["markets-sparklines-v1"],
+  { revalidate: 60 },
+);
 
 export async function generateMetadata({
   params,
@@ -196,25 +225,14 @@ export default async function MarketsPage({
     : markets;
   const gridIds = gridMarkets.map((m) => m.id);
 
-  // One bounded query for every visible card's recent price series (grid +
-  // hero) — grouped + downsampled in JS so the sparklines are real, not faked.
+  // Recent price series for every visible card (grid + hero). The scan +
+  // JS reshape is user-independent and slow-moving, so it runs through a
+  // 60s data cache (getSparkSeries) — concurrent viewers share one
+  // up-to-8000-row PricePoint pass instead of repeating it per request
+  // under force-dynamic. Ids are sorted for a stable cache key.
   const sparkIds = [...gridIds, ...heroMarkets.map((m) => m.id)];
-  const sparkWindow = new Date(Date.now() - 45 * DAY_MS);
-  const sparkRows = sparkIds.length
-    ? await db.pricePoint.findMany({
-        where: { marketId: { in: sparkIds }, recordedAt: { gte: sparkWindow } },
-        select: { marketId: true, yesPrice: true },
-        orderBy: { recordedAt: "desc" },
-        take: 8000,
-      })
-    : [];
-  const sparkByMarket = new Map<string, number[]>();
-  for (const r of sparkRows) {
-    // rows arrive newest→oldest; unshift to rebuild oldest→newest
-    const arr = sparkByMarket.get(r.marketId);
-    if (arr) arr.unshift(r.yesPrice);
-    else sparkByMarket.set(r.marketId, [r.yesPrice]);
-  }
+  const sparkSeries = await getSparkSeries([...sparkIds].sort());
+  const sparkByMarket = new Map<string, number[]>(Object.entries(sparkSeries));
 
   const totalVol = volAgg._sum.volumeCoins ?? 0;
   const catCountMap = new Map<string, number>();

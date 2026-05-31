@@ -5,7 +5,10 @@
    other redesigned routes. Reset/base element rules are dropped —
    Tailwind preflight already covers them.
    ============================================================ */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+/* Render-blocking Google Fonts @import removed (PR-PERF) — Inter / Space
+   Grotesk / JetBrains Mono are already self-hosted via next/font in
+   app/layout.tsx (--font-inter / --font-space-grotesk /
+   --font-jetbrains-mono), referenced in the font tokens below. */
 
 /* ─── SHARED TOKENS (global :root, identical to wallet/markets) ─── */
 :root {
@@ -24,9 +27,9 @@
   --emerald-200: oklch(90.5% .093 164.15); --emerald-300: oklch(84.5% .143 164.978); --emerald-500: oklch(69.6% .17 162.48);
   --rose-200: oklch(89.2% .058 10.001); --rose-300: oklch(81% .117 11.638); --rose-500: oklch(64.5% .246 16.439);
   --amber-300: oklch(87.9% .169 91.605); --amber-400: oklch(82.8% .189 84.429);
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-sans: var(--font-inter), 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: var(--font-space-grotesk), 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --radius-sm: 8px; --radius: 12px; --radius-lg: 16px; --radius-xl: 20px; --topbar-h: 64px;
   --brand-a: #22D3EE; --brand-a-rgb: 34,211,238;
   --brand-b: #6366F1; --brand-b-rgb: 99,102,241;

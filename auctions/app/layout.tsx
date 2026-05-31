@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
+import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { SessionHeartbeat } from "@/components/SessionHeartbeat";
 import {
   DEFAULT_LOCALE,
@@ -9,6 +10,37 @@ import {
   isLocale,
   type Locale,
 } from "@/lib/i18n";
+
+/**
+ * Self-hosted fonts via next/font/google (PR-PERF). Replaces the
+ * render-blocking <link rel="stylesheet"> to fonts.googleapis.com that
+ * previously sat in <head> on EVERY page — a cross-origin, render-blocking
+ * request before first paint, plus two preconnects. next/font subsets +
+ * self-hosts at build time, serves from /_next/static with `display:swap`,
+ * and injects an optimized <link rel=preload>. CJK/Arabic (Noto) are
+ * intentionally dropped from the critical path — those locales fall back
+ * to the platform's system CJK/Arabic fonts (PingFang, Noto, …) which
+ * render instantly. Exposed as CSS variables consumed by the
+ * `--font-sans/-mono/-display` stacks in globals.css / hub.css /
+ * login/landing.css.
+ */
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+});
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  display: "swap",
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-space-grotesk",
+});
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-jetbrains-mono",
+});
 
 export const metadata: Metadata = {
   title: "Kalki Auctions",
@@ -60,23 +92,11 @@ export default async function RootLayout({
   const dir = dirForLocale(locale);
 
   return (
-    <html lang={locale} dir={dir} className="dark">
-      <head>
-        {/* PR-LOGIN-REDESIGN — Space Grotesk (display/UI) + JetBrains
-            Mono (live numbers, tickers) for the hub landing/login.
-            Loaded once at the document level so subsequent navigations
-            don't refetch; CJK/Arabic fallbacks live in the page CSS. */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Sans+Arabic:wght@400;500;600&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html
+      lang={locale}
+      dir={dir}
+      className={`dark ${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}
+    >
       <body className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] antialiased">
         {/* Mounted globally so the session-reminder heartbeat pings
             irrespective of which page the user is on. The component

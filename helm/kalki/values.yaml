@@ -209,6 +209,10 @@ bet:
   image: kalki-bet
   imageTag: 20260530T200204Z-5a41512 # {"$imagepolicy": "flux-system:kalki-bet:tag"}
   port: 3100
+  # Stays at 1 replica: bet runs an in-process scheduler
+  # (bet/lib/scheduler.ts — 60s tick closing markets + decaying trending
+  # scores). Scaling >1 would double-fire it; needs a Redis/advisory lock
+  # first (same gating as the backend cron). CPU request bumped instead.
   replicas: 1
   prismaMigrate: true
   # init-container runs `prisma db seed`. The Bet seed upserts every
@@ -237,24 +241,32 @@ bet:
   nowpayments:
     sandbox: "false"
   resources:
-    requests: {cpu: 100m, memory: 256Mi}
+    requests: {cpu: 250m, memory: 256Mi}
     limits: {cpu: 1000m, memory: 1Gi}
 auctions:
   image: kalki-auctions
   imageTag: 20260531T002256Z-977e949 # {"$imagepolicy": "flux-system:kalki-auctions:tag"}
   port: 3200
-  replicas: 1
+  # 2 replicas so one stays warm — kills the 1.7–5.7s cold-start TTFB on
+  # the apex/login app (kalki.bet) and survives a rolling restart. Pure
+  # SSR frontend, no in-process scheduler, so horizontal scaling is safe.
+  replicas: 2
+  # 50m CPU request starved SSR (the cold-start tax). Guarantee a quarter
+  # core so first render isn't throttled; still bursts to a full core.
   resources:
-    requests: {cpu: 50m, memory: 128Mi}
-    limits: {cpu: 500m, memory: 512Mi}
+    requests: {cpu: 250m, memory: 256Mi}
+    limits: {cpu: 1000m, memory: 512Mi}
 aviator:
   image: kalki-aviator
   imageTag: 20260530T171727Z-ecc0564 # {"$imagepolicy": "flux-system:kalki-aviator:tag"}
   port: 3000
-  replicas: 1
+  # 2 replicas + bigger CPU request, same rationale as auctions. The
+  # Aviator game engine lives in the backend, not this Next UI, so this
+  # pod is a stateless SSR frontend — safe to scale.
+  replicas: 2
   resources:
-    requests: {cpu: 50m, memory: 128Mi}
-    limits: {cpu: 500m, memory: 512Mi}
+    requests: {cpu: 250m, memory: 256Mi}
+    limits: {cpu: 1000m, memory: 512Mi}
 admin:
   image: kalki-admin
   imageTag: 20260530T171439Z-7378263 # {"$imagepolicy": "flux-system:kalki-admin:tag"}

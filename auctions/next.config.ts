@@ -21,6 +21,18 @@ try {
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Minimal standalone server output (.next/standalone) so the Docker
+  // runner boots `node server.js` without the full node_modules — smaller
+  // image, faster cold start (deployed cold TTFB was 1.7–5.7s on the
+  // 50m-CPU pod). This app has NO direct Prisma usage, so Next's file
+  // tracing is clean (no native query-engine to hand-include).
+  output: "standalone",
+  compiler: {
+    removeConsole:
+      process.env.NODE_ENV === "production"
+        ? { exclude: ["error", "warn"] }
+        : false,
+  },
   // Auction product images can come from anywhere the admin uploads — for
   // dev we accept picsum (seed data) and the backend's local /uploads
   // mount. The Bet markets page used `unoptimized` for the same reason;
