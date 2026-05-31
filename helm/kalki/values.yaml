@@ -245,7 +245,7 @@ bet:
     limits: {cpu: 1000m, memory: 1Gi}
 auctions:
   image: kalki-auctions
-  imageTag: 20260531T002256Z-977e949 # {"$imagepolicy": "flux-system:kalki-auctions:tag"}
+  imageTag: 20260531T053322Z-c931d62 # {"$imagepolicy": "flux-system:kalki-auctions:tag"}
   port: 3200
   # 2 replicas so one stays warm — kills the 1.7–5.7s cold-start TTFB on
   # the apex/login app (kalki.bet) and survives a rolling restart. Pure
