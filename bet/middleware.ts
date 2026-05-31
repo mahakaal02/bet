@@ -75,13 +75,18 @@ export function middleware(req: NextRequest) {
   // not /en/markets), and `NextResponse.redirect(url)` ships the
   // Location header verbatim — no automatic re-prefixing on the way
   // out. Strip it for routing decisions, prepend it back when
-  // constructing redirect targets, so the same code works whether
-  // basePath is "" (legacy subdomain) or "/markets" (apex mount).
-  const basePath = req.nextUrl.basePath ?? "";
-  const internalPathname =
-    basePath && req.nextUrl.pathname.startsWith(basePath)
-      ? req.nextUrl.pathname.slice(basePath.length) || "/"
-      : req.nextUrl.pathname;
+  // constructing redirect targets.
+  //
+  // `req.nextUrl.basePath` returns "" in Next 15.0.3 middleware
+  // (verified at runtime — the URL prop is unpopulated even when
+  // next.config.ts declares basePath: '/markets'). Hard-code the
+  // matching value here so the strip/prepend pair stays in sync with
+  // the build-time config. Keep them aligned if either changes.
+  const BASE_PATH = "/markets";
+  const internalPathname = req.nextUrl.pathname.startsWith(BASE_PATH)
+    ? req.nextUrl.pathname.slice(BASE_PATH.length) || "/"
+    : req.nextUrl.pathname;
+  const basePath = BASE_PATH;
 
   /* ----- existing SSO bridge ----- */
   const token = req.nextUrl.searchParams.get("token");
