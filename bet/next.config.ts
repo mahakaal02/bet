@@ -22,6 +22,24 @@ try {
 }
 
 const nextConfig: NextConfig = {
+  // Mount the entire app under /markets so it can be served from the
+  // kalki.bet apex via Traefik's `PathPrefix(/markets)` route without an
+  // addPrefix middleware: every internal link, API route, asset URL
+  // (/_next/...) and 3xx the locale middleware emits is automatically
+  // prefixed by Next, so the rendered page actually loads its CSS/JS
+  // when fetched via kalki.bet/markets instead of falling through to
+  // the auctions catch-all. assetPrefix defaults to basePath in Next
+  // 14+, so the matching /_next/static/... requests stay under the
+  // same prefix and reach this pod.
+  //
+  // Side effect: the legacy kalki-bet.cloud.podstack.ai subdomain now
+  // serves everything under /markets too — bare /en/* paths there
+  // 308-redirect to /markets/en/*. Cross-app links from auctions
+  // (NEXT_PUBLIC_EXCHANGE_URL = https://kalki-bet.cloud.podstack.ai)
+  // therefore pay one extra hop until that env is repointed at
+  // https://kalki.bet/markets in CI — a follow-up rebuild of auctions
+  // + aviator.
+  basePath: "/markets",
   // Embedded in the Android WebView at 10.0.2.2:3100. CORS / referrers are
   // not an issue since the WebView is same-origin to its own page, but we
   // disable strict CSP headers from Next so unsplash images load on the
