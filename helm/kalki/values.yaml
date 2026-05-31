@@ -207,7 +207,7 @@ backend:
       limits: {cpu: 500m, memory: 512Mi}
 bet:
   image: kalki-bet
-  imageTag: 20260531T112227Z-665645a # {"$imagepolicy": "flux-system:kalki-bet:tag"}
+  imageTag: 20260531T114847Z-754702d # {"$imagepolicy": "flux-system:kalki-bet:tag"}
   port: 3100
   # Stays at 1 replica: bet runs an in-process scheduler
   # (bet/lib/scheduler.ts — 60s tick closing markets + decaying trending
