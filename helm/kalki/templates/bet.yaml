@@ -121,6 +121,23 @@ spec:
           resources:
             {{- toYaml .Values.bet.resources | nindent 12 }}
 ---
+# Forward the legacy bet subdomain to the canonical kalki.bet apex.
+# The bet app is mounted at basePath '/markets' (bet/next.config.ts)
+# so kalki-bet.cloud.podstack.ai/<path> → kalki.bet/markets/<path>.
+# Path is preserved verbatim — the locale segment and any deep link
+# survives the hop. 308 keeps caches and bookmarks consistent.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: kalki-bet-redirect-to-apex
+  labels:
+    {{- include "kalki.labels" (dict "name" "bet" "ctx" .) | nindent 4 }}
+spec:
+  redirectRegex:
+    regex: "^https?://[^/]+/?(.*)$"
+    replacement: "https://kalki.bet/markets/${1}"
+    permanent: true
+---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -136,5 +153,7 @@ spec:
       services:
         - name: kalki-bet
           port: {{ .Values.bet.port }}
+      middlewares:
+        - name: kalki-bet-redirect-to-apex
   tls:
     certResolver: {{ .Values.traefik.certResolver }}
