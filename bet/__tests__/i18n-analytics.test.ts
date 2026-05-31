@@ -38,12 +38,12 @@ describe("middleware analytics safety — query preservation", () => {
   it("preserves a full UTM tag set through a geo redirect", () => {
     const res = middleware(
       new NextRequest(
-        "https://kalki.local/wallet?utm_source=twitter&utm_medium=paid_social&utm_campaign=q2_launch&utm_content=variant_a&utm_term=prediction",
+        "https://kalki.bet/wallet?utm_source=twitter&utm_medium=paid_social&utm_campaign=q2_launch&utm_content=variant_a&utm_term=prediction",
         { headers: { "x-vercel-ip-country": "BR" } },
       ),
     );
     const loc = locationOf(res);
-    expect(loc.startsWith("/pt/wallet?")).toBe(true);
+    expect(loc.startsWith("/markets/pt/wallet?")).toBe(true);
     expect(loc).toContain("utm_source=twitter");
     expect(loc).toContain("utm_medium=paid_social");
     expect(loc).toContain("utm_campaign=q2_launch");
@@ -53,7 +53,7 @@ describe("middleware analytics safety — query preservation", () => {
 
   it("preserves Google Ads gclid", () => {
     const res = middleware(
-      new NextRequest("https://kalki.local/markets?gclid=ABCDEFG-1234567890", {
+      new NextRequest("https://kalki.bet/markets?gclid=ABCDEFG-1234567890", {
         headers: { "x-vercel-ip-country": "FR" },
       }),
     );
@@ -63,7 +63,7 @@ describe("middleware analytics safety — query preservation", () => {
   it("preserves Meta fbclid + Microsoft msclkid", () => {
     const res = middleware(
       new NextRequest(
-        "https://kalki.local/?fbclid=fb_click_42&msclkid=ms_click_99",
+        "https://kalki.bet/?fbclid=fb_click_42&msclkid=ms_click_99",
         { headers: { "accept-language": "es-MX,es;q=0.9" } },
       ),
     );
@@ -74,18 +74,18 @@ describe("middleware analytics safety — query preservation", () => {
 
   it("preserves a referral code through the cookie-driven redirect", () => {
     const res = middleware(
-      new NextRequest("https://kalki.local/register?ref=ALICE2024", {
+      new NextRequest("https://kalki.bet/register?ref=ALICE2024", {
         headers: { cookie: "preferred_language=pt" },
       }),
     );
     const loc = locationOf(res);
-    expect(loc.startsWith("/pt/register")).toBe(true);
+    expect(loc.startsWith("/markets/pt/register")).toBe(true);
     expect(loc).toContain("ref=ALICE2024");
   });
 
   it("preserves cross-domain GA linker params (_ga, _gl)", () => {
     const res = middleware(
-      new NextRequest("https://kalki.local/?_ga=GA1.2.1234.5678&_gl=1*foo*ga", {
+      new NextRequest("https://kalki.bet/?_ga=GA1.2.1234.5678&_gl=1*foo*ga", {
         headers: { "accept-language": "fr-FR" },
       }),
     );
@@ -98,7 +98,7 @@ describe("middleware analytics safety — query preservation", () => {
     // No cookie, no AL, no geo — falls to default. Query still
     // survives because middleware clones the entire nextUrl.
     const res = middleware(
-      new NextRequest("https://kalki.local/markets?utm_campaign=organic"),
+      new NextRequest("https://kalki.bet/markets?utm_campaign=organic"),
     );
     expect(locationOf(res)).toContain("utm_campaign=organic");
   });
@@ -109,7 +109,7 @@ describe("middleware analytics safety — query preservation", () => {
     // pipeline sees an attributable bot-hit row rather than a
     // mysterious direct visit.
     const res = middleware(
-      new NextRequest("https://kalki.local/?utm_source=newsletter", {
+      new NextRequest("https://kalki.bet/?utm_source=newsletter", {
         headers: { "user-agent": "Googlebot/2.1" },
       }),
     );
@@ -119,7 +119,7 @@ describe("middleware analytics safety — query preservation", () => {
   it("preserves a multi-value query (search filters + UTM together)", () => {
     const res = middleware(
       new NextRequest(
-        "https://kalki.local/markets?q=elec&cat=POLITICS&sort=volume&utm_source=twitter",
+        "https://kalki.bet/markets?q=elec&cat=POLITICS&sort=volume&utm_source=twitter",
         { headers: { "x-vercel-ip-country": "BR" } },
       ),
     );

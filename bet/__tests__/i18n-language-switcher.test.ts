@@ -158,26 +158,26 @@ describe("LanguageSwitcher contract — preferred_language cookie", () => {
     // switcher: a redirect happens client-side via router.push, AND
     // the preferred_language=es cookie is set. The next non-localized
     // request hits middleware which must respect it.
-    const req = new NextRequest("https://kalki.local/wallet", {
+    const req = new NextRequest("https://kalki.bet/wallet", {
       headers: { cookie: `${PREFERRED_LOCALE_COOKIE}=es` },
     });
     const res = middleware(req);
     const location = res.headers.get("location");
     expect(location).not.toBeNull();
-    expect(new URL(location!).pathname).toBe("/es/wallet");
+    expect(new URL(location!).pathname).toBe("/markets/es/wallet");
   });
 
   it("an unsupported value in the cookie is ignored (defends against tampering)", () => {
     // If a user (or a curl script) sets the cookie to a junk value,
     // middleware must fall through to the next priority step, not
     // honor the junk.
-    const req = new NextRequest("https://kalki.local/wallet", {
+    const req = new NextRequest("https://kalki.bet/wallet", {
       headers: { cookie: `${PREFERRED_LOCALE_COOKIE}=" or 1=1"` },
     });
     const res = middleware(req);
     // No AL, no geo → default fallback.
     expect(new URL(res.headers.get("location")!).pathname).toBe(
-      `/${DEFAULT_LOCALE}/wallet`,
+      `/markets/${DEFAULT_LOCALE}/wallet`,
     );
   });
 
@@ -185,7 +185,7 @@ describe("LanguageSwitcher contract — preferred_language cookie", () => {
     // User is on /pt/wallet; switcher click on Português should be a
     // no-op redirect (back to /pt/wallet). The middleware passes
     // through any locale-prefixed URL.
-    const req = new NextRequest("https://kalki.local/pt/wallet", {
+    const req = new NextRequest("https://kalki.bet/pt/wallet", {
       headers: { cookie: `${PREFERRED_LOCALE_COOKIE}=pt` },
     });
     const res = middleware(req);
@@ -201,11 +201,11 @@ describe("LanguageSwitcher contract — preferred_language cookie", () => {
 describe("LanguageSwitcher contract — persistence over a session", () => {
   it("first-visit geo → user switches → subsequent visits honor the choice", () => {
     // 1) First visit: bare /, geo BR → middleware redirects to /pt.
-    let req = new NextRequest("https://kalki.local/", {
+    let req = new NextRequest("https://kalki.bet/", {
       headers: { "x-vercel-ip-country": "BR" },
     });
     let res = middleware(req);
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/pt");
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/markets/pt");
     // Sentinel cookie was stamped — but no preferred_language cookie
     // yet (the switcher hasn't been used).
     expect(res.cookies.get(PREFERRED_LOCALE_COOKIE)).toBeUndefined();
@@ -214,7 +214,7 @@ describe("LanguageSwitcher contract — persistence over a session", () => {
     //    Then they click "English" in the switcher. The switcher
     //    writes preferred_language=en and router.push("/en/wallet").
     //    The next bare-path navigation tests persistence.
-    req = new NextRequest("https://kalki.local/markets", {
+    req = new NextRequest("https://kalki.bet/wallet", {
       headers: {
         cookie: `${PREFERRED_LOCALE_COOKIE}=en; kalki_geo_routed=1`,
         "x-vercel-ip-country": "BR", // geo still says BR — irrelevant now
@@ -222,20 +222,20 @@ describe("LanguageSwitcher contract — persistence over a session", () => {
     });
     res = middleware(req);
     // Cookie beats geo — user lands on /en/markets, not /pt/markets.
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/en/markets");
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/markets/en/wallet");
   });
 
   it("manual choice survives a VPN-induced country change", () => {
     // User normally in France (geo FR → fr). They've set
     // preferred_language=en (English-only mode). VPN puts them in
     // Brazil — geo says BR. The cookie wins.
-    const req = new NextRequest("https://kalki.local/markets", {
+    const req = new NextRequest("https://kalki.bet/wallet", {
       headers: {
         cookie: `${PREFERRED_LOCALE_COOKIE}=en`,
         "x-vercel-ip-country": "BR",
       },
     });
     const res = middleware(req);
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/en/markets");
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/markets/en/wallet");
   });
 });
