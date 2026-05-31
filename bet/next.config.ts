@@ -67,6 +67,37 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  /**
+   * Cross-app links from auctions/aviator still target the legacy non-
+   * basePath URLs on the bet subdomain:
+   *   - `${EXCHANGE_URL}/?token=…`           (hub → bet SSO bridge)
+   *   - `${EXCHANGE_URL}/wallet?token=…`     (hub → wallet topup CTA)
+   *   - `${EXCHANGE_URL}/admin?token=…`      (admin SSO landing)
+   *   - `${EXCHANGE_URL}/api/auth/sso-logout` (logout chain)
+   *
+   * After basePath: '/markets', these now land outside the served path
+   * and 404 before middleware (which only runs inside basePath) — the
+   * SSO ?token=… bridge breaks. Forward them to their basePath-prefixed
+   * homes; query strings are preserved by default, so ?token=… survives
+   * the hop and the middleware on the next request picks it up.
+   *
+   * basePath:false on each entry tells Next NOT to prepend /markets to
+   * the source pattern — we WANT to match the bare URL.
+   */
+  async redirects() {
+    return [
+      // SSO bridge entry (hub → bet)
+      { source: "/", destination: "/markets", basePath: false, permanent: false },
+      // Wallet deep-link from hub + aviator
+      { source: "/wallet", destination: "/markets/wallet", basePath: false, permanent: false },
+      { source: "/wallet/:path*", destination: "/markets/wallet/:path*", basePath: false, permanent: false },
+      // Admin deep-link from hub
+      { source: "/admin", destination: "/markets/admin", basePath: false, permanent: false },
+      { source: "/admin/:path*", destination: "/markets/admin/:path*", basePath: false, permanent: false },
+      // Logout chain (auctions → bet sso-logout → aviator → back)
+      { source: "/api/auth/sso-logout", destination: "/markets/api/auth/sso-logout", basePath: false, permanent: false },
+    ];
+  },
   // Strip console.* from production bundles (keep error/warn for prod
   // diagnostics). Trims client JS and avoids noisy logs.
   compiler: {
