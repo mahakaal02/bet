@@ -122,10 +122,16 @@ spec:
             {{- toYaml .Values.bet.resources | nindent 12 }}
 ---
 # Forward the legacy bet subdomain to the canonical kalki.bet apex.
-# The bet app is mounted at basePath '/markets' (bet/next.config.ts)
-# so kalki-bet.cloud.podstack.ai/<path> → kalki.bet/markets/<path>.
-# Path is preserved verbatim — the locale segment and any deep link
-# survives the hop. 308 keeps caches and bookmarks consistent.
+# The bet app is mounted at basePath '/markets' on the apex
+# (bet/next.config.ts), so kalki-bet.cloud.podstack.ai/<path> →
+# kalki.bet/markets/<path>. One small smoothing: when the legacy
+# path is `/<locale>/markets` (the old markets-list URL — redundant
+# now that /markets IS the basePath), strip the trailing `/markets`
+# segment so the target is the locale root `/markets/<locale>`. Bet's
+# i18n middleware will then redirect that locale root to the actual
+# markets list (PR-HUB-TO-MARKETS) in one extra hop. Other paths,
+# including deep links like `/en/wallet`, are preserved verbatim.
+# 308 keeps caches and bookmarks consistent.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -134,8 +140,13 @@ metadata:
     {{- include "kalki.labels" (dict "name" "bet" "ctx" .) | nindent 4 }}
 spec:
   redirectRegex:
-    regex: "^https?://[^/]+/?(.*)$"
-    replacement: "https://kalki.bet/markets/${1}"
+    # Alternation: group 1 captures <locale> when the path matches
+    # `/<segment>/markets/?` exactly (the redundant case), otherwise
+    # group 2 captures the full path. Exactly one of {$1, $2} is
+    # non-empty for any given URL, so the replacement concatenates
+    # them safely.
+    regex: "^https?://[^/]+/(?:([^/]+)/markets/?|(.*))$"
+    replacement: "https://kalki.bet/markets/${1}${2}"
     permanent: true
 ---
 apiVersion: traefik.io/v1alpha1
