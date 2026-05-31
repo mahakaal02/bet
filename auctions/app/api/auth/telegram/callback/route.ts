@@ -43,6 +43,15 @@ export async function GET(req: Request) {
   const nextParam = url.searchParams.get("next") ?? "/";
   const next = nextParam.startsWith("/") ? nextParam : "/";
 
+  // Behind Traefik path-routing, `req.url`'s origin is the pod's
+  // internal listen address (e.g. http://localhost:3200) — redirecting
+  // the browser there would land it on an unreachable URL. Prefer the
+  // pinned NEXTAUTH_URL (= https://kalki.bet in prod) the same way the
+  // start route does; fall back to req.url's origin for local dev.
+  const publicOrigin = (
+    process.env.NEXTAUTH_URL ?? url.origin
+  ).replace(/\/$/, "");
+
   const payload = verifyTelegramAuth(
     url.searchParams,
     process.env.TELEGRAM_BOT_TOKEN,
@@ -51,7 +60,7 @@ export async function GET(req: Request) {
     // We deliberately don't 4xx the user — they came from Telegram
     // and might not understand a JSON error. Render the failure on
     // the login page with an error toast slot in the query.
-    const loginUrl = new URL("/login", url.origin);
+    const loginUrl = new URL("/login", publicOrigin);
     loginUrl.searchParams.set("error", "telegram_signature_invalid");
     return NextResponse.redirect(loginUrl.toString(), { status: 303 });
   }
@@ -89,24 +98,24 @@ export async function GET(req: Request) {
         res.status === 404
           ? "telegram_backend_missing"
           : "telegram_auth_failed";
-      const loginUrl = new URL("/login", url.origin);
+      const loginUrl = new URL("/login", publicOrigin);
       loginUrl.searchParams.set("error", errCode);
       return NextResponse.redirect(loginUrl.toString(), { status: 303 });
     }
 
     const sessionBody = (await res.json()) as { token?: string };
     if (!sessionBody.token) {
-      const loginUrl = new URL("/login", url.origin);
+      const loginUrl = new URL("/login", publicOrigin);
       loginUrl.searchParams.set("error", "telegram_token_missing");
       return NextResponse.redirect(loginUrl.toString(), { status: 303 });
     }
 
     await setSessionToken(sessionBody.token);
-    return NextResponse.redirect(new URL(next, url.origin).toString(), {
+    return NextResponse.redirect(new URL(next, publicOrigin).toString(), {
       status: 303,
     });
   } catch {
-    const loginUrl = new URL("/login", url.origin);
+    const loginUrl = new URL("/login", publicOrigin);
     loginUrl.searchParams.set("error", "telegram_network_error");
     return NextResponse.redirect(loginUrl.toString(), { status: 303 });
   }
