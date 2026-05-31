@@ -70,9 +70,22 @@ export const config = {
 };
 
 export function middleware(req: NextRequest) {
+  // PR-BET-BASEPATH — Next 15 middleware sees `req.nextUrl.pathname`
+  // WITH the configured basePath included (e.g. /markets/en/markets,
+  // not /en/markets), and `NextResponse.redirect(url)` ships the
+  // Location header verbatim — no automatic re-prefixing on the way
+  // out. Strip it for routing decisions, prepend it back when
+  // constructing redirect targets, so the same code works whether
+  // basePath is "" (legacy subdomain) or "/markets" (apex mount).
+  const basePath = req.nextUrl.basePath ?? "";
+  const internalPathname =
+    basePath && req.nextUrl.pathname.startsWith(basePath)
+      ? req.nextUrl.pathname.slice(basePath.length) || "/"
+      : req.nextUrl.pathname;
+
   /* ----- existing SSO bridge ----- */
   const token = req.nextUrl.searchParams.get("token");
-  if (token && !req.nextUrl.pathname.startsWith("/api/auth/sso")) {
+  if (token && !internalPathname.startsWith("/api/auth/sso")) {
     // PR-WEB-LOGOUT-FIX — refuse to re-establish a NextAuth session
     // from a `?token=` URL param if the user just signed out.
     const justLoggedOut = req.cookies.get("kalki_logged_out")?.value === "1";
@@ -84,13 +97,15 @@ export function middleware(req: NextRequest) {
     const cleanUrl = req.nextUrl.clone();
     cleanUrl.searchParams.delete("token");
     const sso = req.nextUrl.clone();
-    sso.pathname = "/api/auth/sso";
+    sso.pathname = `${basePath}/api/auth/sso`;
+    // `cleanUrl.pathname` includes basePath; the SSO handler will see
+    // it as-is. No double-prefixing needed in the `next` param.
     sso.searchParams.set("next", cleanUrl.pathname + cleanUrl.search);
     return NextResponse.redirect(sso);
   }
 
   /* ----- i18n routing (PR-BET-I18N) ----- */
-  const { locale: pathLocale, rest } = splitLocaleFromPath(req.nextUrl.pathname);
+  const { locale: pathLocale, rest } = splitLocaleFromPath(internalPathname);
 
   // PR-SINGLE-LOGIN — bet no longer hosts its own auth UI. Any
   // residual deep-link to `/{locale}/login` etc. (e.g. an old
@@ -120,7 +135,7 @@ export function middleware(req: NextRequest) {
     // second pass, after being prefixed with a locale above.
     if (rest === "/") {
       const url = req.nextUrl.clone();
-      url.pathname = `/${pathLocale}/markets`;
+      url.pathname = `${basePath}/${pathLocale}/markets`;
       return NextResponse.redirect(url);
     }
     // URL already has a locale prefix. Trust it as the user's intent
@@ -157,7 +172,10 @@ export function middleware(req: NextRequest) {
     // bare path. 302 because the bare path may host different
     // content in the future (e.g. a redirect to a locale picker).
     const url = req.nextUrl.clone();
-    url.pathname = rest === "/" ? `/${DEFAULT_LOCALE}` : `/${DEFAULT_LOCALE}${rest}`;
+    url.pathname =
+      rest === "/"
+        ? `${basePath}/${DEFAULT_LOCALE}`
+        : `${basePath}/${DEFAULT_LOCALE}${rest}`;
     return NextResponse.redirect(url);
   }
 
@@ -167,7 +185,10 @@ export function middleware(req: NextRequest) {
   const cookiePref = req.cookies.get(PREFERRED_LOCALE_COOKIE)?.value;
   if (isLocale(cookiePref)) {
     const url = req.nextUrl.clone();
-    url.pathname = rest === "/" ? `/${cookiePref}` : `/${cookiePref}${rest}`;
+    url.pathname =
+      rest === "/"
+        ? `${basePath}/${cookiePref}`
+        : `${basePath}/${cookiePref}${rest}`;
     return NextResponse.redirect(url);
   }
 
@@ -211,7 +232,8 @@ export function middleware(req: NextRequest) {
   }
 
   const url = req.nextUrl.clone();
-  url.pathname = rest === "/" ? `/${chosen}` : `/${chosen}${rest}`;
+  url.pathname =
+    rest === "/" ? `${basePath}/${chosen}` : `${basePath}/${chosen}${rest}`;
   const res = NextResponse.redirect(url);
   // Stamp the geo-routed sentinel after a geo fall-through so we
   // don't re-fire the geo logic on every subsequent non-localized
