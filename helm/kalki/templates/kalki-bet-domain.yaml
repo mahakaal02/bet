@@ -1,20 +1,29 @@
 {{/*
 Routing for the kalki.bet apex domain.
 
-  /          → kalki-auctions, path rewritten to /en/login (hub landing)
-  /crash/*   → kalki-aviator, StripPrefix /crash
-  /prediction/* → kalki-bet, StripPrefix /prediction
-  /auction   → kalki-auctions, path rewritten to /en/auctions
-  /*  (rest) → kalki-auctions (pass-through), so /en/profile, /en/wallet,
-              /en/markets, etc. land on the auctions app naturally
+  /             → kalki-auctions, path rewritten to /en/login (hub landing)
+  /crash/*      → kalki-aviator,  StripPrefix /crash
+  /prediction/* → kalki-bet,      StripPrefix /prediction
+  /markets/*    → kalki-bet,      AddPrefix /en (→ /en/markets[/...])
+  /auction      → kalki-auctions, path rewritten to /en/auctions
+  /*  (rest)    → kalki-auctions (pass-through), so /en/profile, /en/wallet,
+                  /en/markets, etc. land on the auctions app naturally
+
+NOTE: /en/markets on auctions and /markets (→ bet's /en/markets) are
+intentionally DIFFERENT pages — kalki.bet/markets is the prediction-
+markets exchange (bet), kalki.bet/en/markets is the hub's markets
+page (auctions). Keep this split when adding new top-level paths.
 
 TLS: cert-manager issues kalki-bet-tls via the letsencrypt-cloudflare
 ClusterIssuer (DNS-01, kalki.bet zone solver).
 
-Caveat: /crash and /prediction StripPrefix sends `/` to aviator + bet, but
-their absolute asset URLs (/_next/…, /static/…) escape the prefix and fall
-through to the catch-all (auctions). Fix at the app level via basePath if
-that bites — same caveat as the original path-routing commit.
+Caveat: /crash, /prediction, /markets all hand the routed pod a non-
+root URL, but the pod's HTML still emits absolute asset URLs
+(/_next/…, /static/…) that escape the prefix and fall through to the
+catch-all (auctions) → 404. Fix at the app level via `basePath` +
+`assetPrefix` in next.config.ts so the asset URLs include the prefix
+(e.g. /markets/_next/…). Until that lands the rendered page is
+unstyled / missing client JS.
 
 Existing kalki-*.cloud.podstack.ai IngressRoutes are untouched.
 */}}
@@ -76,6 +85,19 @@ spec:
   replacePath:
     path: /en/login
 ---
+# Prepend /en so kalki.bet/markets[/*] reaches the bet app's
+# locale-prefixed /en/markets[/*] route. addPrefix preserves the
+# trailing path, so /markets/foo → /en/markets/foo.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: kalki-bet-prefix-en
+  labels:
+    {{- include "kalki.labels" (dict "name" "bet-domain" "ctx" .) | nindent 4 }}
+spec:
+  addPrefix:
+    prefix: /en
+---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -102,6 +124,14 @@ spec:
           port: {{ .Values.bet.port }}
       middlewares:
         - name: kalki-bet-strip-prediction
+    - kind: Rule
+      match: Host(`{{ $domain }}`) && PathPrefix(`/markets`)
+      priority: 100
+      services:
+        - name: kalki-bet
+          port: {{ .Values.bet.port }}
+      middlewares:
+        - name: kalki-bet-prefix-en
     - kind: Rule
       match: Host(`{{ $domain }}`) && Path(`/auction`)
       priority: 100
