@@ -96,6 +96,15 @@ const nextConfig: NextConfig = {
       { source: "/admin/:path*", destination: "/markets/admin/:path*", basePath: false, permanent: false },
       // Logout chain (auctions → bet sso-logout → aviator → back)
       { source: "/api/auth/sso-logout", destination: "/markets/api/auth/sso-logout", basePath: false, permanent: false },
+      // basePath root → default locale. Without this, kalki.bet/markets
+      // (the bare basePath root) 404s — there's no app/page.tsx, and
+      // the middleware doesn't fire on the basePath root in Next 15
+      // (matcher excludes the empty internal pathname). The middleware
+      // picks it up on the next hop and lands the user on
+      // /markets/<locale>/markets via the hub-to-markets redirect.
+      // basePath defaults to true so source/destination resolve under
+      // /markets/ in the served path space.
+      { source: "/", destination: "/en", permanent: false },
     ];
   },
   // Strip console.* from production bundles (keep error/warn for prod
